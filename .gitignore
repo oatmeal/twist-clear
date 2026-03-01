@@ -1,0 +1,12 @@
+# uv
+.venv/
+
+# Credentials and local config
+config.toml
+
+# Scraped data
+data/
+
+# Python
+__pycache__/
+*.pyc

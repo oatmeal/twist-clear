@@ -1,0 +1,14 @@
+[twitch]
+# Create an application at https://dev.twitch.tv/console/apps to get these.
+client_id     = "your_client_id_here"
+client_secret = "your_client_secret_here"
+
+[scraper]
+db_path = "data/clips.db"
+
+# Add one [[streamers]] block per channel you want to track.
+[[streamers]]
+login = "streamer_one"
+
+[[streamers]]
+login = "streamer_two"
