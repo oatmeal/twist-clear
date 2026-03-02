@@ -63,23 +63,53 @@ uv run python scrape.py update
 
 ## Viewing clips
 
-A browser-based viewer is included at `frontend/index.html`. It loads the SQLite database directly via [sql.js](https://github.com/sql-js/sql.js) — no extra server or build step required.
+A browser-based viewer lives in the `frontend/` directory. It uses [sql.js-httpvfs](https://github.com/phiresky/sql.js-httpvfs) to query the SQLite database directly in the browser via HTTP Range requests — only the B-tree pages required for each query are fetched, so the full database file is never downloaded.
 
-**Start a local server from the project root:**
+### Requirements
+
+- Node.js 18+ and npm
+
+### Dev server
 
 ```sh
-uv run python -m http.server 8765
+cd frontend
+npm install
+npm run dev
 ```
 
-Then open **http://localhost:8765/frontend/** in your browser.
+Then open **http://localhost:5173** in your browser. The dev server symlinks to `data/clips.db` so it always reflects the latest scraped data without any export step.
 
-Features:
+### Features
+
 - Thumbnail grid with clip title, view count, creator, game, and date
 - Search by title, filter by game, sort by views or date
+- Date range filter (from/to inputs)
+- Calendar view — year heatmap → month grid with clip counts per day, selectable by day or ISO week
 - Pagination (24 clips per page)
+- URL hash preserves all filter and navigation state
 - Each thumbnail links directly to the clip on Twitch
 
-The viewer reads directly from `data/clips.db`, so it always reflects the latest scraped data without any export step.
+### Frontend development
+
+```sh
+cd frontend
+npm test           # run Vitest unit tests (pure functions: query builder, hash, date utils, formatting)
+npx tsc --noEmit   # type-check
+npm run build      # production build → frontend/dist/
+```
+
+The source is a TypeScript + Vite package under `frontend/src/`:
+
+| File | Purpose |
+|---|---|
+| `src/db.ts` | sql.js-httpvfs worker setup; async `q()` helper |
+| `src/app.ts` | Main render loop, event binding, URL hash state |
+| `src/calendar.ts` | Calendar view (year/month/day/week navigation) |
+| `src/state.ts` | All shared mutable state with typed setters |
+| `src/lib/query.ts` | Pure `buildWhere()` — SQL WHERE clause builder |
+| `src/lib/hash.ts` | Pure `serializeHash()` / `deserializeHash()` |
+| `src/lib/format.ts` | HTML escaping, duration/views/date formatting |
+| `src/lib/dateUtils.ts` | Local-timezone date arithmetic (no UTC pitfalls) |
 
 ## How the scraper works
 
@@ -163,9 +193,19 @@ Or as a GitHub Actions workflow on a schedule — store your credentials as repo
 
 ## Development
 
+**Scraper (Python):**
+
 ```sh
 uv run pytest              # run tests
 uv run ruff check .        # lint
 uv run ruff check --fix .  # lint + auto-fix
 uv run ruff format .       # format
+```
+
+**Frontend (TypeScript):**
+
+```sh
+cd frontend
+npm test           # Vitest unit tests
+npx tsc --noEmit   # type-check
 ```
