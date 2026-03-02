@@ -13,6 +13,7 @@ import {
   syncDateInputs,
   rebuildMonthSelect,
 } from './calendar';
+import { setUseMeta } from './state';
 
 // ── URL hash state ────────────────────────────────────────────────────────
 
@@ -86,22 +87,30 @@ async function setStreamerTag(): Promise<void> {
 }
 
 async function updateGameFilter(): Promise<void> {
-  const params: Record<string, string> = {};
-  const dateClause = state.calDateFrom !== null
-    ? (params[':dateFrom'] = state.calDateFrom,
-       params[':dateTo']   = state.calDateTo!,
-       'WHERE c.created_at >= :dateFrom AND c.created_at < :dateTo')
-    : '';
+  let rows: Awaited<ReturnType<typeof q>>;
 
-  const rows = await q(
-    `SELECT g.id, g.name, COUNT(c.id) AS cnt
-     FROM games g
-     JOIN clips c ON c.game_id = g.id
-     ${dateClause}
-     GROUP BY g.id
-     ORDER BY cnt DESC`,
-    params,
-  );
+  if (state.useMeta && state.calDateFrom === null) {
+    // Fast path: precomputed table — single page read, no aggregate scan.
+    rows = await q('SELECT id, name, cnt FROM game_clip_counts ORDER BY cnt DESC');
+  } else {
+    // Slow path: live aggregate (needed when a date filter is active, or
+    // when running against the raw dev-symlink DB without clips_meta).
+    const params: Record<string, string> = {};
+    const dateClause = state.calDateFrom !== null
+      ? (params[':dateFrom'] = state.calDateFrom,
+         params[':dateTo']   = state.calDateTo!,
+         'WHERE c.created_at >= :dateFrom AND c.created_at < :dateTo')
+      : '';
+    rows = await q(
+      `SELECT g.id, g.name, COUNT(c.id) AS cnt
+       FROM games g
+       JOIN clips c ON c.game_id = g.id
+       ${dateClause}
+       GROUP BY g.id
+       ORDER BY cnt DESC`,
+      params,
+    );
+  }
 
   const sel = document.getElementById('game-filter') as HTMLSelectElement;
   const validIds = new Set(rows.map(r => String(r['id'])));
@@ -143,9 +152,18 @@ export async function render(): Promise<void> {
       useFts: state.useFts,
     });
 
-    const countRows = await q(`SELECT COUNT(*) AS cnt FROM clips c ${where}`, params);
+    // Fast path: when no filters are active and clips_meta is available,
+    // use the precomputed total instead of scanning all rows.
+    let totalClips: number;
+    if (state.useMeta && where === '') {
+      const metaRows = await q('SELECT total_clips FROM clips_meta');
+      totalClips = (metaRows[0]?.['total_clips'] as number | undefined) ?? 0;
+    } else {
+      const countRows = await q(`SELECT COUNT(*) AS cnt FROM clips c ${where}`, params);
+      totalClips = (countRows[0]?.['cnt'] as number | undefined) ?? 0;
+    }
     if (ctrl.signal.aborted) return;
-    state.setTotalClips((countRows[0]?.['cnt'] as number | undefined) ?? 0);
+    state.setTotalClips(totalClips);
 
     const offset = (state.currentPage - 1) * state.PAGE_SIZE;
     const clips = await q(
@@ -326,6 +344,14 @@ export async function init(): Promise<void> {
       "SELECT name FROM sqlite_master WHERE type='table' AND name='clips_fts'",
     );
     state.setUseFts(ftsRows.length > 0);
+
+    // Enable precomputed-metadata fast paths if prepare_web_db.py has run.
+    // clips_meta holds total_clips, min_date, max_date as a single row.
+    // game_clip_counts holds per-game counts without requiring a live GROUP BY.
+    const metaRows = await q(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='clips_meta'",
+    );
+    setUseMeta(metaRows.length > 0);
 
     document.getElementById('loading')!.style.display = 'none';
     document.getElementById('controls')!.style.display = 'flex';

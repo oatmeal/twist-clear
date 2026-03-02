@@ -25,6 +25,9 @@ export let calMaxDate: string | null = null;
 // ── DB capability flags ────────────────────────────────────────────────────
 
 export let useFts: boolean = false;
+// useMeta: true when prepare_web_db.py has built clips_meta / game_clip_counts.
+// Falls back to live aggregate queries when false (e.g. raw dev-symlink DB).
+export let useMeta: boolean = false;
 
 // ── Setters ───────────────────────────────────────────────────────────────
 // ES module live bindings are read-only from importing modules, so mutations
@@ -45,3 +48,4 @@ export function setCalDateTo(v: string | null): void { calDateTo = v; }
 export function setCalMinDate(v: string | null): void { calMinDate = v; }
 export function setCalMaxDate(v: string | null): void { calMaxDate = v; }
 export function setUseFts(v: boolean): void { useFts = v; }
+export function setUseMeta(v: boolean): void { useMeta = v; }

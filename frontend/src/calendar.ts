@@ -584,11 +584,17 @@ export function rebuildMonthSelect(): void {
 export async function initCalendar(onRender: () => Promise<void>): Promise<void> {
   _onRender = onRender;
 
-  const rangeRow = await q(`
-    SELECT MIN(strftime('%Y-%m-%d', created_at)) AS minD,
-           MAX(strftime('%Y-%m-%d', created_at)) AS maxD
-    FROM clips
-  `);
+  // When the prepared DB is present, clips_meta holds precomputed min/max
+  // dates as a single-row lookup — avoiding a full table scan that would
+  // trigger sql.js-httpvfs's exponential read-ahead (O(n) → O(1) page reads).
+  // Falls back to the live aggregate for the raw dev-symlink database.
+  const rangeRow = state.useMeta
+    ? await q('SELECT min_date AS minD, max_date AS maxD FROM clips_meta')
+    : await q(`
+        SELECT substr(MIN(created_at), 1, 10) AS minD,
+               substr(MAX(created_at), 1, 10) AS maxD
+        FROM clips
+      `);
   if (rangeRow.length && rangeRow[0]!['minD']) {
     state.setCalMinDate(rangeRow[0]!['minD'] as string);
     state.setCalMaxDate(rangeRow[0]!['maxD'] as string);
