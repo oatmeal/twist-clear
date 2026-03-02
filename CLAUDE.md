@@ -35,6 +35,62 @@ frontend/
   package.json
 ```
 
+## Worktree setup (do this once per new worktree)
+
+Git worktrees are created under `.claude/worktrees/<name>/`. They share the
+main repo's git history but have an independent working tree. A few things
+need to be wired up before the frontend dev server works:
+
+### 1. Install frontend dependencies
+
+```sh
+cd frontend && npm install
+```
+
+### 2. Create `.claude/launch.json`
+
+The Claude Preview tool looks for this file relative to the worktree root.
+Create `.claude/launch.json`:
+
+```json
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "frontend", "run", "dev"],
+      "port": 5173
+    }
+  ]
+}
+```
+
+### 3. Symlink the database
+
+The Vite dev server serves `frontend/public/clips.db`. The worktree's
+`frontend/public/` directory does not exist by default — create it and
+symlink the prepared DB from the main repo:
+
+```sh
+mkdir -p frontend/public
+ln -s /absolute/path/to/main-repo/frontend/public/clips.db frontend/public/clips.db
+```
+
+Or, using a relative path (works if worktree is 3 levels below the main repo,
+e.g. `.claude/worktrees/<name>/`):
+
+```sh
+mkdir -p frontend/public
+ln -s ../../../../../frontend/public/clips.db frontend/public/clips.db
+```
+
+> **Note:** If `frontend/public/clips.db` does not exist in the main repo yet,
+> run `npm run prepare-db` in the main repo's `frontend/` directory first.
+
+After these steps, `npm run dev` (via the Claude Preview tool or directly)
+will serve the site on port 5173 with the full database.
+
 ## Development commands
 
 ### Python scraper

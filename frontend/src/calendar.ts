@@ -294,6 +294,7 @@ async function renderYearStrip(): Promise<void> {
     el.textContent = t().monthShort[m]!;
     el.title = t().monthTooltip(t().monthLong[m]!, cnt);
     el.style.background = heatColor(cnt);
+    el.dataset.heat = String(heatLevel(cnt));
 
     el.addEventListener('click', () => {
       state.setCalMonth(m);
@@ -368,6 +369,7 @@ async function renderMonthGrid(): Promise<void> {
       if (dateKey === state.calDay)  classes.push('selected');
       cell.className = classes.join(' ');
       cell.style.background = heatColor(cnt);
+      cell.dataset.heat = String(heatLevel(cnt));
 
       const numEl = document.createElement('div');
       numEl.className = 'day-number';

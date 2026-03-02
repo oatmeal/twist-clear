@@ -292,6 +292,22 @@
   border-bottom: 1px solid var(--border);
 }
 
+/* ── Text contrast on bright heat cells ── */
+/* cal-3 (#1e7a3e) and cal-4 (#22a84a) are bright enough that the default
+   light text has poor contrast — switch to dark text instead.
+   White on cal-4: ~2.7:1 (fails). Dark (#0a2010) on cal-4: ~5.8:1 (passes). */
+.month-day-cell[data-heat="3"] .day-number,
+.month-day-cell[data-heat="4"] .day-number { color: #0a2010; }
+.month-day-cell[data-heat="3"] .day-count,
+.month-day-cell[data-heat="4"] .day-count  { color: #1a3d20; }
+/* strip-month: override default muted color AND hover/active states */
+.strip-month[data-heat="3"],
+.strip-month[data-heat="4"] { color: #0a2010; }
+.strip-month[data-heat="3"]:hover,
+.strip-month[data-heat="4"]:hover,
+.strip-month[data-heat="3"].active,
+.strip-month[data-heat="4"].active { color: #0a2010; }
+
 /* ── Responsive ── */
 @media (max-width: 900px) {
   #cal-year-view { grid-template-columns: repeat(3, 1fr); }
@@ -300,4 +316,12 @@
   #cal-year-view { grid-template-columns: repeat(2, 1fr); }
   .month-day-cell { min-height: 40px; }
   .day-count { display: none; }
+
+  /* Calendar nav controls: wrap onto multiple lines on narrow screens
+     so year / month / day nav groups don't overflow horizontally. */
+  #cal-nav-controls { flex-wrap: wrap; gap: 8px; }
+  /* Remove the left-border separators when wrapped — they'd look odd on
+     a new line with no preceding element on the same row. */
+  #cal-month-nav { border-left: none; padding-left: 0; }
+  #cal-day-nav   { border-left: none; padding-left: 0; }
 }

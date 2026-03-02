@@ -272,3 +272,14 @@ main { padding: 24px; }
   font-weight: 700;
 }
 .pg-ellipsis { color: var(--muted); font-size: 13px; padding: 0 4px; }
+
+/* ── Mobile ── */
+@media (max-width: 600px) {
+  header  { padding: 10px 12px; }
+  #controls { padding: 8px 12px; }
+  main    { padding: 12px; }
+  /* Tighten clip grid gap so cards don't feel cramped on narrow screens */
+  #clips-grid { gap: 10px; }
+  /* Pagination: slightly smaller buttons to fit more on one row */
+  #pagination button { padding: 6px 10px; }
+}
