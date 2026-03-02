@@ -95,7 +95,48 @@ def prepare(src_path: str, dst_path: str) -> None:
     dst_conn.execute("INSERT INTO clips_fts(clips_fts) VALUES('optimize')")
     print("  done.")
 
-    # ── 5. VACUUM ─────────────────────────────────────────────────────────
+    # ── 5. Precomputed metadata tables ────────────────────────────────────
+    # These tiny tables let the browser avoid full-table-scan aggregates on
+    # every page load.  Each is a cheap single-page read instead of an
+    # O(n) scan that triggers sql.js-httpvfs's exponential read-ahead.
+
+    # clips_meta: min/max clip dates + total clip count
+    print("Creating clips_meta table …")
+    dst_conn.execute("DROP TABLE IF EXISTS clips_meta")
+    dst_conn.execute("""
+        CREATE TABLE clips_meta AS
+        SELECT
+            substr(MIN(created_at), 1, 10) AS min_date,
+            substr(MAX(created_at), 1, 10) AS max_date,
+            COUNT(*) AS total_clips
+        FROM clips
+    """)
+    print("  done.")
+
+    # game_clip_counts: per-game clip counts (no date filter).
+    # The browser uses this for the game dropdown on initial load; live
+    # aggregate queries are still run when a date filter is active.
+    print("Creating game_clip_counts table …")
+    dst_conn.execute("DROP TABLE IF EXISTS game_clip_counts")
+    dst_conn.execute("""
+        CREATE TABLE game_clip_counts AS
+        SELECT g.id, g.name, COUNT(c.id) AS cnt
+        FROM games g
+        JOIN clips c ON c.game_id = g.id
+        GROUP BY g.id
+        ORDER BY cnt DESC
+    """)
+    print("  done.")
+
+    # Standalone created_at index — makes date-filtered game-count queries
+    # and any future range scans efficient without a full table scan.
+    print("Creating clips_created_at index …")
+    dst_conn.execute(
+        "CREATE INDEX IF NOT EXISTS clips_created_at ON clips(created_at)"
+    )
+    print("  done.")
+
+    # ── 6. VACUUM ─────────────────────────────────────────────────────────
     print("Vacuuming …")
     dst_conn.execute("VACUUM")
     print("  done.")
