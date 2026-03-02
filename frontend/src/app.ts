@@ -277,6 +277,13 @@ export async function init(): Promise<void> {
   try {
     await initDb(DB_URL);
 
+    // Enable FTS5 trigram search if the index was built by prepare_web_db.py.
+    // This is a cheap read from sqlite_master (always in the first DB page).
+    const ftsRows = await q(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='clips_fts'",
+    );
+    state.setUseFts(ftsRows.length > 0);
+
     document.getElementById('loading')!.style.display = 'none';
     document.getElementById('controls')!.style.display = 'flex';
 

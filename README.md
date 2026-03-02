@@ -89,6 +89,21 @@ Then open **http://localhost:5173** in your browser. The dev server symlinks to 
 - URL hash preserves all filter and navigation state
 - Each thumbnail links directly to the clip on Twitch
 
+### Preparing the database for deployment
+
+The raw `data/clips.db` is suitable for local development via the symlink, but before deploying the viewer you should run the preparation script, which:
+
+- Converts the database to **DELETE journal mode** (required by sql.js-httpvfs; WAL mode is not supported)
+- Adds and populates a **FTS5 trigram index** (`clips_fts`) for fast substring title search, including Japanese/CJK (requires SQLite ≥ 3.38)
+- Optimises and VACUUMs the file for compact range-request access
+
+```sh
+cd frontend
+npm run prepare-db   # → writes frontend/public/clips.db
+```
+
+The prepared database is placed in `frontend/public/clips.db` and is automatically used by both the dev server and the production build.  The viewer detects the FTS5 table at startup and enables trigram search automatically; without it, title search falls back to a SQL `LIKE` scan.
+
 ### Frontend development
 
 ```sh

@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepare-db": "cd .. && python prepare_web_db.py data/clips.db frontend/public/clips.db"
+    "prepare-db": "cd .. && python3 prepare_web_db.py data/clips.db frontend/public/clips.db"
   },
   "dependencies": {
     "sql.js-httpvfs": "0.8.12"
