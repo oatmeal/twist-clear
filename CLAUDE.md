@@ -57,7 +57,11 @@ npm run dev          # Vite dev server → http://localhost:5173
 npm test             # Vitest unit tests (88 tests, ~0.5 s)
 npx tsc --noEmit     # type-check
 
-# Build a browser-ready DB (DELETE journal mode + FTS5 index):
+# Build a browser-ready DB:
+#   - DELETE journal mode (required by sql.js-httpvfs)
+#   - FTS5 trigram index (clips_fts)
+#   - Precomputed metadata: clips_meta, game_clip_counts
+#   - Indexes: clips_created_at, clips_created_at_game (covering)
 npm run prepare-db   # → writes frontend/public/clips.db
 
 npm run build        # production Vite build → frontend/dist/
@@ -82,6 +86,14 @@ exports as ESM. The current exclude list is:
 ```
 ['sql.js-httpvfs/dist/sqlite.worker.js', 'sql.js-httpvfs/dist/sql-wasm.wasm']
 ```
+
+**`dbRangePlugin` in `vite.config.ts`**: Vite's built-in static file server
+(sirv) advertises `Accept-Ranges: bytes` but ignores `Range` request headers,
+returning full 200 responses. sql.js-httpvfs requires genuine 206 Partial
+Content responses or it downloads the entire DB. The plugin intercepts `.db`
+requests in both `configureServer` (dev) and `configurePreviewServer` (preview)
+and implements range request handling directly via Node's `fs.createReadStream`.
+Do not remove it or sql.js-httpvfs will fall back to full-file downloads.
 
 ### AbortController in render()
 
@@ -125,6 +137,34 @@ whether the table exists and sets `state.useFts`. When `useFts` is true,
 `buildWhere` routes 3+-character title searches through
 `clips_fts MATCH :search` instead of `LIKE`. With fewer than 3 characters it
 always falls back to LIKE (trigram minimum).
+
+### Precomputed metadata (`useMeta`)
+
+sql.js-httpvfs uses an exponential read-ahead strategy: each sequential page
+miss doubles the next fetch size (4 KiB → 8 → 16 → … → 4 MiB). Aggregate
+queries that touch many rows (MIN/MAX, GROUP BY game, COUNT(*)) each trigger one
+of these chains and can transfer several MB of data from a cold cache.
+
+`prepare_web_db.py` precomputes three things to replace the most expensive
+startup aggregates with cheap single-page lookups:
+
+- `clips_meta` — one row: `min_date`, `max_date`, `total_clips`
+- `game_clip_counts` — one row per game: `id`, `name`, `cnt` (no date filter)
+- `clips_created_at` index — standalone index on `clips(created_at)` for
+  efficient date-range COUNT(*) queries
+- `clips_created_at_game` covering index — `clips(created_at, game_id)` so
+  date-filtered game-count GROUP BY queries are index-only (no table access)
+
+At startup `app.ts` checks `sqlite_master` for `clips_meta` and sets
+`state.useMeta` (mirrors the `useFts` pattern). When `useMeta` is true:
+
+- `initCalendar` reads `min_date`/`max_date` from `clips_meta` instead of
+  `MIN/MAX(created_at)` full scan
+- `updateGameFilter` reads from `game_clip_counts` when no date filter is active
+- `render()` reads `total_clips` from `clips_meta` when no filters are active
+
+Falls back to live aggregate queries when `useMeta` is false (raw dev-symlink
+DB, or a DB prepared before this feature was added).
 
 ### DB file requirements for sql.js-httpvfs
 
