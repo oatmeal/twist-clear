@@ -37,8 +37,9 @@ from lib.db import (
 _TWITCH_EPOCH = datetime(2011, 6, 1, tzinfo=UTC)
 
 # Adaptive window bounds for fetch_history.
-_MIN_WINDOW = timedelta(seconds=1)
-_MAX_WINDOW = timedelta(days=1)
+_MIN_WINDOW     = timedelta(seconds=1)
+_INITIAL_WINDOW = timedelta(days=1)
+_MAX_WINDOW     = timedelta(days=30)
 
 
 # ---------------------------------------------------------------------------
@@ -126,7 +127,7 @@ def fetch_history(
     if from_dt >= to_dt:
         return 0, None
 
-    window = _MAX_WINDOW
+    window = _INITIAL_WINDOW
     current = from_dt
     total = 0
     max_created_at: str | None = None

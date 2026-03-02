@@ -81,6 +81,8 @@ Pagination cursors are intentionally never stored. Per Twitch's own documentatio
 
 After each completed window, `fetch_progress_at` is written to the database. If the run is interrupted, restarting `fetch` picks up from that timestamp — at most one window of work is repeated. Streamers that have already been fully fetched are skipped automatically.
 
+Windows start at one day and double after each quiet window, up to a maximum of 30 days. This means long inactive stretches in a streamer's history are covered in a handful of requests rather than one per day.
+
 ### `update` — incremental update
 
 The update command fetches only clips created after the most recent clip already in the database (`newest_clip_at`). It uses standard cursor-based pagination within the single session, advancing the watermark once all pages are processed.
