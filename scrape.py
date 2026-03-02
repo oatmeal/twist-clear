@@ -8,7 +8,7 @@ Usage:
 
 import argparse
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 try:
     import tomllib
@@ -21,14 +21,25 @@ except ImportError:
 from lib.api import TwitchAPI
 from lib.db import (
     get_known_game_ids,
+    get_streamer,
     get_streamers,
     init_db,
     mark_full_history_fetched,
+    save_fetch_progress,
     update_watermark,
     upsert_clips,
     upsert_games,
     upsert_streamer,
 )
+
+# Twitch's public launch date — used as the fallback start when a streamer's
+# account_created_at is unavailable.
+_TWITCH_EPOCH = datetime(2011, 6, 1, tzinfo=UTC)
+
+# Adaptive window bounds for fetch_history.
+_MIN_WINDOW = timedelta(seconds=1)
+_MAX_WINDOW = timedelta(days=1)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -65,14 +76,10 @@ def normalize_clip(clip: dict) -> dict:
 def resolve_new_games(api: TwitchAPI, conn, clips: list[dict]) -> None:
     """Fetch and store names for any game_ids not yet in the DB."""
     known = get_known_game_ids(conn)
-    new_ids = [
-        c["game_id"]
-        for c in clips
-        if c.get("game_id") and c["game_id"] not in known
-    ]
+    new_ids = list({c["game_id"] for c in clips if c.get("game_id") and c["game_id"] not in known})
     if not new_ids:
         return
-    games = api.get_games(list(set(new_ids)))
+    games = api.get_games(new_ids)
     upsert_games(
         conn,
         [{"id": g["id"], "name": g["name"], "box_art_url": g.get("box_art_url", "")}
@@ -80,36 +87,89 @@ def resolve_new_games(api: TwitchAPI, conn, clips: list[dict]) -> None:
     )
 
 
-def scrape_streamer(
+def _fmt_window(window: timedelta) -> str:
+    """Format a timedelta as a compact human-readable string (e.g. '1d', '6h', '30m', '45s')."""
+    seconds = int(window.total_seconds())
+    if seconds >= 86400:
+        return f"{seconds // 86400}d"
+    if seconds >= 3600:
+        return f"{seconds // 3600}h"
+    if seconds >= 60:
+        return f"{seconds // 60}m"
+    return f"{seconds}s"
+
+
+# ---------------------------------------------------------------------------
+# Core fetch logic
+# ---------------------------------------------------------------------------
+
+
+def fetch_history(
     api: TwitchAPI,
     conn,
     broadcaster_id: str,
-    display_name: str,
-    started_at: str | None = None,
+    from_dt: datetime,
+    to_dt: datetime,
 ) -> tuple[int, str | None]:
-    """Page through all clips for a broadcaster, storing each page as we go.
+    """Fetch all clips in [from_dt, to_dt] using adaptive time windows.
+
+    Each window is a single API request (started_at + ended_at, first=100).
+    If the response includes a cursor — meaning the window holds more than 100
+    clips — the window is halved and the same start is retried. No cursors are
+    stored; the cursor is used only as an overflow signal.
+
+    Once a window completes successfully, fetch_progress_at is written to the
+    DB so an interrupted run can resume from the right place.
 
     Returns (total_clips_stored, max_created_at).
-    max_created_at is the most recent created_at across all fetched clips,
-    suitable for use as the next watermark.
     """
+    if from_dt >= to_dt:
+        return 0, None
+
+    window = _MAX_WINDOW
+    current = from_dt
     total = 0
     max_created_at: str | None = None
 
-    for page in api.get_clips(broadcaster_id, started_at=started_at):
-        clips = [normalize_clip(c) for c in page]
-        resolve_new_games(api, conn, clips)
-        upsert_clips(conn, clips)
-        total += len(clips)
+    while current < to_dt:
+        window_end = min(current + window, to_dt)
+        effective = window_end - current
 
-        page_max = max(c["created_at"] for c in clips)
-        if max_created_at is None or page_max > max_created_at:
-            max_created_at = page_max
+        clips_raw, has_more = api.get_clips_window(
+            broadcaster_id,
+            started_at=current.isoformat(timespec="seconds"),
+            ended_at=window_end.isoformat(timespec="seconds"),
+        )
 
-        print(f"  {total} clips fetched...", end="\r", flush=True)
+        if has_more and effective > _MIN_WINDOW:
+            # Too many clips in this window — halve it based on the actual
+            # (possibly clamped) effective size, not the stored window.
+            window = max(effective / 2, _MIN_WINDOW)
+            continue
 
-    # Clear the progress line
-    print(f"  {total} clips.           ")
+        # Window is complete: either it fits in ≤100 clips, or we're already
+        # at the minimum window size and just take what we get.
+        if clips_raw:
+            clips = [normalize_clip(c) for c in clips_raw]
+            resolve_new_games(api, conn, clips)
+            upsert_clips(conn, clips)
+            total += len(clips)
+
+            page_max = max(c["created_at"] for c in clips)
+            if max_created_at is None or page_max > max_created_at:
+                max_created_at = page_max
+
+        save_fetch_progress(conn, broadcaster_id, window_end.isoformat(timespec="seconds"))
+        current = window_end
+        window = min(window * 2, _MAX_WINDOW)
+
+        print(
+            f"  {current.date()}  window={_fmt_window(window)}  {total} clips",
+            end="\r",
+            flush=True,
+        )
+
+    print(f"  {total} clips total.                    ")
     return total, max_created_at
 
 
@@ -137,13 +197,33 @@ def cmd_fetch(api: TwitchAPI, conn, config: dict) -> None:
             "id": user["id"],
             "login": user["login"],
             "display_name": user["display_name"],
+            "account_created_at": user.get("created_at"),
         })
-        print(f"\n{user['display_name']} ({user['login']})")
-        total, max_created_at = scrape_streamer(api, conn, user["id"], user["display_name"])
+
+        row = get_streamer(conn, user["id"])
+
+        if row["full_history_fetched"]:
+            print(f"\n{user['display_name']} — already complete, skipping.")
+            continue
+
+        if row["fetch_progress_at"]:
+            from_dt = datetime.fromisoformat(row["fetch_progress_at"])
+            print(f"\n{user['display_name']} — resuming from {row['fetch_progress_at'][:10]}")
+        elif row["account_created_at"]:
+            from_dt = datetime.fromisoformat(row["account_created_at"])
+            print(f"\n{user['display_name']} — starting from account creation "
+                  f"({row['account_created_at'][:10]})")
+        else:
+            from_dt = _TWITCH_EPOCH
+            print(f"\n{user['display_name']} — no account date found, starting from "
+                  f"{_TWITCH_EPOCH.date()}")
+
+        to_dt = datetime.now(UTC)
+        total, max_created_at = fetch_history(api, conn, user["id"], from_dt, to_dt)
+
         if max_created_at:
             mark_full_history_fetched(conn, user["id"], max_created_at, now_iso())
         elif total == 0:
-            # No clips found; still mark as fully fetched so update works later.
             mark_full_history_fetched(conn, user["id"], "", now_iso())
 
 
@@ -156,20 +236,37 @@ def cmd_update(api: TwitchAPI, conn) -> None:
     for streamer in streamers:
         if not streamer["full_history_fetched"]:
             print(
-                f"Skipping {streamer['login']} — full history not yet fetched (run 'fetch' first).",
+                f"Skipping {streamer['login']} — full history not yet fetched "
+                "(run 'fetch' first).",
                 file=sys.stderr,
             )
             continue
 
-        watermark = streamer["newest_clip_at"]
+        watermark = streamer["newest_clip_at"] or None
         since = watermark or "beginning"
         print(f"\n{streamer['display_name']} ({streamer['login']}) — since {since}")
-        total, max_created_at = scrape_streamer(
-            api, conn, streamer["id"], streamer["display_name"], started_at=watermark or None
-        )
-        # Always advance last_scraped_at; advance watermark only if we found newer clips.
+
+        total = 0
+        max_created_at: str | None = None
+
+        for page in api.get_clips(streamer["id"], started_at=watermark):
+            clips = [normalize_clip(c) for c in page]
+            resolve_new_games(api, conn, clips)
+            upsert_clips(conn, clips)
+            total += len(clips)
+
+            page_max = max(c["created_at"] for c in clips)
+            if max_created_at is None or page_max > max_created_at:
+                max_created_at = page_max
+
+            print(f"  {total} clips fetched...", end="\r", flush=True)
+
+        print(f"  {total} clips.           ")
+
         new_watermark = (
-            max_created_at if max_created_at and max_created_at > (watermark or "") else watermark
+            max_created_at
+            if max_created_at and max_created_at > (watermark or "")
+            else watermark
         )
         update_watermark(conn, streamer["id"], new_watermark or "", now_iso())
 

@@ -3,6 +3,11 @@ from collections.abc import Iterator
 
 import requests
 
+# Slow down proactively when fewer than this many requests remain in the window.
+_RATE_LIMIT_BUFFER = 20
+# Seconds to pause when the remaining budget is low (avoids hitting 429).
+_RATE_LIMIT_PAUSE = 1.0
+
 
 class TwitchAPI:
     _BASE = "https://api.twitch.tv/helix"
@@ -49,13 +54,25 @@ class TwitchAPI:
         url = f"{self._BASE}/{endpoint}"
         while True:
             resp = requests.get(url, headers=self._headers(), params=params)
+
             if resp.status_code == 429:
                 reset = float(resp.headers.get("Ratelimit-Reset", time.time() + 1))
                 wait = max(0.0, reset - time.time()) + 0.1
                 print(f"  Rate limited — waiting {wait:.1f}s...")
                 time.sleep(wait)
                 continue
+
             resp.raise_for_status()
+
+            # Proactive: pause briefly when the remaining budget is nearly gone
+            # so we don't have to wait for a full 429 cycle.
+            remaining = resp.headers.get("Ratelimit-Remaining")
+            if remaining is not None and int(remaining) < _RATE_LIMIT_BUFFER:
+                reset = float(resp.headers.get("Ratelimit-Reset", time.time() + 1))
+                wait = max(_RATE_LIMIT_PAUSE, reset - time.time())
+                print(f"  Rate limit low ({remaining} remaining) — waiting {wait:.1f}s...")
+                time.sleep(wait)
+
             return resp.json()
 
     # ------------------------------------------------------------------
@@ -67,16 +84,41 @@ class TwitchAPI:
         data = self._get("users", {"login": logins})
         return data.get("data", [])
 
+    def get_clips_window(
+        self,
+        broadcaster_id: str,
+        started_at: str,
+        ended_at: str,
+    ) -> tuple[list[dict], bool]:
+        """Fetch at most 100 clips in [started_at, ended_at].
+
+        Returns (clips, has_more). has_more is True when the response includes
+        a pagination cursor, meaning the window contains more than 100 clips
+        and should be narrowed before retrying. The cursor itself is discarded —
+        it is never stored, only used as a boolean overflow signal.
+        """
+        data = self._get(
+            "clips",
+            {
+                "broadcaster_id": broadcaster_id,
+                "started_at": started_at,
+                "ended_at": ended_at,
+                "first": 100,
+            },
+        )
+        clips = data.get("data", [])
+        has_more = bool(data.get("pagination", {}).get("cursor"))
+        return clips, has_more
+
     def get_clips(
         self,
         broadcaster_id: str,
         started_at: str | None = None,
     ) -> Iterator[list[dict]]:
-        """Yield pages of clip dicts for a broadcaster.
+        """Yield pages of clip dicts for a broadcaster (used by incremental update).
 
         Pages are returned in descending view-count order (Twitch default).
-        Pass started_at (ISO 8601) to restrict to clips created on or after
-        that timestamp — used for incremental updates.
+        Cursors are consumed within this single call and are never persisted.
         """
         params: dict = {"broadcaster_id": broadcaster_id, "first": 100}
         if started_at:

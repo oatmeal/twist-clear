@@ -6,9 +6,11 @@ CREATE TABLE IF NOT EXISTS streamers (
     id                   TEXT PRIMARY KEY,
     login                TEXT NOT NULL UNIQUE,
     display_name         TEXT NOT NULL,
+    account_created_at   TEXT,
     first_scraped_at     TEXT,
     last_scraped_at      TEXT,
     newest_clip_at       TEXT,
+    fetch_progress_at    TEXT,
     full_history_fetched INTEGER NOT NULL DEFAULT 0
 );
 
@@ -53,11 +55,12 @@ def init_db(path: str) -> sqlite3.Connection:
 def upsert_streamer(conn: sqlite3.Connection, streamer: dict) -> None:
     conn.execute(
         """
-        INSERT INTO streamers (id, login, display_name)
-        VALUES (:id, :login, :display_name)
+        INSERT INTO streamers (id, login, display_name, account_created_at)
+        VALUES (:id, :login, :display_name, :account_created_at)
         ON CONFLICT(id) DO UPDATE SET
-            login        = excluded.login,
-            display_name = excluded.display_name
+            login              = excluded.login,
+            display_name       = excluded.display_name,
+            account_created_at = COALESCE(streamers.account_created_at, excluded.account_created_at)
         """,
         streamer,
     )
@@ -101,6 +104,14 @@ def upsert_clips(conn: sqlite3.Connection, clips: list[dict]) -> int:
     return result.rowcount
 
 
+def save_fetch_progress(conn: sqlite3.Connection, broadcaster_id: str, progress_at: str) -> None:
+    conn.execute(
+        "UPDATE streamers SET fetch_progress_at = ? WHERE id = ?",
+        (progress_at, broadcaster_id),
+    )
+    conn.commit()
+
+
 def mark_full_history_fetched(
     conn: sqlite3.Connection,
     broadcaster_id: str,
@@ -137,6 +148,10 @@ def update_watermark(
         (newest_clip_at, now, broadcaster_id),
     )
     conn.commit()
+
+
+def get_streamer(conn: sqlite3.Connection, broadcaster_id: str) -> sqlite3.Row | None:
+    return conn.execute("SELECT * FROM streamers WHERE id = ?", (broadcaster_id,)).fetchone()
 
 
 def get_streamers(conn: sqlite3.Connection) -> list[sqlite3.Row]:
