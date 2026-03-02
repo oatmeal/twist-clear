@@ -2,10 +2,10 @@
 
 ## What this repo is
 
-Two components in one repository:
+Two components of roughly equal importance in one repository:
 
 1. **Python scraper** (`scrape.py`, `lib/`) — fetches Twitch clip metadata via the Helix API using adaptive time-windowing and stores it in a local SQLite database.
-2. **Browser viewer** (`frontend/`) — a TypeScript + Vite SPA that queries the database directly in the browser using [sql.js-httpvfs](https://github.com/phiresky/sql.js-httpvfs) (HTTP Range requests; the full DB is never downloaded).
+2. **Browser viewer** (`frontend/`) — a TypeScript + Vite SPA that queries the database directly in the browser using [sql.js-httpvfs](https://github.com/phiresky/sql.js-httpvfs) (HTTP Range requests; only the B-tree pages needed for each query are fetched).
 
 ## Repository layout
 
@@ -231,8 +231,10 @@ DB, or a DB prepared before this feature was added).
 ### DB file requirements for sql.js-httpvfs
 
 - Must be in **DELETE journal mode** (not WAL). `prepare_web_db.py` handles this.
-- `frontend/public/clips.db` in dev is a symlink → `data/clips.db` (5 levels up).
-  The prepared file for production/build is a real file written by `prepare-db`.
+- In the main repo, `frontend/public/clips.db` is a symlink to `../../data/clips.db`
+  (the raw scraper output). In git worktrees, symlink it to the main repo's
+  `frontend/public/clips.db`. The prepared file for production/build is a real file
+  written by `prepare-db`.
 - The symlink is gitignored; the prepared DB is also gitignored (too large for git).
 
 ### Date arithmetic
