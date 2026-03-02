@@ -87,3 +87,71 @@ describe('buildWhere', () => {
     expect(andCount).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe('buildWhere filter interactions', () => {
+  it('calDateFrom with null calDateTo: :dateTo is bound to null at runtime', () => {
+    const { where, params } = buildWhere({ ...base, calDateFrom: '2024-01-01', calDateTo: null });
+    // The date clause is still emitted. The non-null assertion (!) in buildWhere
+    // bypasses TypeScript's type check, so :dateTo receives null at runtime.
+    // SQLite evaluates `created_at < NULL` as NULL — no rows will match.
+    expect(where).toContain(':dateTo');
+    expect(params[':dateFrom']).toBe('2024-01-01');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((params as any)[':dateTo']).toBeNull();
+  });
+
+  it('LIKE search: % in query is not escaped and acts as a SQL wildcard', () => {
+    // User types "100%" → :search becomes "%100%%" → SQL LIKE "%100%%" matches
+    // anything containing "100" followed by zero or more chars. The inner % is
+    // not treated as a literal percent sign.
+    const { params } = buildWhere({ ...base, searchQuery: '100%' });
+    expect(params[':search']).toBe('%100%%');
+  });
+
+  it('LIKE search: _ in query is not escaped and acts as a single-char wildcard', () => {
+    // User types "h_llo" → SQL LIKE "%h_llo%" matches "hello", "hallo", etc.,
+    // not only the literal string containing underscore.
+    const { params } = buildWhere({ ...base, searchQuery: 'h_llo' });
+    expect(params[':search']).toBe('%h_llo%');
+  });
+
+  it('gameFilter "0" is a truthy string and generates a WHERE clause', () => {
+    // Game IDs are strings; "0" is falsy in some languages but truthy in JS/TS.
+    const { where, params } = buildWhere({ ...base, gameFilter: '0' });
+    expect(where).toContain('game_id');
+    expect(params[':game']).toBe('0');
+  });
+
+  it('FTS5 + game filter + date range: all three filters combined', () => {
+    const { where, params } = buildWhere({
+      searchQuery: 'pog',
+      gameFilter: '123',
+      calDateFrom: '2024-01-01',
+      calDateTo: '2024-02-01',
+      useFts: true,
+    });
+    expect(where).toContain('clips_fts');
+    expect(where).toContain('game_id');
+    expect(where).toContain(':dateFrom');
+    expect(where).toContain(':dateTo');
+    // FTS AND game AND (dateFrom AND dateTo within date clause) = ≥3 ANDs
+    const andCount = (where.match(/\bAND\b/g) ?? []).length;
+    expect(andCount).toBeGreaterThanOrEqual(3);
+    expect(params[':search']).toBe('pog');
+    expect(params[':game']).toBe('123');
+    expect(params[':dateFrom']).toBe('2024-01-01');
+    expect(params[':dateTo']).toBe('2024-02-01');
+  });
+
+  it('date range where from equals to: params are set as provided', () => {
+    // At SQL level `created_at >= X AND created_at < X` matches nothing;
+    // buildWhere passes the values through unchanged.
+    const { params } = buildWhere({
+      ...base,
+      calDateFrom: '2024-06-01',
+      calDateTo: '2024-06-01',
+    });
+    expect(params[':dateFrom']).toBe('2024-06-01');
+    expect(params[':dateTo']).toBe('2024-06-01');
+  });
+});
