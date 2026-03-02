@@ -28,7 +28,7 @@ async function init() {
     document.getElementById('controls').style.display = 'flex';
 
     setStreamerTag();
-    populateGameFilter();
+    updateGameFilter();
     bindEvents();
     initCalendar(); // must come before applyStateHash so selects are populated
 
@@ -202,21 +202,39 @@ function setStreamerTag() {
   }
 }
 
-function populateGameFilter() {
+function updateGameFilter() {
+  // Re-query games scoped to the current date filter only (not search — you
+  // want to see all games in the selected period, not just those matching
+  // the current search term).
+  const params = {};
+  const dateClause = calDateFrom !== null
+    ? (params[':dateFrom'] = calDateFrom, params[':dateTo'] = calDateTo,
+       'WHERE c.created_at >= :dateFrom AND c.created_at < :dateTo')
+    : '';
+
   const rows = q(`
-    SELECT g.id, g.name, COUNT(c.id) as cnt
+    SELECT g.id, g.name, COUNT(c.id) AS cnt
     FROM games g
     JOIN clips c ON c.game_id = g.id
+    ${dateClause}
     GROUP BY g.id
     ORDER BY cnt DESC
-  `);
+  `, params);
+
   const sel = document.getElementById('game-filter');
+  const validIds = new Set(rows.map(r => String(r.id)));
+
+  sel.innerHTML = '<option value="">All Games</option>';
   for (const { id, name, cnt } of rows) {
     const opt = document.createElement('option');
     opt.value = id;
     opt.textContent = `${name} (${cnt.toLocaleString()})`;
     sel.appendChild(opt);
   }
+
+  // If the selected game is no longer present in this date range, clear it
+  if (gameFilter && !validIds.has(String(gameFilter))) gameFilter = '';
+  sel.value = gameFilter;
 }
 
 // ── Query building ────────────────────────────────────────────────────────
@@ -253,6 +271,10 @@ const ORDER = {
 // ── Render ────────────────────────────────────────────────────────────────
 
 function render() {
+  // Refresh game filter options scoped to the current date range; also clears
+  // gameFilter if the previously selected game has no clips in this range.
+  updateGameFilter();
+
   const { where, params } = buildWhere();
 
   const countRes = db.exec(`SELECT COUNT(*) FROM clips c ${where}`, params);

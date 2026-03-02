@@ -7,6 +7,8 @@ let calDay      = null;   // null | 'YYYY-MM-DD'
 let calWeek     = null;   // null | 'YYYY-MM-DD' (Monday of selected week)
 let calDateFrom = null;   // consumed by buildWhere() in app.js
 let calDateTo   = null;   // exclusive upper bound
+let calMinDate  = null;   // 'YYYY-MM-DD' — earliest clip in DB (set by initCalendar)
+let calMaxDate  = null;   // 'YYYY-MM-DD' — latest  clip in DB (set by initCalendar)
 
 const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const MONTH_LONG  = ['January','February','March','April','May','June',
@@ -113,12 +115,23 @@ function syncDateInputs() {
   fromEl.value = fromVal;
   toEl.value   = toVal;
 
-  // Keep the pickers mutually constrained so "to" can never precede "from"
-  if (fromVal) toEl.setAttribute('min', fromVal);
-  else         toEl.removeAttribute('min');
+  // Absolute lower bound: never before first clip
+  if (calMinDate) fromEl.setAttribute('min', calMinDate);
+  else            fromEl.removeAttribute('min');
 
-  if (toVal) fromEl.setAttribute('max', toVal);
-  else       fromEl.removeAttribute('max');
+  // Absolute upper bound: never after last clip; tightened by cross-constraint
+  const fromMax = toVal || calMaxDate;
+  if (fromMax) fromEl.setAttribute('max', fromMax);
+  else         fromEl.removeAttribute('max');
+
+  // Cross-constraint lower bound for to-input; loosened to absolute min
+  const toMin = fromVal || calMinDate;
+  if (toMin) toEl.setAttribute('min', toMin);
+  else       toEl.removeAttribute('min');
+
+  // Absolute upper bound for to-input: never after last clip
+  if (calMaxDate) toEl.setAttribute('max', calMaxDate);
+  else            toEl.removeAttribute('max');
 }
 
 // ── SQL Query Helpers ─────────────────────────────────────────────────────
@@ -174,16 +187,38 @@ function renderCalendar() {
 }
 
 function renderNavControls() {
-  // Update year select
   const ySel = document.getElementById('cal-year-select');
   if (ySel) ySel.value = calYear;
+
+  // Parse DB boundaries (month/day are 1-based from split)
+  const [mnY, mnM] = calMinDate ? calMinDate.split('-').map(Number) : [0,  1 ];
+  const [mxY, mxM] = calMaxDate ? calMaxDate.split('-').map(Number) : [9999, 12];
+
+  // Year arrow buttons: disable at DB year boundaries
+  document.getElementById('cal-prev-year').disabled = (calYear <= mnY);
+  document.getElementById('cal-next-year').disabled = (calYear >= mxY);
 
   const monthNav = document.getElementById('cal-month-nav');
   const dayNav   = document.getElementById('cal-day-nav');
 
   if (calMonth !== null) {
     const mSel = document.getElementById('cal-month-select');
-    if (mSel) mSel.value = calMonth;
+    if (mSel) {
+      mSel.value = calMonth;
+      // Disable months outside the DB range for boundary years
+      Array.from(mSel.options).forEach((opt, i) => {
+        // i is 0-based; mnM/mxM are 1-based
+        opt.disabled = (calYear === mnY && i < mnM - 1)
+                    || (calYear === mxY && i > mxM - 1);
+      });
+    }
+
+    // Month arrow buttons: disable when already at the min/max year-month
+    document.getElementById('cal-prev-month').disabled =
+      (calYear <= mnY && calMonth <= mnM - 1);
+    document.getElementById('cal-next-month').disabled =
+      (calYear >= mxY && calMonth >= mxM - 1);
+
     monthNav.style.display = 'flex';
 
     if (calDay !== null) {
@@ -192,14 +227,25 @@ function renderNavControls() {
         const total = daysInMonth(calYear, calMonth);
         dSel.innerHTML = '';
         for (let d = 1; d <= total; d++) {
+          const dateKey = localDateStr(calYear, calMonth, d);
           const opt = document.createElement('option');
           opt.value = d;
           opt.textContent = d;
+          // Disable days outside the absolute clip date range
+          opt.disabled = (calMinDate && dateKey < calMinDate)
+                      || (calMaxDate && dateKey > calMaxDate);
           dSel.appendChild(opt);
         }
         const [, , dd] = calDay.split('-');
         dSel.value = parseInt(dd, 10);
       }
+
+      // Day arrow buttons: disable at absolute min/max dates
+      document.getElementById('cal-prev-day').disabled =
+        !!(calMinDate && calDay <= calMinDate);
+      document.getElementById('cal-next-day').disabled =
+        !!(calMaxDate && calDay >= calMaxDate);
+
       dayNav.style.display = 'flex';
     } else {
       dayNav.style.display = 'none';
@@ -501,6 +547,8 @@ function switchView(view) {
 // ── Year / Month / Day Navigation ─────────────────────────────────────────
 
 function prevYear() {
+  const minY = calMinDate ? parseInt(calMinDate.slice(0, 4), 10) : 0;
+  if (calYear <= minY) return;
   calYear--;
   calMonth = null;
   calDay   = null;
@@ -512,6 +560,8 @@ function prevYear() {
 }
 
 function nextYear() {
+  const maxY = calMaxDate ? parseInt(calMaxDate.slice(0, 4), 10) : 9999;
+  if (calYear >= maxY) return;
   calYear++;
   calMonth = null;
   calDay   = null;
@@ -523,6 +573,8 @@ function nextYear() {
 }
 
 function prevMonth() {
+  const [mnY, mnM] = calMinDate ? calMinDate.split('-').map(Number) : [0, 1];
+  if (calYear <= mnY && calMonth <= mnM - 1) return;
   if (calMonth === 0) { calMonth = 11; calYear--; }
   else                { calMonth--;               }
   calDay  = null;
@@ -534,6 +586,8 @@ function prevMonth() {
 }
 
 function nextMonth() {
+  const [mxY, mxM] = calMaxDate ? calMaxDate.split('-').map(Number) : [9999, 12];
+  if (calYear >= mxY && calMonth >= mxM - 1) return;
   if (calMonth === 11) { calMonth = 0; calYear++; }
   else                 { calMonth++;              }
   calDay  = null;
@@ -545,6 +599,7 @@ function nextMonth() {
 }
 
 function prevDay() {
+  if (calMinDate && calDay <= calMinDate) return;
   const newDay = addDays(calDay, -1);
   const [y, m] = newDay.split('-').map(Number);
   calYear  = y;
@@ -553,6 +608,7 @@ function prevDay() {
 }
 
 function nextDay() {
+  if (calMaxDate && calDay >= calMaxDate) return;
   const newDay = addDays(calDay, 1);
   const [y, m] = newDay.split('-').map(Number);
   calYear  = y;
@@ -564,14 +620,22 @@ function nextDay() {
 // Called from app.js after the DB is loaded.
 
 function initCalendar() {
-  // Default to the most recent year that has clip data
-  const minRow = q("SELECT MIN(strftime('%Y', created_at)) AS yr FROM clips");
-  const maxRow = q("SELECT MAX(strftime('%Y', created_at)) AS yr FROM clips");
-  const minY = parseInt(minRow[0].yr, 10);
-  const maxY = parseInt(maxRow[0].yr, 10);
+  // Fetch the full date range of the clip archive in a single query
+  const rangeRow = q(`
+    SELECT MIN(strftime('%Y-%m-%d', created_at)) AS minD,
+           MAX(strftime('%Y-%m-%d', created_at)) AS maxD
+    FROM clips
+  `);
+  if (rangeRow.length && rangeRow[0].minD) {
+    calMinDate = rangeRow[0].minD; // 'YYYY-MM-DD'
+    calMaxDate = rangeRow[0].maxD;
+  }
+
+  const minY = calMinDate ? parseInt(calMinDate.slice(0, 4), 10) : new Date().getFullYear();
+  const maxY = calMaxDate ? parseInt(calMaxDate.slice(0, 4), 10) : new Date().getFullYear();
   calYear = maxY;
 
-  // Populate year select
+  // Populate year select (only years that have clips)
   const ySel = document.getElementById('cal-year-select');
   for (let y = maxY; y >= minY; y--) {
     const opt = document.createElement('option');
@@ -580,6 +644,9 @@ function initCalendar() {
     ySel.appendChild(opt);
   }
   ySel.value = calYear;
+
+  // Sync date inputs with absolute DB bounds now that calMinDate/calMaxDate are set
+  syncDateInputs();
   ySel.addEventListener('change', () => {
     calYear  = parseInt(ySel.value, 10);
     calMonth = null;
