@@ -105,9 +105,20 @@ function syncDateInputs() {
   const fromEl = document.getElementById('date-from-input');
   const toEl   = document.getElementById('date-to-input');
   if (!fromEl) return;
-  fromEl.value = calDateFrom ?? '';
+
+  const fromVal = calDateFrom ?? '';
   // calDateTo is exclusive; display inclusive by showing the day before
-  toEl.value = calDateTo ? addDays(calDateTo, -1) : '';
+  const toVal = calDateTo ? addDays(calDateTo, -1) : '';
+
+  fromEl.value = fromVal;
+  toEl.value   = toVal;
+
+  // Keep the pickers mutually constrained so "to" can never precede "from"
+  if (fromVal) toEl.setAttribute('min', fromVal);
+  else         toEl.removeAttribute('min');
+
+  if (toVal) fromEl.setAttribute('max', toVal);
+  else       fromEl.removeAttribute('max');
 }
 
 // ── SQL Query Helpers ─────────────────────────────────────────────────────
