@@ -61,6 +61,26 @@ uv run python scrape.py update
 --db PATH       Override the database path from config
 ```
 
+## Viewing clips
+
+A browser-based viewer is included at `frontend/index.html`. It loads the SQLite database directly via [sql.js](https://github.com/sql-js/sql.js) — no extra server or build step required.
+
+**Start a local server from the project root:**
+
+```sh
+uv run python -m http.server 8765
+```
+
+Then open **http://localhost:8765/frontend/** in your browser.
+
+Features:
+- Thumbnail grid with clip title, view count, creator, game, and date
+- Search by title, filter by game, sort by views or date
+- Pagination (24 clips per page)
+- Each thumbnail links directly to the clip on Twitch
+
+The viewer reads directly from `data/clips.db`, so it always reflects the latest scraped data without any export step.
+
 ## How the scraper works
 
 ### `fetch` — full historical scrape
