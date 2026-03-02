@@ -4,11 +4,14 @@ import { escHtml, fmtDuration, fmtViews, fmtDateTime } from './lib/format';
 import { buildWhere, ORDER } from './lib/query';
 import type { SortKey } from './lib/query';
 import { serializeHash, deserializeHash } from './lib/hash';
+import { t, lang, setLang, detectLang } from './lib/i18n';
+import type { Lang } from './lib/i18n';
 import {
   initCalendar,
   renderCalendar,
   clearCalDateFilter,
   syncDateInputs,
+  rebuildMonthSelect,
 } from './calendar';
 
 // ── URL hash state ────────────────────────────────────────────────────────
@@ -103,7 +106,7 @@ async function updateGameFilter(): Promise<void> {
   const sel = document.getElementById('game-filter') as HTMLSelectElement;
   const validIds = new Set(rows.map(r => String(r['id'])));
 
-  sel.innerHTML = '<option value="">All Games</option>';
+  sel.innerHTML = `<option value="">${escHtml(t().allGames)}</option>`;
   for (const row of rows) {
     const opt = document.createElement('option');
     opt.value = String(row['id']);
@@ -158,8 +161,7 @@ export async function render(): Promise<void> {
     );
     if (ctrl.signal.aborted) return;
 
-    document.getElementById('result-count')!.textContent =
-      `${state.totalClips.toLocaleString()} clip${state.totalClips !== 1 ? 's' : ''}`;
+    document.getElementById('result-count')!.textContent = t().resultCount(state.totalClips);
 
     const grid  = document.getElementById('clips-grid')!;
     const empty = document.getElementById('empty')!;
@@ -188,9 +190,9 @@ export async function render(): Promise<void> {
               </a>
             </div>
             <div class="clip-meta">
-              <span class="views">${fmtViews(c['view_count'] as number)} views</span>
+              <span class="views">${t().views(fmtViews(c['view_count'] as number))}</span>
               ${c['game_name'] ? `<span>${escHtml(c['game_name'])}</span>` : ''}
-              <span>by ${escHtml(c['creator_name'])} &middot; ${fmtDateTime(c['created_at'] as string)}</span>
+              <span>${t().creatorLine(escHtml(c['creator_name']), fmtDateTime(c['created_at'] as string, lang))}</span>
             </div>
           </div>
         </div>
@@ -241,6 +243,32 @@ function goPage(p: number): void {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+// ── Translation application ───────────────────────────────────────────────
+
+function applyTranslations(): void {
+  const tr = t();
+  (document.getElementById('search') as HTMLInputElement).placeholder = tr.searchPlaceholder;
+
+  const sort = document.getElementById('sort') as HTMLSelectElement;
+  // Options are indexed 0–3 matching HTML order: Most Viewed, Least Viewed, Newest, Oldest
+  sort.options[0]!.textContent = tr.sortMostViewed;
+  sort.options[1]!.textContent = tr.sortLeastViewed;
+  sort.options[2]!.textContent = tr.sortNewest;
+  sort.options[3]!.textContent = tr.sortOldest;
+
+  (document.getElementById('date-from-input') as HTMLInputElement).title = tr.dateFrom;
+  (document.getElementById('date-to-input')   as HTMLInputElement).title = tr.dateTo;
+
+  (document.getElementById('btn-view-grid') as HTMLButtonElement).textContent = tr.viewGrid;
+  (document.getElementById('btn-view-cal')  as HTMLButtonElement).textContent = tr.viewCalendar;
+
+  const loadingText = document.getElementById('loading-text');
+  if (loadingText) loadingText.textContent = tr.loading;
+  (document.getElementById('empty') as HTMLElement).textContent = tr.noClips;
+
+  (document.getElementById('lang-toggle') as HTMLButtonElement).textContent = tr.langToggle;
+}
+
 // ── Event binding ─────────────────────────────────────────────────────────
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -269,11 +297,26 @@ function bindEvents(): void {
     state.setCurrentPage(1);
     void render();
   });
+
 }
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────
 
 export async function init(): Promise<void> {
+  setLang(detectLang());
+  applyTranslations();
+
+  // Bind the lang toggle immediately so it works even if DB fails to load.
+  document.getElementById('lang-toggle')!.addEventListener('click', () => {
+    const newLang: Lang = lang === 'en' ? 'ja' : 'en';
+    setLang(newLang);
+    applyTranslations();
+    rebuildMonthSelect();
+    state.setCurrentPage(1);
+    void render();
+    if (state.currentView === 'calendar') void renderCalendar();
+  });
+
   try {
     await initDb(DB_URL);
 
@@ -322,9 +365,8 @@ export async function init(): Promise<void> {
     const el = document.getElementById('error')!;
     el.style.display = 'block';
     el.innerHTML =
-      `<strong>Could not load the database.</strong><br>` +
+      `<strong>${escHtml(t().errorTitle)}</strong><br>` +
       `${escHtml(err instanceof Error ? err.message : String(err))}<br><br>` +
-      `Make sure you are serving this page over HTTP and that <code>clips.db</code> ` +
-      `is accessible. Run: <code>npm run dev</code> from the frontend/ directory.`;
+      `${t().errorHint}`;
   }
 }

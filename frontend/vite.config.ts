@@ -4,7 +4,7 @@ export default defineConfig({
   root: '.',
   publicDir: 'public',
   server: {
-    port: 5173,
+    port: parseInt(process.env['PORT'] ?? '5173', 10),
     host: '127.0.0.1',
     fs: {
       // Allow resolving symlinks that point outside the package root (e.g. public/clips.db)

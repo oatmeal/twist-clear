@@ -9,13 +9,7 @@ import {
   weekStart,
   isoWeekNumber,
 } from './lib/dateUtils';
-
-// ── Constants ─────────────────────────────────────────────────────────────
-
-const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-const MONTH_LONG  = ['January','February','March','April','May','June',
-                     'July','August','September','October','November','December'];
-const DOW_LABELS  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+import { t } from './lib/i18n';
 
 // ── Render callback ───────────────────────────────────────────────────────
 // Injected by app.ts via initCalendar() to avoid a circular import.
@@ -240,7 +234,7 @@ async function renderYearView(): Promise<void> {
 
     const title = document.createElement('div');
     title.className = 'mini-month-title';
-    title.textContent = MONTH_SHORT[m]!;
+    title.textContent = t().monthShort[m]!;
     card.appendChild(title);
 
     const grid = document.createElement('div');
@@ -257,7 +251,7 @@ async function renderYearView(): Promise<void> {
       const cell = document.createElement('div');
       cell.className = 'mini-day';
       cell.style.background = heatColor(cnt);
-      if (cnt > 0) cell.title = `${key}: ${cnt} clip${cnt !== 1 ? 's' : ''}`;
+      if (cnt > 0) cell.title = t().dayTooltip(key, cnt);
       grid.appendChild(cell);
     }
 
@@ -297,8 +291,8 @@ async function renderYearStrip(): Promise<void> {
 
     const el = document.createElement('div');
     el.className = 'strip-month' + (m === state.calMonth ? ' active' : '');
-    el.textContent = MONTH_SHORT[m]!;
-    el.title = `${MONTH_LONG[m]}: ${cnt.toLocaleString()} clip${cnt !== 1 ? 's' : ''}`;
+    el.textContent = t().monthShort[m]!;
+    el.title = t().monthTooltip(t().monthLong[m]!, cnt);
     el.style.background = heatColor(cnt);
 
     el.addEventListener('click', () => {
@@ -330,7 +324,7 @@ async function renderMonthGrid(): Promise<void> {
   const header = document.createElement('div');
   header.className = 'month-dow-header';
   header.appendChild(document.createElement('span')); // empty corner above week gutter
-  DOW_LABELS.forEach(label => {
+  t().dayOfWeek.forEach(label => {
     const s = document.createElement('span');
     s.textContent = label;
     header.appendChild(s);
@@ -356,7 +350,7 @@ async function renderMonthGrid(): Promise<void> {
       const weekBtn = document.createElement('div');
       weekBtn.className = 'week-number-btn' + (state.calWeek === rowWeekMon ? ' selected' : '');
       weekBtn.textContent = String(weekNum);
-      weekBtn.title = `Select week ${weekNum} (${rowWeekMon})`;
+      weekBtn.title = t().selectWeek(weekNum, rowWeekMon);
       weekBtn.addEventListener('click', () => selectWeek(rowWeekMon));
       currentRow.appendChild(weekBtn);
     }
@@ -383,7 +377,7 @@ async function renderMonthGrid(): Promise<void> {
       if (cnt > 0) {
         const cntEl = document.createElement('div');
         cntEl.className = 'day-count';
-        cntEl.textContent = `${cnt} clip${cnt !== 1 ? 's' : ''}`;
+        cntEl.textContent = t().clipCount(cnt);
         cell.appendChild(cntEl);
       }
 
@@ -409,9 +403,9 @@ function renderBreadcrumb(): void {
   if (state.calMonth !== null) {
     parts.push(`<span class="sep">›</span>`);
     if (state.calDay === null && state.calWeek === null) {
-      parts.push(`<span class="crumb-current">${MONTH_LONG[state.calMonth]}</span>`);
+      parts.push(`<span class="crumb-current">${t().monthLong[state.calMonth]!}</span>`);
     } else {
-      parts.push(`<span class="crumb" data-action="month">${MONTH_LONG[state.calMonth]}</span>`);
+      parts.push(`<span class="crumb" data-action="month">${t().monthLong[state.calMonth]!}</span>`);
     }
   }
 
@@ -421,7 +415,7 @@ function renderBreadcrumb(): void {
     parts.push(`<span class="crumb-current">${parseInt(dd!, 10)}</span>`);
   } else if (state.calWeek !== null) {
     parts.push(`<span class="sep">›</span>`);
-    parts.push(`<span class="crumb-current">Week of ${state.calWeek}</span>`);
+    parts.push(`<span class="crumb-current">${t().weekLabel(state.calWeek!)}</span>`);
   }
 
   bc.innerHTML = parts.join('');
@@ -572,6 +566,21 @@ function nextDay(): void {
 
 // ── Init ──────────────────────────────────────────────────────────────────
 
+/** Rebuild the month <select> options in the current language (call after lang change). */
+export function rebuildMonthSelect(): void {
+  const mSel = document.getElementById('cal-month-select') as HTMLSelectElement | null;
+  if (!mSel) return;
+  const currentVal = mSel.value;
+  mSel.innerHTML = '';
+  t().monthLong.forEach((name, i) => {
+    const opt = document.createElement('option');
+    opt.value = String(i);
+    opt.textContent = name;
+    mSel.appendChild(opt);
+  });
+  mSel.value = currentVal;
+}
+
 export async function initCalendar(onRender: () => Promise<void>): Promise<void> {
   _onRender = onRender;
 
@@ -612,7 +621,7 @@ export async function initCalendar(onRender: () => Promise<void>): Promise<void>
   });
 
   const mSel = document.getElementById('cal-month-select') as HTMLSelectElement;
-  MONTH_LONG.forEach((name, i) => {
+  t().monthLong.forEach((name, i) => {
     const opt = document.createElement('option');
     opt.value = String(i);
     opt.textContent = name;

@@ -37,6 +37,18 @@ header .streamer-tag {
   font-size: 13px;
   color: var(--muted);
 }
+.lang-toggle {
+  margin-left: auto;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+}
+.lang-toggle:hover { border-color: var(--accent); color: var(--text); }
 
 /* ── Controls bar ── */
 #controls {
