@@ -25,6 +25,7 @@ from lib.db import (
     get_streamers,
     init_db,
     mark_full_history_fetched,
+    reset_fetch_state,
     save_fetch_progress,
     update_watermark,
     upsert_clips,
@@ -179,8 +180,11 @@ def fetch_history(
 # ---------------------------------------------------------------------------
 
 
-def cmd_fetch(api: TwitchAPI, conn, config: dict) -> None:
+def cmd_fetch(api: TwitchAPI, conn, config: dict, force: bool = False) -> None:
     """Full historical scrape for all streamers listed in config."""
+    if force:
+        print("--force: resetting fetch state for all streamers (view counts will refresh)...")
+        reset_fetch_state(conn)
     logins = [s["login"] for s in config.get("streamers", [])]
     if not logins:
         sys.exit("No streamers configured. Add [[streamers]] entries to config.toml.")
@@ -290,7 +294,12 @@ def main() -> None:
                         help="Override the database path from config")
 
     sub = parser.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("fetch", help="Full historical scrape for all configured streamers")
+    fetch_sub = sub.add_parser("fetch", help="Full historical scrape for all configured streamers")
+    fetch_sub.add_argument(
+        "--force",
+        action="store_true",
+        help="Reset all fetch state first, re-scanning full history and refreshing view counts",
+    )
     sub.add_parser("update", help="Incremental update — fetch only new clips")
 
     args = parser.parse_args()
@@ -305,7 +314,7 @@ def main() -> None:
     conn = init_db(db_path)
 
     if args.cmd == "fetch":
-        cmd_fetch(api, conn, config)
+        cmd_fetch(api, conn, config, force=getattr(args, "force", False))
     elif args.cmd == "update":
         cmd_update(api, conn)
 

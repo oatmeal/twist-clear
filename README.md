@@ -198,6 +198,10 @@ Requires `frontend/public/clips.db` to exist — run `prepare-db` first.
 
 Serve `frontend/dist/` from any static host that supports HTTP Range requests (`206 Partial Content`). Most CDNs and object storage services (S3, Cloudflare R2, Netlify) do; standard nginx and Apache do too.
 
+### Deploying to GitHub Pages
+
+See **[docs/deploying.md](docs/deploying.md)** for a complete walkthrough. The short version: create a private archive repo, add your Twitch credentials as secrets, enable Pages with "GitHub Actions" as the source, and add a workflow that calls the reusable `deploy.yml` in this repo. A daily schedule rebuilds and redeploys the archive automatically.
+
 ---
 
 ## Database schema

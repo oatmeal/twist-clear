@@ -29,7 +29,6 @@ import os
 import sqlite3
 import sys
 
-
 MIN_SQLITE = (3, 38, 0)  # trigram tokenizer requires 3.38+
 
 

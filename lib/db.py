@@ -161,3 +161,16 @@ def get_streamers(conn: sqlite3.Connection) -> list[sqlite3.Row]:
 def get_known_game_ids(conn: sqlite3.Connection) -> set[str]:
     rows = conn.execute("SELECT id FROM games").fetchall()
     return {row["id"] for row in rows}
+
+
+def reset_fetch_state(conn: sqlite3.Connection) -> None:
+    """Reset all streamers so fetch re-scans the full history from scratch.
+
+    Clears full_history_fetched and fetch_progress_at on every streamer row.
+    Existing clip data is preserved; clips will be upserted on the next fetch
+    run, updating their view counts.
+    """
+    conn.execute(
+        "UPDATE streamers SET full_history_fetched = 0, fetch_progress_at = NULL"
+    )
+    conn.commit()

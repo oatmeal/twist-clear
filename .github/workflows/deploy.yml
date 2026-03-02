@@ -1,0 +1,131 @@
+name: Deploy to GitHub Pages
+
+# Reusable workflow — call this from an archive repo's workflow.
+# See docs/deploying.md for setup instructions.
+on:
+  workflow_call:
+    inputs:
+      streamers:
+        description: >
+          Comma-separated list of Twitch channel logins to scrape
+          (e.g. "streamer1,streamer2").
+        required: true
+        type: string
+      force:
+        description: >
+          Reset all fetch state before scraping. This re-scans the full clip
+          history from scratch, refreshing view counts on every clip. Slower
+          than a normal run (~30 min for a typical archive) but ensures view
+          counts are current. Use on a weekly or monthly schedule alongside
+          a faster daily run without --force.
+        required: false
+        type: boolean
+        default: false
+      scraper_ref:
+        description: >
+          Branch, tag, or SHA of twitch-clips-scraper to check out.
+          Defaults to master.
+        required: false
+        type: string
+        default: master
+      code_repo:
+        description: >
+          GitHub repo containing the scraper code (owner/repo).
+          Defaults to {caller_owner}/twitch-clips-scraper, which works when
+          the archive repo and this repo are under the same account. Override
+          this if they are under different accounts.
+        required: false
+        type: string
+        default: ''
+    secrets:
+      TWITCH_CLIENT_ID:
+        required: true
+      TWITCH_CLIENT_SECRET:
+        required: true
+
+permissions:
+  pages: write
+  id-token: write
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04   # ubuntu-22.04 ships SQLite 3.37 which is too old for FTS5 trigram (needs 3.38+)
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Check out scraper + frontend code
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.code_repo || format('{0}/twitch-clips-scraper', github.repository_owner) }}
+          ref: ${{ inputs.scraper_ref }}
+
+      - uses: astral-sh/setup-uv@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Generate config.toml
+        env:
+          TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
+          TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
+          STREAMERS: ${{ inputs.streamers }}
+        run: |
+          python3 - <<'PYEOF'
+          import os, pathlib
+          cid = os.environ["TWITCH_CLIENT_ID"]
+          csc = os.environ["TWITCH_CLIENT_SECRET"]
+          logins = [s.strip() for s in os.environ["STREAMERS"].split(",") if s.strip()]
+          lines = [
+              "[twitch]",
+              f'client_id     = "{cid}"',
+              f'client_secret = "{csc}"',
+              "",
+              "[scraper]",
+              'db_path = "data/clips.db"',
+          ]
+          for login in logins:
+              lines += ["", "[[streamers]]", f'login = "{login}"']
+          pathlib.Path("config.toml").write_text("\n".join(lines) + "\n")
+          print(f"Generated config.toml with {len(logins)} streamer(s): {', '.join(logins)}")
+          PYEOF
+
+      - name: Install Python dependencies
+        run: uv sync
+
+      - name: Install Node dependencies
+        run: npm --prefix frontend ci
+
+      - name: Scrape clips
+        run: |
+          if [ "$FORCE" = "true" ]; then
+            uv run python scrape.py fetch --force
+          else
+            uv run python scrape.py fetch
+          fi
+        env:
+          FORCE: ${{ inputs.force }}
+
+      - name: Prepare database
+        run: npm --prefix frontend run prepare-db
+
+      - name: Build frontend
+        run: npm --prefix frontend run build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
