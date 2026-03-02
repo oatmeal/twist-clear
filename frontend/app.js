@@ -30,8 +30,33 @@ async function init() {
     setStreamerTag();
     populateGameFilter();
     bindEvents();
-    render();
-    initCalendar();
+    initCalendar(); // must come before applyStateHash so selects are populated
+
+    // Restore from URL hash (permalink), otherwise just render the default view
+    if (location.hash && location.hash.length > 1) {
+      applyStateHash(location.hash);
+    } else {
+      render();
+    }
+
+    // Re-apply state if the user edits the hash manually in the address bar
+    window.addEventListener('hashchange', () => {
+      if (location.hash && location.hash.length > 1) {
+        applyStateHash(location.hash);
+      } else {
+        // Empty hash → reset to default state
+        searchQuery = ''; sortBy = 'view_count_desc'; gameFilter = ''; currentPage = 1;
+        currentView = 'grid';
+        clearCalDateFilter();
+        document.getElementById('search').value      = '';
+        document.getElementById('sort').value        = 'view_count_desc';
+        document.getElementById('game-filter').value = '';
+        document.getElementById('btn-view-grid').classList.add('active');
+        document.getElementById('btn-view-cal').classList.remove('active');
+        document.getElementById('calendar-panel').style.display = 'none';
+        render();
+      }
+    });
   } catch (err) {
     document.getElementById('loading').style.display = 'none';
     const el = document.getElementById('error');
@@ -43,6 +68,87 @@ async function init() {
       `and that <code>data/clips.db</code> is accessible from the server root. ` +
       `Run: <code>uv run python -m http.server 8765</code> from the worktree directory.`;
   }
+}
+
+// ── URL hash state (permalink) ─────────────────────────────────────────────
+
+// Serialize current app + calendar state into a URLSearchParams hash string.
+// Default values are omitted to keep URLs short.
+function getStateHash() {
+  const p = new URLSearchParams();
+
+  // App state (omit defaults)
+  if (currentView === 'calendar')       p.set('view', 'calendar');
+  if (searchQuery)                      p.set('q',    searchQuery);
+  if (sortBy !== 'view_count_desc')     p.set('sort', sortBy);
+  if (gameFilter)                       p.set('game', gameFilter);
+  if (currentPage > 1)                  p.set('page', currentPage);
+
+  // Date filter (present in both views when set via the date inputs)
+  if (calDateFrom !== null)             p.set('from', calDateFrom);
+  if (calDateTo   !== null)             p.set('to',   calDateTo);
+
+  // Calendar navigation position (only meaningful in calendar view)
+  if (currentView === 'calendar') {
+    p.set('year', calYear);
+    if (calMonth !== null)              p.set('month', calMonth);
+    if (calDay   !== null)              p.set('day',   calDay);
+    if (calWeek  !== null)              p.set('week',  calWeek);
+  }
+
+  return p.toString();
+}
+
+// Write current state to location.hash without creating a browser history entry.
+function pushHash() {
+  const s = getStateHash();
+  history.replaceState(null, '', s ? '#' + s : location.pathname + location.search);
+}
+
+// Parse a hash string and restore all state, then re-render.
+// Called on page load (if a hash is present) and on hashchange.
+function applyStateHash(hashStr) {
+  const p = new URLSearchParams(hashStr.replace(/^#/, ''));
+
+  // App state
+  searchQuery = p.get('q')     || '';
+  sortBy      = p.get('sort')  || 'view_count_desc';
+  gameFilter  = p.get('game')  || '';
+  currentPage = parseInt(p.get('page') || '1', 10);
+
+  // Calendar date filter
+  calDateFrom = p.get('from') || null;
+  calDateTo   = p.get('to')   || null;
+
+  // Calendar navigation position
+  if (p.has('year')) calYear = parseInt(p.get('year'), 10);
+  calMonth = p.has('month') ? parseInt(p.get('month'), 10) : null;
+  calDay   = p.get('day')   || null;
+  calWeek  = p.get('week')  || null;
+
+  // Sync DOM controls
+  document.getElementById('search').value       = searchQuery;
+  document.getElementById('sort').value         = sortBy;
+  document.getElementById('game-filter').value  = gameFilter;
+  const ySel = document.getElementById('cal-year-select');
+  if (ySel) ySel.value = calYear;
+  syncDateInputs(); // defined in calendar.js
+
+  // View-specific rendering
+  const isCalendar = p.get('view') === 'calendar';
+  if (isCalendar) {
+    currentView = 'calendar';
+    document.getElementById('btn-view-cal').classList.add('active');
+    document.getElementById('btn-view-grid').classList.remove('active');
+    renderCalendar(); // defined in calendar.js
+  } else {
+    currentView = 'grid';
+    document.getElementById('btn-view-grid').classList.add('active');
+    document.getElementById('btn-view-cal').classList.remove('active');
+    document.getElementById('calendar-panel').style.display = 'none';
+  }
+
+  render();
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -206,6 +312,7 @@ function render() {
   }
 
   renderPagination();
+  pushHash();
 }
 
 function renderPagination() {
