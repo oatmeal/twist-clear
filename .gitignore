@@ -11,3 +11,8 @@ data/
 # Python
 __pycache__/
 *.pyc
+
+# Frontend package
+frontend/node_modules/
+frontend/dist/
+frontend/public/clips.db

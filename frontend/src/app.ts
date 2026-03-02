@@ -1,0 +1,308 @@
+import * as state from './state';
+import { initDb, q, DB_URL } from './db';
+import { escHtml, fmtDuration, fmtViews, fmtDateTime } from './lib/format';
+import { buildWhere, ORDER } from './lib/query';
+import type { SortKey } from './lib/query';
+import { serializeHash, deserializeHash } from './lib/hash';
+import {
+  initCalendar,
+  renderCalendar,
+  clearCalDateFilter,
+  syncDateInputs,
+} from './calendar';
+
+// ── URL hash state ────────────────────────────────────────────────────────
+
+function pushHash(): void {
+  const s = serializeHash({
+    currentView: state.currentView,
+    searchQuery: state.searchQuery,
+    sortBy: state.sortBy,
+    gameFilter: state.gameFilter,
+    currentPage: state.currentPage,
+    calDateFrom: state.calDateFrom,
+    calDateTo: state.calDateTo,
+    calYear: state.calYear,
+    calMonth: state.calMonth,
+    calDay: state.calDay,
+    calWeek: state.calWeek,
+  });
+  history.replaceState(null, '', s ? '#' + s : location.pathname + location.search);
+}
+
+function applyStateHash(hashStr: string): void {
+  const partial = deserializeHash(hashStr);
+
+  state.setSearchQuery(partial.searchQuery ?? '');
+  state.setSortBy((partial.sortBy ?? 'view_count_desc') as SortKey);
+  state.setGameFilter(partial.gameFilter ?? '');
+  state.setCurrentPage(partial.currentPage ?? 1);
+  state.setCalDateFrom(partial.calDateFrom ?? null);
+  state.setCalDateTo(partial.calDateTo ?? null);
+
+  if (partial.calYear !== undefined) state.setCalYear(partial.calYear);
+  state.setCalMonth(partial.calMonth ?? null);
+  state.setCalDay(partial.calDay ?? null);
+  state.setCalWeek(partial.calWeek ?? null);
+
+  // Sync DOM controls
+  (document.getElementById('search') as HTMLInputElement).value      = state.searchQuery;
+  (document.getElementById('sort') as HTMLSelectElement).value       = state.sortBy;
+  (document.getElementById('game-filter') as HTMLSelectElement).value = state.gameFilter;
+  const ySel = document.getElementById('cal-year-select') as HTMLSelectElement | null;
+  if (ySel) ySel.value = String(state.calYear);
+  syncDateInputs();
+
+  const isCalendar = partial.currentView === 'calendar';
+  if (isCalendar) {
+    state.setCurrentView('calendar');
+    document.getElementById('btn-view-cal')!.classList.add('active');
+    document.getElementById('btn-view-grid')!.classList.remove('active');
+    renderCalendar();
+  } else {
+    state.setCurrentView('grid');
+    document.getElementById('btn-view-grid')!.classList.add('active');
+    document.getElementById('btn-view-cal')!.classList.remove('active');
+    document.getElementById('calendar-panel')!.style.display = 'none';
+  }
+
+  render();
+}
+
+// ── DB query helpers ──────────────────────────────────────────────────────
+
+function setStreamerTag(): void {
+  const rows = q('SELECT display_name, login FROM streamers LIMIT 1');
+  if (rows.length) {
+    const row = rows[0]!;
+    const display = row['display_name'];
+    const login   = row['login'];
+    document.getElementById('streamer-tag')!.textContent =
+      display ? `${String(display)} (${String(login)})` : String(login);
+  }
+}
+
+function updateGameFilter(): void {
+  const params: Record<string, string> = {};
+  const dateClause = state.calDateFrom !== null
+    ? (params[':dateFrom'] = state.calDateFrom,
+       params[':dateTo']   = state.calDateTo!,
+       'WHERE c.created_at >= :dateFrom AND c.created_at < :dateTo')
+    : '';
+
+  const rows = q(
+    `SELECT g.id, g.name, COUNT(c.id) AS cnt
+     FROM games g
+     JOIN clips c ON c.game_id = g.id
+     ${dateClause}
+     GROUP BY g.id
+     ORDER BY cnt DESC`,
+    params,
+  );
+
+  const sel = document.getElementById('game-filter') as HTMLSelectElement;
+  const validIds = new Set(rows.map(r => String(r['id'])));
+
+  sel.innerHTML = '<option value="">All Games</option>';
+  for (const row of rows) {
+    const opt = document.createElement('option');
+    opt.value = String(row['id']);
+    opt.textContent = `${String(row['name'])} (${Number(row['cnt']).toLocaleString()})`;
+    sel.appendChild(opt);
+  }
+
+  if (state.gameFilter && !validIds.has(String(state.gameFilter))) {
+    state.setGameFilter('');
+  }
+  sel.value = state.gameFilter;
+}
+
+// ── Main render ───────────────────────────────────────────────────────────
+
+export function render(): void {
+  updateGameFilter();
+
+  const { where, params } = buildWhere({
+    searchQuery: state.searchQuery,
+    gameFilter: state.gameFilter,
+    calDateFrom: state.calDateFrom,
+    calDateTo: state.calDateTo,
+    useFts: state.useFts,
+  });
+
+  const countRows = q(`SELECT COUNT(*) AS cnt FROM clips c ${where}`, params);
+  state.setTotalClips((countRows[0]?.['cnt'] as number | undefined) ?? 0);
+
+  const offset = (state.currentPage - 1) * state.PAGE_SIZE;
+  const clips = q(
+    `SELECT c.id, c.title, c.creator_name, c.view_count,
+            c.created_at, c.duration, c.thumbnail_url, c.url,
+            COALESCE(g.name, '') AS game_name
+     FROM clips c
+     LEFT JOIN games g ON c.game_id = g.id
+     ${where}
+     ORDER BY ${ORDER[state.sortBy]}
+     LIMIT ${state.PAGE_SIZE} OFFSET ${offset}`,
+    params,
+  );
+
+  document.getElementById('result-count')!.textContent =
+    `${state.totalClips.toLocaleString()} clip${state.totalClips !== 1 ? 's' : ''}`;
+
+  const grid  = document.getElementById('clips-grid')!;
+  const empty = document.getElementById('empty')!;
+
+  if (!clips.length) {
+    grid.innerHTML = '';
+    empty.style.display = 'block';
+  } else {
+    empty.style.display = 'none';
+    grid.innerHTML = clips.map(c => `
+      <div class="clip-card">
+        <div class="clip-thumb">
+          <a href="${escHtml(c['url'])}" target="_blank" rel="noopener noreferrer">
+            <img src="${escHtml(c['thumbnail_url'])}" alt="${escHtml(c['title'])}"
+                 loading="lazy" onerror="this.classList.add('broken')">
+            <div class="clip-play-icon">
+              <svg viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
+            </div>
+          </a>
+          <span class="clip-duration">${fmtDuration(c['duration'] as number)}</span>
+        </div>
+        <div class="clip-info">
+          <div class="clip-title">
+            <a href="${escHtml(c['url'])}" target="_blank" rel="noopener noreferrer">
+              ${escHtml(c['title'])}
+            </a>
+          </div>
+          <div class="clip-meta">
+            <span class="views">${fmtViews(c['view_count'] as number)} views</span>
+            ${c['game_name'] ? `<span>${escHtml(c['game_name'])}</span>` : ''}
+            <span>by ${escHtml(c['creator_name'])} &middot; ${fmtDateTime(c['created_at'] as string)}</span>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  renderPagination();
+  pushHash();
+}
+
+function renderPagination(): void {
+  const totalPages = Math.ceil(state.totalClips / state.PAGE_SIZE);
+  const pg = document.getElementById('pagination')!;
+  if (totalPages <= 1) { pg.innerHTML = ''; return; }
+
+  const show = new Set([1, totalPages]);
+  for (let i = Math.max(1, state.currentPage - 2); i <= Math.min(totalPages, state.currentPage + 2); i++) {
+    show.add(i);
+  }
+  const sorted = [...show].sort((a, b) => a - b);
+
+  const parts: string[] = [];
+  parts.push(`<button id="pg-prev" ${state.currentPage === 1 ? 'disabled' : ''}>&#8249;</button>`);
+
+  let prev = 0;
+  for (const p of sorted) {
+    if (p - prev > 1) parts.push(`<span class="pg-ellipsis">&hellip;</span>`);
+    parts.push(`<button class="pg-btn${p === state.currentPage ? ' active' : ''}" data-page="${p}">${p}</button>`);
+    prev = p;
+  }
+  parts.push(`<button id="pg-next" ${state.currentPage === totalPages ? 'disabled' : ''}>&#8250;</button>`);
+  pg.innerHTML = parts.join('');
+
+  pg.querySelector('#pg-prev')!.addEventListener('click', () => goPage(state.currentPage - 1));
+  pg.querySelector('#pg-next')!.addEventListener('click', () => goPage(state.currentPage + 1));
+  pg.querySelectorAll('.pg-btn').forEach(btn =>
+    btn.addEventListener('click', () => goPage(Number((btn as HTMLButtonElement).dataset['page']))),
+  );
+}
+
+function goPage(p: number): void {
+  state.setCurrentPage(p);
+  render();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ── Event binding ─────────────────────────────────────────────────────────
+
+let searchTimer: ReturnType<typeof setTimeout> | null = null;
+
+function bindEvents(): void {
+  const searchInput = document.getElementById('search') as HTMLInputElement;
+  searchInput.addEventListener('input', e => {
+    if (searchTimer !== null) clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      state.setSearchQuery((e.target as HTMLInputElement).value.trim());
+      state.setCurrentPage(1);
+      render();
+    }, 300);
+  });
+
+  const sortSelect = document.getElementById('sort') as HTMLSelectElement;
+  sortSelect.addEventListener('change', e => {
+    state.setSortBy((e.target as HTMLSelectElement).value as SortKey);
+    state.setCurrentPage(1);
+    render();
+  });
+
+  const gameSelect = document.getElementById('game-filter') as HTMLSelectElement;
+  gameSelect.addEventListener('change', e => {
+    state.setGameFilter((e.target as HTMLSelectElement).value);
+    state.setCurrentPage(1);
+    render();
+  });
+}
+
+// ── Bootstrap ─────────────────────────────────────────────────────────────
+
+export async function init(): Promise<void> {
+  try {
+    await initDb(DB_URL);
+
+    document.getElementById('loading')!.style.display = 'none';
+    document.getElementById('controls')!.style.display = 'flex';
+
+    setStreamerTag();
+    updateGameFilter();
+    bindEvents();
+    initCalendar(render); // initCalendar must come before applyStateHash
+
+    if (location.hash && location.hash.length > 1) {
+      applyStateHash(location.hash);
+    } else {
+      render();
+    }
+
+    window.addEventListener('hashchange', () => {
+      if (location.hash && location.hash.length > 1) {
+        applyStateHash(location.hash);
+      } else {
+        // Empty hash → reset to default state
+        state.setSearchQuery('');
+        state.setSortBy('view_count_desc');
+        state.setGameFilter('');
+        state.setCurrentPage(1);
+        state.setCurrentView('grid');
+        clearCalDateFilter();
+        (document.getElementById('search') as HTMLInputElement).value       = '';
+        (document.getElementById('sort') as HTMLSelectElement).value        = 'view_count_desc';
+        (document.getElementById('game-filter') as HTMLSelectElement).value = '';
+        document.getElementById('btn-view-grid')!.classList.add('active');
+        document.getElementById('btn-view-cal')!.classList.remove('active');
+        document.getElementById('calendar-panel')!.style.display = 'none';
+        render();
+      }
+    });
+  } catch (err) {
+    document.getElementById('loading')!.style.display = 'none';
+    const el = document.getElementById('error')!;
+    el.style.display = 'block';
+    el.innerHTML =
+      `<strong>Could not load the database.</strong><br>` +
+      `${escHtml(err instanceof Error ? err.message : String(err))}<br><br>` +
+      `Make sure you are serving this page over HTTP and that <code>clips.db</code> ` +
+      `is accessible. Run: <code>npm run dev</code> from the frontend/ directory.`;
+  }
+}

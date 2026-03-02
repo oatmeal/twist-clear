@@ -1,0 +1,53 @@
+export type SortKey = 'view_count_desc' | 'view_count_asc' | 'date_desc' | 'date_asc';
+
+export const ORDER: Record<SortKey, string> = {
+  view_count_desc: 'c.view_count DESC',
+  view_count_asc: 'c.view_count ASC',
+  date_desc: 'c.created_at DESC',
+  date_asc: 'c.created_at ASC',
+};
+
+export interface WhereClause {
+  where: string;
+  params: Record<string, string>;
+}
+
+export interface BuildWhereOpts {
+  searchQuery: string;
+  gameFilter: string;
+  calDateFrom: string | null;
+  calDateTo: string | null;
+  useFts: boolean;
+}
+
+export function buildWhere(opts: BuildWhereOpts): WhereClause {
+  const parts: string[] = [];
+  const params: Record<string, string> = {};
+
+  if (opts.searchQuery) {
+    if (opts.useFts && opts.searchQuery.length >= 3) {
+      // FTS5 trigram subquery: only fetches relevant index pages
+      parts.push('c.rowid IN (SELECT rowid FROM clips_fts WHERE clips_fts MATCH :search)');
+      params[':search'] = opts.searchQuery;
+    } else {
+      parts.push('c.title LIKE :search');
+      params[':search'] = `%${opts.searchQuery}%`;
+    }
+  }
+
+  if (opts.gameFilter) {
+    parts.push('c.game_id = :game');
+    params[':game'] = opts.gameFilter;
+  }
+
+  if (opts.calDateFrom !== null) {
+    parts.push('c.created_at >= :dateFrom AND c.created_at < :dateTo');
+    params[':dateFrom'] = opts.calDateFrom;
+    params[':dateTo'] = opts.calDateTo!;
+  }
+
+  return {
+    where: parts.length ? `WHERE ${parts.join(' AND ')}` : '',
+    params,
+  };
+}
