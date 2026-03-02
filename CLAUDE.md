@@ -35,6 +35,12 @@ frontend/
   package.json
 ```
 
+## Default branch
+
+The default branch is **`master`**. Claude Code's session header may show
+"Main branch: main" — this is a generic label injected by the tool, not the
+actual branch name. Always target `master` for merges and PRs.
+
 ## Worktree setup (do this once per new worktree)
 
 Git worktrees are created under `.claude/worktrees/<name>/`. They share the
