@@ -266,10 +266,17 @@ function renderYearView() {
   const yearData = queryYearDays(calYear);
   const dayMap   = Object.fromEntries(yearData.map(r => [r.day, r.cnt]));
 
+  // Aggregate day-level counts up to month totals (avoids a second query)
+  const monthTotals = new Array(12).fill(0);
+  for (const [key, cnt] of Object.entries(dayMap)) {
+    monthTotals[parseInt(key.slice(5, 7), 10) - 1] += cnt; // key = 'YYYY-MM-DD'
+  }
+
   const container = document.getElementById('cal-year-view');
   container.innerHTML = '';
 
   for (let m = 0; m < 12; m++) {
+    if (monthTotals[m] === 0) continue; // hide months with no clips
     const totalDays = daysInMonth(calYear, m);
     const firstDow  = firstDayOfMonth(calYear, m);
 
