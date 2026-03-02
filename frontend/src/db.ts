@@ -1,42 +1,40 @@
-// Phase 1: synchronous sql.js loaded from CDN.
-// Phase 2 will replace this file with the sql.js-httpvfs async implementation.
+// Phase 2: sql.js-httpvfs — HTTP Range request VFS.
+// Only the SQLite B-tree pages needed for each query are fetched over the
+// network; the rest of the file is never downloaded.
+// Requires the DB to be in DELETE journal mode (not WAL).
 
-// sql.js is loaded as a <script> tag in index.html and placed on window.
-declare function initSqlJs(opts: { locateFile: (f: string) => string }): Promise<SqlJsStatic>;
-
-interface SqlJsStatic {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  Database: new (data: Uint8Array) => any;
-}
+import { createDbWorker } from 'sql.js-httpvfs';
+import workerUrl from 'sql.js-httpvfs/dist/sqlite.worker.js?url';
+import wasmUrl from 'sql.js-httpvfs/dist/sql-wasm.wasm?url';
+import type { WorkerHttpvfs } from 'sql.js-httpvfs';
 
 export type Row = Record<string, string | number | null>;
 
-// Accepts either named params (:name → value) or positional params ([val, ...])
+// Accepts either named params (:name → value) or positional params ([val, ...]).
+// Both are passed directly to sql.js exec() inside the worker:
+//   worker.db.query = (...args) => toObjects(exec(...args))
 type BindParams = Record<string, string | number | null> | (string | number | null)[];
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _db: any = null;
+let _worker: WorkerHttpvfs | null = null;
 
 export const DB_URL = '/clips.db';
 
 export async function initDb(dbUrl: string = DB_URL): Promise<void> {
-  const SQL = await initSqlJs({
-    locateFile: (f: string) =>
-      `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${f}`,
-  });
-  const res = await fetch(dbUrl);
-  if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${dbUrl}`);
-  const buf = await res.arrayBuffer();
-  _db = new SQL.Database(new Uint8Array(buf));
+  _worker = await createDbWorker(
+    [{ from: 'inline', config: { serverMode: 'full', url: dbUrl, requestChunkSize: 4096 } }],
+    workerUrl,
+    wasmUrl,
+  );
 }
 
-export function q(sql: string, params?: BindParams): Row[] {
-  if (!_db) throw new Error('DB not initialized');
+export async function q(sql: string, params?: BindParams): Promise<Row[]> {
+  if (!_worker) throw new Error('DB not initialized');
+  // Cast through any to avoid fighting Comlink.Remote<T>'s complex generic types.
+  // At runtime, query(...args) delegates to exec(...args) which accepts both
+  // positional arrays and named-param objects, same as Phase 1.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const res: any[] = _db.exec(sql, params);
-  if (!res.length) return [];
-  const cols: string[] = res[0].columns;
-  return (res[0].values as (string | number | null)[][]).map(row =>
-    Object.fromEntries(cols.map((c, i) => [c, row[i] ?? null])),
-  );
+  const db = _worker.db as any;
+  return params !== undefined
+    ? (db.query(sql, params) as Promise<Row[]>)
+    : (db.query(sql) as Promise<Row[]>);
 }

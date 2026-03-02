@@ -58,7 +58,7 @@ function applyStateHash(hashStr: string): void {
     state.setCurrentView('calendar');
     document.getElementById('btn-view-cal')!.classList.add('active');
     document.getElementById('btn-view-grid')!.classList.remove('active');
-    renderCalendar();
+    void renderCalendar();
   } else {
     state.setCurrentView('grid');
     document.getElementById('btn-view-grid')!.classList.add('active');
@@ -66,13 +66,13 @@ function applyStateHash(hashStr: string): void {
     document.getElementById('calendar-panel')!.style.display = 'none';
   }
 
-  render();
+  void render();
 }
 
 // ── DB query helpers ──────────────────────────────────────────────────────
 
-function setStreamerTag(): void {
-  const rows = q('SELECT display_name, login FROM streamers LIMIT 1');
+async function setStreamerTag(): Promise<void> {
+  const rows = await q('SELECT display_name, login FROM streamers LIMIT 1');
   if (rows.length) {
     const row = rows[0]!;
     const display = row['display_name'];
@@ -82,7 +82,7 @@ function setStreamerTag(): void {
   }
 }
 
-function updateGameFilter(): void {
+async function updateGameFilter(): Promise<void> {
   const params: Record<string, string> = {};
   const dateClause = state.calDateFrom !== null
     ? (params[':dateFrom'] = state.calDateFrom,
@@ -90,7 +90,7 @@ function updateGameFilter(): void {
        'WHERE c.created_at >= :dateFrom AND c.created_at < :dateTo')
     : '';
 
-  const rows = q(
+  const rows = await q(
     `SELECT g.id, g.name, COUNT(c.id) AS cnt
      FROM games g
      JOIN clips c ON c.game_id = g.id
@@ -119,74 +119,90 @@ function updateGameFilter(): void {
 
 // ── Main render ───────────────────────────────────────────────────────────
 
-export function render(): void {
-  updateGameFilter();
+// AbortController guard: if a new render() call starts while one is in
+// flight, the earlier one checks the signal and returns early.
+let _renderController: AbortController | null = null;
 
-  const { where, params } = buildWhere({
-    searchQuery: state.searchQuery,
-    gameFilter: state.gameFilter,
-    calDateFrom: state.calDateFrom,
-    calDateTo: state.calDateTo,
-    useFts: state.useFts,
-  });
+export async function render(): Promise<void> {
+  _renderController?.abort();
+  const ctrl = new AbortController();
+  _renderController = ctrl;
 
-  const countRows = q(`SELECT COUNT(*) AS cnt FROM clips c ${where}`, params);
-  state.setTotalClips((countRows[0]?.['cnt'] as number | undefined) ?? 0);
+  try {
+    await updateGameFilter();
+    if (ctrl.signal.aborted) return;
 
-  const offset = (state.currentPage - 1) * state.PAGE_SIZE;
-  const clips = q(
-    `SELECT c.id, c.title, c.creator_name, c.view_count,
-            c.created_at, c.duration, c.thumbnail_url, c.url,
-            COALESCE(g.name, '') AS game_name
-     FROM clips c
-     LEFT JOIN games g ON c.game_id = g.id
-     ${where}
-     ORDER BY ${ORDER[state.sortBy]}
-     LIMIT ${state.PAGE_SIZE} OFFSET ${offset}`,
-    params,
-  );
+    const { where, params } = buildWhere({
+      searchQuery: state.searchQuery,
+      gameFilter: state.gameFilter,
+      calDateFrom: state.calDateFrom,
+      calDateTo: state.calDateTo,
+      useFts: state.useFts,
+    });
 
-  document.getElementById('result-count')!.textContent =
-    `${state.totalClips.toLocaleString()} clip${state.totalClips !== 1 ? 's' : ''}`;
+    const countRows = await q(`SELECT COUNT(*) AS cnt FROM clips c ${where}`, params);
+    if (ctrl.signal.aborted) return;
+    state.setTotalClips((countRows[0]?.['cnt'] as number | undefined) ?? 0);
 
-  const grid  = document.getElementById('clips-grid')!;
-  const empty = document.getElementById('empty')!;
+    const offset = (state.currentPage - 1) * state.PAGE_SIZE;
+    const clips = await q(
+      `SELECT c.id, c.title, c.creator_name, c.view_count,
+              c.created_at, c.duration, c.thumbnail_url, c.url,
+              COALESCE(g.name, '') AS game_name
+       FROM clips c
+       LEFT JOIN games g ON c.game_id = g.id
+       ${where}
+       ORDER BY ${ORDER[state.sortBy]}
+       LIMIT ${state.PAGE_SIZE} OFFSET ${offset}`,
+      params,
+    );
+    if (ctrl.signal.aborted) return;
 
-  if (!clips.length) {
-    grid.innerHTML = '';
-    empty.style.display = 'block';
-  } else {
-    empty.style.display = 'none';
-    grid.innerHTML = clips.map(c => `
-      <div class="clip-card">
-        <div class="clip-thumb">
-          <a href="${escHtml(c['url'])}" target="_blank" rel="noopener noreferrer">
-            <img src="${escHtml(c['thumbnail_url'])}" alt="${escHtml(c['title'])}"
-                 loading="lazy" onerror="this.classList.add('broken')">
-            <div class="clip-play-icon">
-              <svg viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
-            </div>
-          </a>
-          <span class="clip-duration">${fmtDuration(c['duration'] as number)}</span>
-        </div>
-        <div class="clip-info">
-          <div class="clip-title">
+    document.getElementById('result-count')!.textContent =
+      `${state.totalClips.toLocaleString()} clip${state.totalClips !== 1 ? 's' : ''}`;
+
+    const grid  = document.getElementById('clips-grid')!;
+    const empty = document.getElementById('empty')!;
+
+    if (!clips.length) {
+      grid.innerHTML = '';
+      empty.style.display = 'block';
+    } else {
+      empty.style.display = 'none';
+      grid.innerHTML = clips.map(c => `
+        <div class="clip-card">
+          <div class="clip-thumb">
             <a href="${escHtml(c['url'])}" target="_blank" rel="noopener noreferrer">
-              ${escHtml(c['title'])}
+              <img src="${escHtml(c['thumbnail_url'])}" alt="${escHtml(c['title'])}"
+                   loading="lazy" onerror="this.classList.add('broken')">
+              <div class="clip-play-icon">
+                <svg viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
+              </div>
             </a>
+            <span class="clip-duration">${fmtDuration(c['duration'] as number)}</span>
           </div>
-          <div class="clip-meta">
-            <span class="views">${fmtViews(c['view_count'] as number)} views</span>
-            ${c['game_name'] ? `<span>${escHtml(c['game_name'])}</span>` : ''}
-            <span>by ${escHtml(c['creator_name'])} &middot; ${fmtDateTime(c['created_at'] as string)}</span>
+          <div class="clip-info">
+            <div class="clip-title">
+              <a href="${escHtml(c['url'])}" target="_blank" rel="noopener noreferrer">
+                ${escHtml(c['title'])}
+              </a>
+            </div>
+            <div class="clip-meta">
+              <span class="views">${fmtViews(c['view_count'] as number)} views</span>
+              ${c['game_name'] ? `<span>${escHtml(c['game_name'])}</span>` : ''}
+              <span>by ${escHtml(c['creator_name'])} &middot; ${fmtDateTime(c['created_at'] as string)}</span>
+            </div>
           </div>
         </div>
-      </div>
-    `).join('');
-  }
+      `).join('');
+    }
 
-  renderPagination();
-  pushHash();
+    renderPagination();
+    pushHash();
+  } catch (e) {
+    if (ctrl.signal.aborted) return; // expected: a newer render() preempted us
+    throw e;
+  }
 }
 
 function renderPagination(): void {
@@ -221,7 +237,7 @@ function renderPagination(): void {
 
 function goPage(p: number): void {
   state.setCurrentPage(p);
-  render();
+  void render();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -236,7 +252,7 @@ function bindEvents(): void {
     searchTimer = setTimeout(() => {
       state.setSearchQuery((e.target as HTMLInputElement).value.trim());
       state.setCurrentPage(1);
-      render();
+      void render();
     }, 300);
   });
 
@@ -244,14 +260,14 @@ function bindEvents(): void {
   sortSelect.addEventListener('change', e => {
     state.setSortBy((e.target as HTMLSelectElement).value as SortKey);
     state.setCurrentPage(1);
-    render();
+    void render();
   });
 
   const gameSelect = document.getElementById('game-filter') as HTMLSelectElement;
   gameSelect.addEventListener('change', e => {
     state.setGameFilter((e.target as HTMLSelectElement).value);
     state.setCurrentPage(1);
-    render();
+    void render();
   });
 }
 
@@ -264,15 +280,14 @@ export async function init(): Promise<void> {
     document.getElementById('loading')!.style.display = 'none';
     document.getElementById('controls')!.style.display = 'flex';
 
-    setStreamerTag();
-    updateGameFilter();
+    void setStreamerTag();
     bindEvents();
-    initCalendar(render); // initCalendar must come before applyStateHash
+    await initCalendar(render); // must await: queries clip date range for nav bounds
 
     if (location.hash && location.hash.length > 1) {
       applyStateHash(location.hash);
     } else {
-      render();
+      void render();
     }
 
     window.addEventListener('hashchange', () => {
@@ -292,7 +307,7 @@ export async function init(): Promise<void> {
         document.getElementById('btn-view-grid')!.classList.add('active');
         document.getElementById('btn-view-cal')!.classList.remove('active');
         document.getElementById('calendar-panel')!.style.display = 'none';
-        render();
+        void render();
       }
     });
   } catch (err) {

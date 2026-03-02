@@ -20,10 +20,12 @@ const DOW_LABELS  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 // ── Render callback ───────────────────────────────────────────────────────
 // Injected by app.ts via initCalendar() to avoid a circular import.
 
-let _onRender: (() => void) | null = null;
+let _onRender: (() => Promise<void>) | null = null;
 
 function callRender(): void {
-  _onRender?.();
+  // Fire and forget — the AbortController in render() handles deduplication
+  // when multiple rapid interactions trigger overlapping renders.
+  void _onRender?.();
 }
 
 // ── Heat color ────────────────────────────────────────────────────────────
@@ -98,50 +100,50 @@ export function syncDateInputs(): void {
 
 // ── DB queries ────────────────────────────────────────────────────────────
 
-function queryYearDays(year: number): { day: string; cnt: number }[] {
-  return q(
+async function queryYearDays(year: number): Promise<{ day: string; cnt: number }[]> {
+  return (await q(
     `SELECT strftime('%Y-%m-%d', created_at) AS day, COUNT(*) AS cnt
      FROM clips
      WHERE created_at >= ? AND created_at < ?
      GROUP BY day`,
     [`${year}-01-01`, `${year + 1}-01-01`],
-  ) as { day: string; cnt: number }[];
+  )) as { day: string; cnt: number }[];
 }
 
-function queryMonthDays(year: number, month: number): { day: string; cnt: number }[] {
+async function queryMonthDays(year: number, month: number): Promise<{ day: string; cnt: number }[]> {
   const from = `${year}-${String(month + 1).padStart(2, '0')}-01`;
   const to   = month === 11
     ? `${year + 1}-01-01`
     : `${year}-${String(month + 2).padStart(2, '0')}-01`;
-  return q(
+  return (await q(
     `SELECT strftime('%Y-%m-%d', created_at) AS day, COUNT(*) AS cnt
      FROM clips
      WHERE created_at >= ? AND created_at < ?
      GROUP BY day`,
     [from, to],
-  ) as { day: string; cnt: number }[];
+  )) as { day: string; cnt: number }[];
 }
 
-function queryYearMonthTotals(year: number): { month: string; cnt: number }[] {
-  return q(
+async function queryYearMonthTotals(year: number): Promise<{ month: string; cnt: number }[]> {
+  return (await q(
     `SELECT strftime('%Y-%m', created_at) AS month, COUNT(*) AS cnt
      FROM clips
      WHERE created_at >= ? AND created_at < ?
      GROUP BY month`,
     [`${year}-01-01`, `${year + 1}-01-01`],
-  ) as { month: string; cnt: number }[];
+  )) as { month: string; cnt: number }[];
 }
 
 // ── Main calendar dispatcher ──────────────────────────────────────────────
 
-export function renderCalendar(): void {
+export async function renderCalendar(): Promise<void> {
   const panel = document.getElementById('calendar-panel')!;
   panel.style.display = 'block';
 
   if (state.calMonth === null) {
-    renderYearView();
+    await renderYearView();
   } else {
-    renderMonthView();
+    await renderMonthView();
   }
 
   renderNavControls();
@@ -212,12 +214,12 @@ function renderNavControls(): void {
 
 // ── Year view ─────────────────────────────────────────────────────────────
 
-function renderYearView(): void {
+async function renderYearView(): Promise<void> {
   document.getElementById('cal-year-view')!.style.display  = 'grid';
   document.getElementById('cal-month-view')!.style.display = 'none';
   renderBreadcrumb();
 
-  const yearData = queryYearDays(state.calYear);
+  const yearData = await queryYearDays(state.calYear);
   const dayMap   = Object.fromEntries(yearData.map(r => [r.day, r.cnt]));
 
   const monthTotals = new Array<number>(12).fill(0);
@@ -265,7 +267,7 @@ function renderYearView(): void {
       state.setCalDay(null);
       state.setCalWeek(null);
       setMonthFilter(state.calYear, m);
-      renderCalendar();
+      void renderCalendar();
       state.setCurrentPage(1);
       callRender();
     });
@@ -275,16 +277,15 @@ function renderYearView(): void {
 
 // ── Month view ────────────────────────────────────────────────────────────
 
-function renderMonthView(): void {
+async function renderMonthView(): Promise<void> {
   document.getElementById('cal-year-view')!.style.display  = 'none';
   document.getElementById('cal-month-view')!.style.display = 'block';
   renderBreadcrumb();
-  renderYearStrip();
-  renderMonthGrid();
+  await Promise.all([renderYearStrip(), renderMonthGrid()]);
 }
 
-function renderYearStrip(): void {
-  const totals   = queryYearMonthTotals(state.calYear);
+async function renderYearStrip(): Promise<void> {
+  const totals   = await queryYearMonthTotals(state.calYear);
   const monthMap = Object.fromEntries(totals.map(r => [r.month, r.cnt]));
 
   const strip = document.getElementById('cal-year-strip')!;
@@ -305,7 +306,7 @@ function renderYearStrip(): void {
       state.setCalDay(null);
       state.setCalWeek(null);
       setMonthFilter(state.calYear, m);
-      renderCalendar();
+      void renderCalendar();
       state.setCurrentPage(1);
       callRender();
     });
@@ -313,8 +314,8 @@ function renderYearStrip(): void {
   }
 }
 
-function renderMonthGrid(): void {
-  const monthData = queryMonthDays(state.calYear, state.calMonth!);
+async function renderMonthGrid(): Promise<void> {
+  const monthData = await queryMonthDays(state.calYear, state.calMonth!);
   const dayMap    = Object.fromEntries(monthData.map(r => [r.day, r.cnt]));
 
   const totalDays  = daysInMonth(state.calYear, state.calMonth!);
@@ -430,7 +431,7 @@ function renderBreadcrumb(): void {
     state.setCalDay(null);
     state.setCalWeek(null);
     setYearFilter(state.calYear);
-    renderCalendar();
+    void renderCalendar();
     state.setCurrentPage(1);
     callRender();
   });
@@ -439,7 +440,7 @@ function renderBreadcrumb(): void {
     state.setCalDay(null);
     state.setCalWeek(null);
     setMonthFilter(state.calYear, state.calMonth!);
-    renderCalendar();
+    void renderCalendar();
     state.setCurrentPage(1);
     callRender();
   });
@@ -453,7 +454,7 @@ function selectDay(dateStr: string): void {
   state.setCalDateFrom(dateStr);
   state.setCalDateTo(addDays(dateStr, 1));
   syncDateInputs();
-  renderCalendar();
+  void renderCalendar();
   state.setCurrentPage(1);
   callRender();
 }
@@ -464,7 +465,7 @@ function selectWeek(weekMonStr: string): void {
   state.setCalDateFrom(weekMonStr);
   state.setCalDateTo(addDays(weekMonStr, 7));
   syncDateInputs();
-  renderCalendar();
+  void renderCalendar();
   state.setCurrentPage(1);
   callRender();
 }
@@ -491,7 +492,7 @@ export function switchView(view: 'grid' | 'calendar'): void {
     state.setSortBy('date_asc');
     (document.getElementById('sort') as HTMLSelectElement).value = 'date_asc';
     setYearFilter(state.calYear);
-    renderCalendar();
+    void renderCalendar();
     state.setCurrentPage(1);
     callRender();
   }
@@ -507,7 +508,7 @@ function prevYear(): void {
   state.setCalDay(null);
   state.setCalWeek(null);
   setYearFilter(state.calYear);
-  renderCalendar();
+  void renderCalendar();
   state.setCurrentPage(1);
   callRender();
 }
@@ -520,7 +521,7 @@ function nextYear(): void {
   state.setCalDay(null);
   state.setCalWeek(null);
   setYearFilter(state.calYear);
-  renderCalendar();
+  void renderCalendar();
   state.setCurrentPage(1);
   callRender();
 }
@@ -533,7 +534,7 @@ function prevMonth(): void {
   state.setCalDay(null);
   state.setCalWeek(null);
   setMonthFilter(state.calYear, state.calMonth!);
-  renderCalendar();
+  void renderCalendar();
   state.setCurrentPage(1);
   callRender();
 }
@@ -546,7 +547,7 @@ function nextMonth(): void {
   state.setCalDay(null);
   state.setCalWeek(null);
   setMonthFilter(state.calYear, state.calMonth!);
-  renderCalendar();
+  void renderCalendar();
   state.setCurrentPage(1);
   callRender();
 }
@@ -571,10 +572,10 @@ function nextDay(): void {
 
 // ── Init ──────────────────────────────────────────────────────────────────
 
-export function initCalendar(onRender: () => void): void {
+export async function initCalendar(onRender: () => Promise<void>): Promise<void> {
   _onRender = onRender;
 
-  const rangeRow = q(`
+  const rangeRow = await q(`
     SELECT MIN(strftime('%Y-%m-%d', created_at)) AS minD,
            MAX(strftime('%Y-%m-%d', created_at)) AS maxD
     FROM clips
@@ -605,7 +606,7 @@ export function initCalendar(onRender: () => void): void {
     state.setCalDay(null);
     state.setCalWeek(null);
     setYearFilter(state.calYear);
-    renderCalendar();
+    void renderCalendar();
     state.setCurrentPage(1);
     callRender();
   });
@@ -622,7 +623,7 @@ export function initCalendar(onRender: () => void): void {
     state.setCalDay(null);
     state.setCalWeek(null);
     setMonthFilter(state.calYear, state.calMonth!);
-    renderCalendar();
+    void renderCalendar();
     state.setCurrentPage(1);
     callRender();
   });

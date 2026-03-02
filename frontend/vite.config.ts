@@ -12,8 +12,10 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    // sql.js-httpvfs ships pre-bundled; exclude from Vite's dep optimizer
-    exclude: ['sql.js-httpvfs'],
+    // The worker and WASM are imported with ?url so they bypass the optimizer.
+    // The main package entry (index.js) is CJS and must be pre-bundled so Vite
+    // can expose its named exports as ESM.
+    exclude: ['sql.js-httpvfs/dist/sqlite.worker.js', 'sql.js-httpvfs/dist/sql-wasm.wasm'],
   },
   assetsInclude: ['**/*.wasm'],
   test: {
