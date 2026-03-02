@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,6 +13,7 @@
 <header>
   <h1>Twitch Clips</h1>
   <span class="streamer-tag" id="streamer-tag"></span>
+  <button id="lang-toggle" class="lang-toggle"></button>
 </header>
 
 <div id="controls">
@@ -69,7 +70,7 @@
 
   <div id="loading">
     <div class="spinner"></div>
-    <p>Loading clips database…</p>
+    <p id="loading-text">Loading clips database…</p>
   </div>
   <div id="error"></div>
   <div id="empty">No clips match your search.</div>
