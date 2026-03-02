@@ -67,13 +67,28 @@
 #cal-breadcrumb .crumb-current { color: var(--text); font-weight: 600; }
 #cal-breadcrumb .sep { color: var(--border); }
 
-/* ── Year navigation ── */
-#cal-year-nav {
+/* ── Navigation controls (year / month / day) ── */
+#cal-nav-controls {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 16px;
 }
-#cal-year-nav button {
+
+#cal-year-nav,
+#cal-month-nav,
+#cal-day-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Separator between nav groups */
+#cal-month-nav { border-left: 1px solid var(--border); padding-left: 16px; }
+#cal-day-nav   { border-left: 1px solid var(--border); padding-left: 16px; }
+
+#cal-year-nav button,
+#cal-month-nav button,
+#cal-day-nav button {
   background: var(--surface2);
   border: 1px solid var(--border);
   color: var(--text);
@@ -88,12 +103,32 @@
   justify-content: center;
   transition: border-color 0.12s;
 }
-#cal-year-nav button:hover { border-color: var(--accent); }
-#cal-year-label {
+#cal-year-nav button:hover,
+#cal-month-nav button:hover,
+#cal-day-nav button:hover { border-color: var(--accent); }
+
+/* Inline <select> elements styled to look like nav labels */
+.cal-nav-select {
+  background: transparent;
+  border: none;
+  color: var(--text);
   font-size: 15px;
   font-weight: 700;
+  cursor: pointer;
+  outline: none;
+  padding: 0 2px;
   min-width: 44px;
   text-align: center;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.cal-nav-select:hover { color: var(--accent-h); }
+.cal-nav-select:focus { color: var(--accent); }
+/* Style the dropdown list to match dark theme */
+.cal-nav-select option {
+  background: var(--surface2);
+  color: var(--text);
+  font-weight: 400;
 }
 
 /* ── Year view: 4×3 mini-month grid ── */

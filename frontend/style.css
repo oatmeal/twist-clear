@@ -84,6 +84,25 @@ select:focus { border-color: var(--accent); }
   margin-left: auto;
 }
 
+/* ── Date range filter ── */
+.date-range-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.date-range-filter input[type="date"] {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  color-scheme: dark;
+}
+.date-range-filter input[type="date"]:focus { border-color: var(--accent); }
+.date-range-sep { color: var(--muted); font-size: 13px; }
+
 /* ── Main area ── */
 main { padding: 24px; }
 

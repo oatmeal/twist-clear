@@ -26,6 +26,11 @@
   <select id="game-filter">
     <option value="">All Games</option>
   </select>
+  <div class="date-range-filter">
+    <input type="date" id="date-from-input" title="From date">
+    <span class="date-range-sep">–</span>
+    <input type="date" id="date-to-input" title="To date (inclusive)">
+  </div>
   <div class="view-switcher">
     <button id="btn-view-grid" class="view-btn active">Grid</button>
     <button id="btn-view-cal"  class="view-btn">Calendar</button>
@@ -37,10 +42,22 @@
   <div id="calendar-panel" style="display:none">
     <div id="cal-header">
       <div id="cal-breadcrumb"></div>
-      <div id="cal-year-nav">
-        <button id="cal-prev-year">&#8249;</button>
-        <span   id="cal-year-label"></span>
-        <button id="cal-next-year">&#8250;</button>
+      <div id="cal-nav-controls">
+        <div id="cal-year-nav">
+          <button id="cal-prev-year">&#8249;</button>
+          <select id="cal-year-select" class="cal-nav-select"></select>
+          <button id="cal-next-year">&#8250;</button>
+        </div>
+        <div id="cal-month-nav" style="display:none">
+          <button id="cal-prev-month">&#8249;</button>
+          <select id="cal-month-select" class="cal-nav-select"></select>
+          <button id="cal-next-month">&#8250;</button>
+        </div>
+        <div id="cal-day-nav" style="display:none">
+          <button id="cal-prev-day">&#8249;</button>
+          <select id="cal-day-select" class="cal-nav-select"></select>
+          <button id="cal-next-day">&#8250;</button>
+        </div>
       </div>
     </div>
     <div id="cal-year-view"></div>

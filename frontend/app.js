@@ -78,6 +78,13 @@ function fmtDate(iso) {
   });
 }
 
+function fmtDateTime(iso) {
+  return new Date(iso).toLocaleString(undefined, {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit'
+  });
+}
+
 // ── Populate UI from DB ───────────────────────────────────────────────────
 
 function setStreamerTag() {
@@ -140,12 +147,6 @@ const ORDER = {
 // ── Render ────────────────────────────────────────────────────────────────
 
 function render() {
-  // In calendar view with no date selection, don't query or render clips.
-  if (currentView === 'calendar' && calDateFrom === null) {
-    document.getElementById('result-count').textContent = '';
-    return;
-  }
-
   const { where, params } = buildWhere();
 
   const countRes = db.exec(`SELECT COUNT(*) FROM clips c ${where}`, params);
@@ -197,7 +198,7 @@ function render() {
           <div class="clip-meta">
             <span class="views">${fmtViews(c.view_count)} views</span>
             ${c.game_name ? `<span>${escHtml(c.game_name)}</span>` : ''}
-            <span>by ${escHtml(c.creator_name)} &middot; ${fmtDate(c.created_at)}</span>
+            <span>by ${escHtml(c.creator_name)} &middot; ${fmtDateTime(c.created_at)}</span>
           </div>
         </div>
       </div>

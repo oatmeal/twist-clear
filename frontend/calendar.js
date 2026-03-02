@@ -76,6 +76,40 @@ function heatColor(cnt) {
   return `var(--cal-${heatLevel(cnt)})`;
 }
 
+// ── Date Filter Helpers ───────────────────────────────────────────────────
+
+function setYearFilter(y) {
+  calDateFrom = `${y}-01-01`;
+  calDateTo   = `${y + 1}-01-01`;
+  syncDateInputs();
+}
+
+function setMonthFilter(y, m) {
+  const pad = n => String(n).padStart(2, '0');
+  calDateFrom = `${y}-${pad(m + 1)}-01`;
+  calDateTo   = m === 11
+    ? `${y + 1}-01-01`
+    : `${y}-${pad(m + 2)}-01`;
+  syncDateInputs();
+}
+
+function clearCalDateFilter() {
+  calDay      = null;
+  calWeek     = null;
+  calDateFrom = null;
+  calDateTo   = null;
+  syncDateInputs();
+}
+
+function syncDateInputs() {
+  const fromEl = document.getElementById('date-from-input');
+  const toEl   = document.getElementById('date-to-input');
+  if (!fromEl) return;
+  fromEl.value = calDateFrom ?? '';
+  // calDateTo is exclusive; display inclusive by showing the day before
+  toEl.value = calDateTo ? addDays(calDateTo, -1) : '';
+}
+
 // ── SQL Query Helpers ─────────────────────────────────────────────────────
 // q() is defined in app.js and available globally.
 
@@ -118,12 +152,50 @@ function queryYearMonthTotals(year) {
 function renderCalendar() {
   const panel = document.getElementById('calendar-panel');
   panel.style.display = 'block';
-  document.getElementById('cal-year-label').textContent = calYear;
 
   if (calMonth === null) {
     renderYearView();
   } else {
     renderMonthView();
+  }
+
+  renderNavControls();
+}
+
+function renderNavControls() {
+  // Update year select
+  const ySel = document.getElementById('cal-year-select');
+  if (ySel) ySel.value = calYear;
+
+  const monthNav = document.getElementById('cal-month-nav');
+  const dayNav   = document.getElementById('cal-day-nav');
+
+  if (calMonth !== null) {
+    const mSel = document.getElementById('cal-month-select');
+    if (mSel) mSel.value = calMonth;
+    monthNav.style.display = 'flex';
+
+    if (calDay !== null) {
+      const dSel = document.getElementById('cal-day-select');
+      if (dSel) {
+        const total = daysInMonth(calYear, calMonth);
+        dSel.innerHTML = '';
+        for (let d = 1; d <= total; d++) {
+          const opt = document.createElement('option');
+          opt.value = d;
+          opt.textContent = d;
+          dSel.appendChild(opt);
+        }
+        const [, , dd] = calDay.split('-');
+        dSel.value = parseInt(dd, 10);
+      }
+      dayNav.style.display = 'flex';
+    } else {
+      dayNav.style.display = 'none';
+    }
+  } else {
+    monthNav.style.display = 'none';
+    dayNav.style.display = 'none';
   }
 }
 
@@ -177,8 +249,10 @@ function renderYearView() {
       calMonth = m;
       calDay   = null;
       calWeek  = null;
-      clearCalDateFilter();
+      setMonthFilter(calYear, m);
       renderCalendar();
+      currentPage = 1;
+      render();
     });
     container.appendChild(card);
   }
@@ -215,7 +289,7 @@ function renderYearStrip() {
       calMonth = m;
       calDay   = null;
       calWeek  = null;
-      clearCalDateFilter();
+      setMonthFilter(calYear, m);
       renderCalendar();
       currentPage = 1;
       render();
@@ -341,14 +415,18 @@ function renderBreadcrumb() {
 
   bc.querySelector('[data-action="year"]')?.addEventListener('click', () => {
     calMonth = null;
-    clearCalDateFilter();
+    calDay   = null;
+    calWeek  = null;
+    setYearFilter(calYear);
     renderCalendar();
     currentPage = 1;
     render();
   });
 
   bc.querySelector('[data-action="month"]')?.addEventListener('click', () => {
-    clearCalDateFilter();
+    calDay  = null;
+    calWeek = null;
+    setMonthFilter(calYear, calMonth);
     renderCalendar();
     currentPage = 1;
     render();
@@ -362,11 +440,10 @@ function selectDay(dateStr) {
   calWeek     = null;
   calDateFrom = dateStr;
   calDateTo   = addDays(dateStr, 1);
-  showClipsGrid();
+  syncDateInputs();
   renderCalendar();
   currentPage = 1;
   render();
-  scrollToClips();
 }
 
 function selectWeek(weekMonStr) {
@@ -374,18 +451,10 @@ function selectWeek(weekMonStr) {
   calDay      = null;
   calDateFrom = weekMonStr;
   calDateTo   = addDays(weekMonStr, 7);
-  showClipsGrid();
+  syncDateInputs();
   renderCalendar();
   currentPage = 1;
   render();
-  scrollToClips();
-}
-
-function clearCalDateFilter() {
-  calDay      = null;
-  calWeek     = null;
-  calDateFrom = null;
-  calDateTo   = null;
 }
 
 // ── View Switching ────────────────────────────────────────────────────────
@@ -402,51 +471,82 @@ function switchView(view) {
     calBtn.classList.remove('active');
     calPanel.style.display = 'none';
     clearCalDateFilter();
-    showClipsGrid();
     currentPage = 1;
     render();
   } else {
     calBtn.classList.add('active');
     gridBtn.classList.remove('active');
-    // Hide clip grid until a date is selected
-    if (calDateFrom === null) hideClipsGrid();
+    // Default to chronological sort when entering calendar
+    sortBy = 'date_asc';
+    document.getElementById('sort').value = 'date_asc';
+    // Always start with a year-level filter so clips are visible immediately
+    setYearFilter(calYear);
     renderCalendar();
+    currentPage = 1;
+    render();
   }
 }
 
-function showClipsGrid() {
-  document.getElementById('clips-grid').style.removeProperty('display');
-  document.getElementById('pagination').style.removeProperty('display');
-  document.getElementById('empty').style.removeProperty('display');
-}
-
-function hideClipsGrid() {
-  document.getElementById('clips-grid').style.display  = 'none';
-  document.getElementById('pagination').style.display  = 'none';
-  document.getElementById('empty').style.display       = 'none';
-}
-
-function scrollToClips() {
-  document.getElementById('clips-grid')
-    .scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-// ── Year Navigation ───────────────────────────────────────────────────────
+// ── Year / Month / Day Navigation ─────────────────────────────────────────
 
 function prevYear() {
   calYear--;
   calMonth = null;
-  clearCalDateFilter();
-  hideClipsGrid();
+  calDay   = null;
+  calWeek  = null;
+  setYearFilter(calYear);
   renderCalendar();
+  currentPage = 1;
+  render();
 }
 
 function nextYear() {
   calYear++;
   calMonth = null;
-  clearCalDateFilter();
-  hideClipsGrid();
+  calDay   = null;
+  calWeek  = null;
+  setYearFilter(calYear);
   renderCalendar();
+  currentPage = 1;
+  render();
+}
+
+function prevMonth() {
+  if (calMonth === 0) { calMonth = 11; calYear--; }
+  else                { calMonth--;               }
+  calDay  = null;
+  calWeek = null;
+  setMonthFilter(calYear, calMonth);
+  renderCalendar();
+  currentPage = 1;
+  render();
+}
+
+function nextMonth() {
+  if (calMonth === 11) { calMonth = 0; calYear++; }
+  else                 { calMonth++;              }
+  calDay  = null;
+  calWeek = null;
+  setMonthFilter(calYear, calMonth);
+  renderCalendar();
+  currentPage = 1;
+  render();
+}
+
+function prevDay() {
+  const newDay = addDays(calDay, -1);
+  const [y, m] = newDay.split('-').map(Number);
+  calYear  = y;
+  calMonth = m - 1; // 0-based
+  selectDay(newDay);
+}
+
+function nextDay() {
+  const newDay = addDays(calDay, 1);
+  const [y, m] = newDay.split('-').map(Number);
+  calYear  = y;
+  calMonth = m - 1; // 0-based
+  selectDay(newDay);
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────
@@ -454,11 +554,86 @@ function nextYear() {
 
 function initCalendar() {
   // Default to the most recent year that has clip data
-  const row = q("SELECT MAX(strftime('%Y', created_at)) AS yr FROM clips");
-  if (row.length && row[0].yr) calYear = parseInt(row[0].yr, 10);
+  const minRow = q("SELECT MIN(strftime('%Y', created_at)) AS yr FROM clips");
+  const maxRow = q("SELECT MAX(strftime('%Y', created_at)) AS yr FROM clips");
+  const minY = parseInt(minRow[0].yr, 10);
+  const maxY = parseInt(maxRow[0].yr, 10);
+  calYear = maxY;
 
-  document.getElementById('btn-view-grid').addEventListener('click', () => switchView('grid'));
-  document.getElementById('btn-view-cal') .addEventListener('click', () => switchView('calendar'));
-  document.getElementById('cal-prev-year').addEventListener('click', prevYear);
-  document.getElementById('cal-next-year').addEventListener('click', nextYear);
+  // Populate year select
+  const ySel = document.getElementById('cal-year-select');
+  for (let y = maxY; y >= minY; y--) {
+    const opt = document.createElement('option');
+    opt.value = y;
+    opt.textContent = y;
+    ySel.appendChild(opt);
+  }
+  ySel.value = calYear;
+  ySel.addEventListener('change', () => {
+    calYear  = parseInt(ySel.value, 10);
+    calMonth = null;
+    calDay   = null;
+    calWeek  = null;
+    setYearFilter(calYear);
+    renderCalendar();
+    currentPage = 1;
+    render();
+  });
+
+  // Populate month select (static 12 options)
+  const mSel = document.getElementById('cal-month-select');
+  MONTH_LONG.forEach((name, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = name;
+    mSel.appendChild(opt);
+  });
+  mSel.addEventListener('change', () => {
+    calMonth = parseInt(mSel.value, 10);
+    calDay   = null;
+    calWeek  = null;
+    setMonthFilter(calYear, calMonth);
+    renderCalendar();
+    currentPage = 1;
+    render();
+  });
+
+  // Day select — options populated dynamically in renderNavControls()
+  document.getElementById('cal-day-select').addEventListener('change', e => {
+    const d = parseInt(e.target.value, 10);
+    selectDay(localDateStr(calYear, calMonth, d));
+  });
+
+  // Date range inputs
+  document.getElementById('date-from-input').addEventListener('change', e => {
+    calDateFrom = e.target.value || null;
+    calDay      = null;
+    calWeek     = null;
+    const toVal = document.getElementById('date-to-input').value;
+    calDateTo = toVal
+      ? addDays(toVal, 1)
+      : (calDateFrom ? addDays(calDateFrom, 1) : null);
+    currentPage = 1;
+    render();
+  });
+  document.getElementById('date-to-input').addEventListener('change', e => {
+    const toVal = e.target.value;
+    calDateTo = toVal ? addDays(toVal, 1) : null;
+    calDay    = null;
+    calWeek   = null;
+    currentPage = 1;
+    render();
+  });
+
+  // View switcher
+  document.getElementById('btn-view-grid') .addEventListener('click', () => switchView('grid'));
+  document.getElementById('btn-view-cal')  .addEventListener('click', () => switchView('calendar'));
+
+  // Year / month / day arrow navigation
+  document.getElementById('cal-prev-year') .addEventListener('click', prevYear);
+  document.getElementById('cal-next-year') .addEventListener('click', nextYear);
+  document.getElementById('cal-prev-month').addEventListener('click', prevMonth);
+  document.getElementById('cal-next-month').addEventListener('click', nextMonth);
+  document.getElementById('cal-prev-day')  .addEventListener('click', prevDay);
+  document.getElementById('cal-next-day')  .addEventListener('click', nextDay);
 }
