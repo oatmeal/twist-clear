@@ -23,7 +23,7 @@ on:
         default: false
       scraper_ref:
         description: >
-          Branch, tag, or SHA of twitch-clips-scraper to check out.
+          Branch, tag, or SHA of twist-clear to check out.
           Defaults to master.
         required: false
         type: string
@@ -31,9 +31,8 @@ on:
       code_repo:
         description: >
           GitHub repo containing the scraper code (owner/repo).
-          Defaults to {caller_owner}/twitch-clips-scraper, which works when
-          the archive repo and this repo are under the same account. Override
-          this if they are under different accounts.
+          Defaults to oatmeal/twist-clear. Override this if you are using
+          a fork or a copy of the code under a different account.
         required: false
         type: string
         default: ''
@@ -63,7 +62,7 @@ jobs:
       - name: Check out scraper + frontend code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
-          repository: ${{ inputs.code_repo || format('{0}/twitch-clips-scraper', github.repository_owner) }}
+          repository: ${{ inputs.code_repo || 'oatmeal/twist-clear' }}
           ref: ${{ inputs.scraper_ref }}
 
       - uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098  # v7.3.1

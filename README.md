@@ -1,4 +1,4 @@
-# twitch-clips-scraper
+# twist-clear
 
 A two-part tool for building and browsing a personal archive of Twitch clip metadata.
 
@@ -14,7 +14,7 @@ The easiest way to get a live, automatically-updating archive is to [deploy it t
 
 The recommended setup uses two GitHub repositories:
 
-- **This repo** (`twitch-clips-scraper`) — contains all the code and a reusable GitHub Actions workflow.
+- **This repo** (`twist-clear`) — contains all the code and a reusable GitHub Actions workflow.
 - **Your archive repo** (e.g. `my-clips`, can be private) — contains only your credentials (as secrets) and a short workflow file that calls the reusable one. The archive repo's GitHub Pages site hosts your clip viewer.
 
 A daily Actions run scrapes all clips from scratch and redeploys the site. Each run takes roughly 30 minutes for a typical archive, which is well within Actions' free tier limits.
@@ -39,7 +39,7 @@ on:
 
 jobs:
   deploy:
-    uses: YOUR_USERNAME/twitch-clips-scraper/.github/workflows/deploy.yml@master
+    uses: oatmeal/twist-clear/.github/workflows/deploy.yml@master
     with:
       streamers: "streamer1,streamer2"
     secrets:
@@ -83,7 +83,7 @@ The scraper uses the **Client Credentials** flow — an app access token with no
 
 ```sh
 git clone <repo>
-cd twitch-clips-scraper
+cd twist-clear
 cp config.toml.example config.toml
 ```
 

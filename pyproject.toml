@@ -1,5 +1,5 @@
 [project]
-name = "twitch-clips-scraper"
+name = "twist-clear"
 version = "0.1.0"
 description = "Scrape and archive Twitch clip metadata"
 requires-python = ">=3.11"

@@ -8,14 +8,14 @@ Two GitHub repositories are involved:
 
 | Repo | Visibility | Purpose |
 |---|---|---|
-| `twitch-clips-scraper` (this repo) | Public | Scraper code + frontend + reusable workflow |
+| `twist-clear` (this repo) | Public | Scraper code + frontend + reusable workflow |
 | `my-clips` (your archive repo) | Public or private* | Schedule config + Twitch secrets |
 
 The archive repo's workflow calls the reusable `deploy.yml` in this repo, which handles everything: checking out the code, scraping, building, and deploying to the archive repo's GitHub Pages site.
 
 > \* GitHub Pages for private repositories requires GitHub Pro or a paid organisation plan.
 
-**Requirement**: both repos must be under the same GitHub account or organisation, because the reusable workflow identifies the code repo by combining the caller's account name with the fixed name `twitch-clips-scraper`. If your repos are under different accounts, pass the `code_repo` input explicitly (see [Inputs reference](#inputs-reference)).
+**Note**: the reusable workflow defaults to checking out `oatmeal/twist-clear`. If you are using a fork or a copy of the code under a different account, pass the `code_repo` input explicitly (see [Inputs reference](#inputs-reference)).
 
 ---
 
@@ -62,7 +62,7 @@ on:
 
 jobs:
   deploy:
-    uses: YOUR_GITHUB_USERNAME/twitch-clips-scraper/.github/workflows/deploy.yml@master
+    uses: oatmeal/twist-clear/.github/workflows/deploy.yml@master
     with:
       streamers: "streamer1,streamer2"
     secrets:
@@ -116,17 +116,17 @@ Edit the `cron` expression in your archive repo's workflow. Some examples:
 Change `@master` to a tag or commit SHA:
 
 ```yaml
-uses: YOUR_GITHUB_USERNAME/twitch-clips-scraper/.github/workflows/deploy.yml@v1.2.3
+uses: oatmeal/twist-clear/.github/workflows/deploy.yml@v1.2.3
 ```
 
-### Archive and main repos under different accounts
+### Using a fork or copy of the code under a different account
 
-If your archive repo is under a different account than `twitch-clips-scraper`, pass the `code_repo` input:
+If your copy of `twist-clear` is under a different account than `oatmeal`, pass the `code_repo` input:
 
 ```yaml
 with:
   streamers: "streamer1"
-  code_repo: "original-owner/twitch-clips-scraper"
+  code_repo: "your-username/twist-clear"
 ```
 
 ---
@@ -137,8 +137,8 @@ with:
 |---|---|---|---|
 | `streamers` | Yes | — | Comma-separated Twitch channel logins |
 | `force` | No | `false` | Reset fetch state before scraping (re-scans full history; rarely needed since daily runs already rebuild from scratch) |
-| `scraper_ref` | No | `master` | Branch, tag, or SHA of `twitch-clips-scraper` to use |
-| `code_repo` | No | `{caller_owner}/twitch-clips-scraper` | Override if the repos are under different accounts |
+| `scraper_ref` | No | `master` | Branch, tag, or SHA of `twist-clear` to use |
+| `code_repo` | No | `oatmeal/twist-clear` | Override if using a fork or copy under a different account |
 
 ---
 
