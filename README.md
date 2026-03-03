@@ -6,59 +6,88 @@ A two-part tool for building and browsing a personal archive of Twitch clip meta
 
 **Viewer** (`frontend/`) — a browser-based SPA that queries the database directly in the browser via HTTP Range requests ([sql.js-httpvfs](https://github.com/phiresky/sql.js-httpvfs)), so only the pages needed for each query are fetched — the full database is never downloaded at once.
 
+The easiest way to get a live, automatically-updating archive is to [deploy it to GitHub Pages](#deploying-to-github-pages) — no server required. If you prefer to run everything locally, see [Running locally](#running-locally).
+
 ---
 
-## Quick start
+## Deploying to GitHub Pages
 
-```sh
-git clone <repo>
-cd twitch-clips-scraper
+The recommended setup uses two GitHub repositories:
 
-# Configure credentials and streamers (see Setup below)
-cp config.toml.example config.toml
-# edit config.toml
+- **This repo** (`twitch-clips-scraper`) — contains all the code and a reusable GitHub Actions workflow.
+- **Your archive repo** (e.g. `my-clips`, can be private) — contains only your credentials (as secrets) and a short workflow file that calls the reusable one. The archive repo's GitHub Pages site hosts your clip viewer.
 
-# Install scraper dependencies
-uv sync
+A daily Actions run scrapes all clips from scratch and redeploys the site. Each run takes roughly 30 minutes for a typical archive, which is well within Actions' free tier limits.
 
-# Run the initial scrape
-uv run python scrape.py fetch
+**Full walkthrough:** [docs/deploying.md](docs/deploying.md)
 
-# Launch the viewer
-cd frontend && npm install && npm run dev
-# → open http://localhost:5173
+**Quick summary:**
+
+1. **Twitch app** — create one at https://dev.twitch.tv/console/apps (see [step-by-step instructions](#1-create-a-twitch-application) below; you'll need Client ID and Client Secret).
+2. **Create the archive repo** — any name, public or private.
+3. **Add secrets** — `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET` under *Settings → Secrets and variables → Actions*.
+4. **Enable Pages** — *Settings → Pages*, source set to **GitHub Actions**.
+5. **Add this workflow file** as `.github/workflows/deploy.yml` in the archive repo, replacing `YOUR_USERNAME` and the streamer logins:
+
+```yaml
+name: Deploy clip archive
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    uses: YOUR_USERNAME/twitch-clips-scraper/.github/workflows/deploy.yml@master
+    with:
+      streamers: "streamer1,streamer2"
+    secrets:
+      TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
+      TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
 ```
 
+6. **Trigger the first run** manually from the Actions tab. Once it completes, your archive is live at `https://YOUR_USERNAME.github.io/my-clips/`.
+
 ---
 
-## Setup
+## Running locally
 
-### 1. Create a Twitch application
+For local development, ad-hoc scraping, or self-hosting on your own server.
 
-The scraper uses the **Client Credentials** flow — an app access token with no user login required — to read public clip data. You need a Twitch application to get a client ID and secret.
+### Prerequisites
 
-1. Go to **https://dev.twitch.tv/console/apps** and sign in, then click **Register Your Application** (or **+ Register Your Application**).
+- Python 3.11+ and [uv](https://docs.astral.sh/uv/)
+- Node.js 18+ and npm
+
+### Setup
+
+#### 1. Create a Twitch application
+
+The scraper uses the **Client Credentials** flow — an app access token with no user login required — to read public clip data.
+
+1. Go to **https://dev.twitch.tv/console/apps** and sign in, then click **Register Your Application**.
 
 2. Fill in the registration form:
 
    | Field | What to enter |
    |---|---|
    | **Name** | Anything descriptive, e.g. `clips-scraper`. Must be unique on Twitch. |
-   | **OAuth Redirect URLs** | `http://localhost` — this field is required by the form but is never used by the client credentials flow. |
+   | **OAuth Redirect URLs** | `http://localhost` — required by the form but never used by the client credentials flow. |
    | **Category** | *Application Integration* (or any category; it doesn't affect the credentials). |
-   | **Client Type** | **Confidential** — this is the option that provides a client secret, which the client credentials flow requires. If you choose *Public* you won't get a secret. |
+   | **Client Type** | **Confidential** — this gives you a client secret. If you choose *Public* you won't get one. |
 
-3. Click **Create**. You'll be returned to the app list.
+3. Click **Create**, then click **Manage** next to your new app. Click **New Secret** to generate a client secret. Copy both the **Client ID** and **Client Secret** — the secret is only shown once (regenerate if lost).
 
-4. Click **Manage** next to your new application. Here you'll see your **Client ID**. Click **New Secret** to generate a client secret. Copy both values — the secret is only shown once (you can regenerate it if you lose it).
-
-### 2. Edit config.toml
+#### 2. Configure
 
 ```sh
+git clone <repo>
+cd twitch-clips-scraper
 cp config.toml.example config.toml
 ```
 
-Open `config.toml` and fill in your credentials and the channels you want to track:
+Edit `config.toml`:
 
 ```toml
 [twitch]
@@ -70,32 +99,16 @@ db_path = "data/clips.db"   # created automatically on first run
 
 [[streamers]]
 login = "channelname"       # Twitch login (lowercase), one block per channel
-
-[[streamers]]
-login = "anotherchannel"
 ```
 
-Add as many `[[streamers]]` blocks as you need.
-
-### 3. Install dependencies
-
-**Scraper** (requires Python 3.11+ and [uv](https://docs.astral.sh/uv/)):
+#### 3. Install dependencies
 
 ```sh
-uv sync
+uv sync                      # Python scraper
+cd frontend && npm install   # browser viewer
 ```
 
-**Viewer** (requires Node.js 18+ and npm):
-
-```sh
-cd frontend && npm install
-```
-
----
-
-## Scraper
-
-### Commands
+### Scraper
 
 **Initial scrape** — fetches the full clip history for every configured streamer:
 
@@ -103,7 +116,7 @@ cd frontend && npm install
 uv run python scrape.py fetch
 ```
 
-This can take a while for channels with large histories. It writes progress after every time window, so if interrupted it picks up where it left off.
+This can take a while for channels with large histories. Progress is saved after every time window, so if interrupted it picks up where it left off.
 
 **Incremental update** — fetches only clips created since the last run:
 
@@ -111,96 +124,51 @@ This can take a while for channels with large histories. It writes progress afte
 uv run python scrape.py update
 ```
 
-Both commands upsert clips, so re-running is always safe and `view_count` values are kept current.
+Both commands upsert clips, so re-running is always safe and `view_count` values stay current.
 
-### Options
+**Options:**
 
 ```
 --config PATH   Path to config file (default: config.toml)
 --db PATH       Override the database path from config
 ```
 
-### Keeping the database current
+**How fetch works:** `fetch` uses adaptive time windows starting from the channel's account creation date. Each window makes one API call (up to 100 clips). If a full page comes back the window is halved; on success it doubles again up to a maximum of 30 days, so long quiet stretches are covered efficiently. Pagination cursors are never saved — each window is a fully stateless, self-contained request.
 
-Run `update` on whatever schedule suits your needs. As a daily cron job:
+### Browser viewer
 
-```
-0 6 * * * cd /path/to/twitch-clips-scraper && uv run python scrape.py update
-```
-
-Or as a GitHub Actions scheduled workflow — store your credentials as repository secrets and pass them in via environment variables or a generated `config.toml`.
-
-### How it works
-
-**`fetch`** uses adaptive time windows to scan the full clip history starting from the channel's account creation date. Each window covers a fixed time range and makes one API call (up to 100 clips). If the response fills a full page (indicating more clips exist in that range), the window is halved and retried. Once a window fits in a single request the size doubles again, up to a maximum of 30 days:
-
-```
-[2022-01-01 → 2022-01-02]   12 clips  ✓  advance, try 2-day window
-[2022-01-02 → 2022-01-04]   87 clips  ✓  advance, try 4-day window
-[2022-01-04 → 2022-01-08]  100 clips  ✗  too many — halve to 2 days
-[2022-01-04 → 2022-01-06]   43 clips  ✓  advance
-...
-```
-
-Pagination cursors are never saved. Per Twitch's documentation they are for immediate sequential use only; each window is a fully stateless, self-contained request.
-
-**`update`** fetches clips created after the most recent clip already in the database (`newest_clip_at`), using standard cursor-based pagination within the session.
-
----
-
-## Browser viewer
-
-### Features
-
-- Thumbnail grid with clip title, view count, creator, game, and date
-- Search by title, filter by game, sort by views or date
-- Date range filter (from/to inputs)
-- Calendar view — year heatmap → month grid with clip counts per day, selectable by day or ISO week
-- Pagination (24 clips per page)
-- URL hash preserves all filter and navigation state; links are bookmarkable and shareable
-- Each thumbnail links directly to the clip on Twitch
-
-### Dev server
-
-The dev server uses `data/clips.db` directly via a symlink at `frontend/public/clips.db`, so it always reflects the latest scraped data without any export step.
+**Dev server** — the dev server reads `data/clips.db` directly via a symlink, always reflecting the latest scraped data:
 
 ```sh
 cd frontend
 npm run dev   # → http://localhost:5173
 ```
 
-### Preparing the database for deployment
-
-The raw `data/clips.db` is suitable for local development, but before deploying run the preparation script:
+**Prepare the database for deployment:**
 
 ```sh
 cd frontend
 npm run prepare-db   # → writes frontend/public/clips.db
 ```
 
-This script:
+This converts the database to DELETE journal mode (required by sql.js-httpvfs), adds a FTS5 trigram index for fast title search, adds covering indexes and precomputed metadata to avoid expensive full-table scans on first load, then VACUUMs for compact layout.
 
-- Converts the database to **DELETE journal mode** (required by sql.js-httpvfs; WAL mode is not supported)
-- Adds a **FTS5 trigram index** (`clips_fts`) for fast substring title search, including Japanese/CJK (requires SQLite ≥ 3.38)
-- Adds covering indexes and a precomputed metadata table to avoid expensive full-table scans on cold browser cache
-- VACUUMs the file for compact range-request access
-
-The viewer detects these additions at startup and uses them automatically; without them it falls back to live aggregate queries.
-
-### Production build
+**Production build:**
 
 ```sh
 cd frontend
 npm run build   # → frontend/dist/
 ```
 
-Requires `frontend/public/clips.db` to exist — run `prepare-db` first.
+Requires `frontend/public/clips.db` — run `prepare-db` first. Serve `frontend/dist/` from any static host that supports HTTP Range requests (`206 Partial Content`).
 
-Serve `frontend/dist/` from any static host that supports HTTP Range requests (`206 Partial Content`). Most CDNs and object storage services (S3, Cloudflare R2, Netlify) do; standard nginx and Apache do too.
+**Viewer features:**
 
-### Deploying to GitHub Pages
-
-See **[docs/deploying.md](docs/deploying.md)** for a complete walkthrough. The short version: create a private archive repo, add your Twitch credentials as secrets, enable Pages with "GitHub Actions" as the source, and add a workflow that calls the reusable `deploy.yml` in this repo. A daily schedule rebuilds and redeploys the archive automatically.
+- Thumbnail grid with clip title, view count, creator, game, and date
+- Search by title, filter by game, sort by views or date
+- Date range filter and calendar view (year heatmap → month grid, selectable by day or week)
+- URL hash preserves all filter state — links are bookmarkable and shareable
+- Each thumbnail links directly to the clip on Twitch
 
 ---
 
