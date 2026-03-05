@@ -151,6 +151,17 @@ def prepare(src_path: str, dst_path: str) -> None:
     )
     print("  done.")
 
+    # (game_id, created_at DESC) index — lets the browser serve
+    # "WHERE game_id = ? ORDER BY created_at DESC LIMIT n" with early
+    # termination: SQLite walks the index in sorted order and stops after n
+    # rows instead of fetching all matching rows for an in-memory sort.
+    print("Creating clips_game_created index …")
+    dst_conn.execute(
+        "CREATE INDEX IF NOT EXISTS clips_game_created"
+        " ON clips(game_id, created_at DESC)"
+    )
+    print("  done.")
+
     # ── 6. VACUUM ─────────────────────────────────────────────────────────
     print("Vacuuming …")
     dst_conn.execute("VACUUM")

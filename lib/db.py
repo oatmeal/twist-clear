@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS clips (
 CREATE INDEX IF NOT EXISTS clips_broadcaster_created ON clips(broadcaster_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS clips_view_count          ON clips(view_count DESC);
 CREATE INDEX IF NOT EXISTS clips_game                ON clips(game_id);
+CREATE INDEX IF NOT EXISTS clips_game_created        ON clips(game_id, created_at DESC);
 """
 
 
