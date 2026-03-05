@@ -4,28 +4,66 @@ Deferred items with rationale. See the relevant source files for implementation 
 
 ---
 
-## Live clips: full pagination merge with archive clips
+## Live clips: merge into non-date_desc sort orders
 
-Currently live clips (fetched from the Twitch API at runtime) are shown in a
-separate collapsible "New clips" section above the main grid rather than being
-interleaved with archive clips in the pagination.
+Live clips are currently merged into the main grid only when `sortBy ===
+'date_desc'` (see `render()` in `app.ts`). For the other three sort orders
+(**Most Viewed**, **Least Viewed**, **Oldest First**) they fall back to the
+separate collapsible panel.
 
-For the default **date-descending** sort this integration is straightforward:
-live clips are always newer than any archived clip, so they naturally fill the
-first page(s). The pagination math is simple — compute how many live clips fit
-on the current page, then fill the remainder from the DB with an adjusted offset
-(~50 extra lines in `render()`).
+True interleaving for view-count or date-ascending sorts requires ranking live
+clips against archive clips in a single sorted sequence. Because live clips are
+in memory and archive clips are in the DB, a correct merge would require one of:
 
-For other sort orders (**view count**, **date ascending**) true interleaving
-requires sorting the combined set. Since live clips are in memory and archive
-clips are in the DB, a correct merge would require loading all DB clips into
-memory, defeating the sql.js-httpvfs range-request optimization.
+- **Load all DB clips into memory** and sort the combined set client-side.
+  Defeats the sql.js-httpvfs range-request optimisation for large archives.
+- **Push live clips into a temporary in-memory SQLite table** via the worker,
+  then join against archive clips in SQL. The sql.js-httpvfs worker API does
+  not currently expose DDL/write commands on the HTTP-backed database, so this
+  would require a patched or separate in-memory db instance.
+- **Server-side merge** — only applicable if the site is ever served by a
+  backend rather than GitHub Pages.
 
-A pragmatic middle ground: merge seamlessly when `sortBy === 'date_desc'`,
-fall back to the separate section otherwise.
+The pragmatic middle ground already shipped: merge when `sortBy ===
+'date_desc'` (live clips are always newest so offset math is trivial), show
+the panel otherwise.
 
-Deferred because the separate section is clear UX (labels the boundary between
-archive and live data) and avoids pagination complexity in the initial build.
+If the number of live clips is small (typical between scraper runs), a
+simpler approach for view-count sorts may be acceptable: fetch all live clips
+client-side (already in memory), fetch all DB clips up to some cap (e.g. top
+N by view count), merge and re-sort. This is correct only when live clips
+cannot outrank DB clips beyond the cap — i.e. when the cap is large enough.
+
+---
+
+## Game filter: large data transfers due to non-covering index
+
+When filtering by game, the main clips SELECT requires columns (`title`,
+`creator_name`, `view_count`, `duration`, `thumbnail_url`, `url`) that are not
+in the `clips_game_created` index `(game_id, created_at DESC)`. SQLite uses the
+index to find matching rowids in sort order, then does one random table-page
+lookup per row to fetch the remaining columns. With `LIMIT 24`, that is 24
+separate table-page reads. Because clips for a game are inserted interleaved
+with clips from other games, those rows are scattered across the table B-tree
+even after VACUUM; each lookup likely misses the cache and triggers a new
+exponential read-ahead cycle, totalling many MB.
+
+The COUNT fast path (`game_clip_counts`) was added to eliminate the separate
+count scan, but the main fetch is the dominant cost.
+
+Potential fixes (in order of implementation effort):
+
+- **Wider covering index** — add all selected columns to `clips_game_created`
+  so the query never touches the table. This duplicates storage but makes
+  game-filtered pages entirely index-resident.
+- **Table clustering by `(game_id, created_at DESC)`** — in
+  `prepare_web_db.py`, recreate the clips table with rows inserted in
+  `(game_id, created_at DESC)` order so rowids reflect that order and table
+  lookups are sequential. Requires rewriting the prepare script and a full
+  VACUUM. Effective for date-desc game queries; less so for view-count sorts.
+- **Precomputed per-game page table** — materialise the top-N clips per game
+  into a separate table during `prepare_web_db.py`, keeping all needed columns
+  contiguous on disk. Trades preparation complexity for near-zero runtime I/O.
 
 ---
 

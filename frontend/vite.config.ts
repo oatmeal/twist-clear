@@ -108,7 +108,7 @@ export default defineConfig({
   publicDir: 'public',
   server: {
     port: parseInt(process.env['PORT'] ?? '5173', 10),
-    host: '127.0.0.1',
+    host: 'localhost',
     fs: {
       // Allow resolving symlinks that point outside the package root (e.g. public/clips.db)
       allow: ['..'],
@@ -118,7 +118,7 @@ export default defineConfig({
     // Explicit port so `vite preview` is always on 4173 regardless of whether
     // Vite inherits server.port (behaviour varies across Vite versions).
     port: parseInt(process.env['PREVIEW_PORT'] ?? '4173', 10),
-    host: '127.0.0.1',
+    host: 'localhost',
   },
   plugins: [dbRangePlugin()],
   optimizeDeps: {
