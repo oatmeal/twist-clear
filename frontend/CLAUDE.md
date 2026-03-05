@@ -173,10 +173,16 @@ client ID — the login button is hidden and live-clip features are disabled.
 clip (`_dbCutoffDate` in `app.ts`). It auto-paginates (100 clips per page) and
 resolves game names in a second batch request.
 
-Live clips are stored in `state.liveClips` and rendered above the main DB grid
-by `renderLiveSection()`. They are filtered client-side by `filterLiveClips(opts)`
-from `lib/liveFilter.ts` — a pure function that takes `LiveFilterOpts` (clips
-array, cutoff date, date range, game filter, search query).
+Live clips are stored in `state.liveClips` and filtered client-side by
+`filterLiveClips(opts)` from `lib/liveFilter.ts` — a pure function that takes
+`LiveFilterOpts` (clips array, cutoff date, date range, game filter, search query).
+
+When `sortBy === 'date_desc'`, `render()` merges live clips directly into the
+main grid rather than showing the separate collapsible panel. Live clips are
+always newer than any archived clip, so they fill the first page(s); the
+pagination math computes `liveOnPage`/`dbOnPage`/`dbOffset` for each page.
+For other sort orders the separate `renderLiveSection()` panel is shown instead,
+because true interleaving would require loading all DB clips into memory.
 
 ### Internationalization (`lib/i18n.ts`)
 

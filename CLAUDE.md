@@ -101,8 +101,21 @@ ln -s ../../../../../frontend/public/clips.db frontend/public/clips.db
 > **Note:** If `frontend/public/clips.db` does not exist in the main repo yet,
 > run `npm run prepare-db` in the main repo's `frontend/` directory first.
 
+### 4. Symlink config.toml
+
+`vite.config.ts` reads `../config.toml` (relative to `frontend/`) as a
+fallback source for `VITE_TWITCH_CLIENT_ID`. In a worktree that path resolves
+to the worktree root, not the main repo, so the login banner and live-clip
+features will be silently disabled unless you symlink it:
+
+```sh
+ln -s ../../../config.toml config.toml
+```
+
+(Three levels up: worktree-name → worktrees → .claude → main repo root.)
+
 After these steps, `npm run dev` (via the Claude Preview tool or directly)
-will serve the site on port 5173 with the full database.
+will serve the site on port 5173 with the full database and auth UI enabled.
 
 ## Development commands
 

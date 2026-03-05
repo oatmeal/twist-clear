@@ -388,8 +388,26 @@ export async function render(): Promise<void> {
   _renderController = ctrl;
 
   try {
-    // Live section is pure in-memory — no async DB reads needed.
-    renderLiveSection();
+    // Decide whether to merge live clips into the main grid.
+    // Only date_desc merges: live clips are always newer than any archived clip,
+    // so they naturally fill the first pages and the pagination math is simple.
+    // For other sort orders the separate live-section panel is shown instead.
+    const filteredLive = _filteredLiveClips();
+    const merging = state.sortBy === 'date_desc' && filteredLive.length > 0;
+
+    if (merging) {
+      // Hide the collapsible panel — live clips appear inline in the main grid.
+      const liveSection = document.getElementById('live-section')!;
+      if (_expandedCard?.closest('#live-section')) {
+        _expandedCard = null;
+        document.removeEventListener('click', _onDocClickOutside);
+      }
+      liveSection.style.display = 'none';
+      document.getElementById('live-clips-grid')!.innerHTML = '';
+    } else {
+      // Live section is pure in-memory — no async DB reads needed.
+      renderLiveSection();
+    }
     if (ctrl.signal.aborted) return;
 
     await updateGameFilter();
@@ -403,31 +421,62 @@ export async function render(): Promise<void> {
       useFts: state.useFts,
     });
 
-    // Fast path: when no filters are active and clips_meta is available,
-    // use the precomputed total instead of scanning all rows.
-    let totalClips: number;
+    // Fast path: avoid a full COUNT(*) scan when precomputed totals are available.
+    //   - No filters: read total_clips from clips_meta (single row).
+    //   - Game-only filter: read cnt from game_clip_counts (single row).
+    //     COUNT(*) with only a game filter would scan the entire clips_game_created
+    //     index for that game_id — potentially thousands of pages for popular games.
+    //   - Any other filter combination: fall back to COUNT(*).
+    let dbCount: number;
+    const gameOnlyFilter = state.useMeta
+      && state.gameFilter !== ''
+      && !state.searchQuery
+      && state.calDateFrom === null;
     if (state.useMeta && where === '') {
       const metaRows = await q('SELECT total_clips FROM clips_meta');
-      totalClips = (metaRows[0]?.['total_clips'] as number | undefined) ?? 0;
+      dbCount = (metaRows[0]?.['total_clips'] as number | undefined) ?? 0;
+    } else if (gameOnlyFilter) {
+      const gcRows = await q(
+        'SELECT cnt FROM game_clip_counts WHERE id = :game',
+        { ':game': state.gameFilter },
+      );
+      dbCount = (gcRows[0]?.['cnt'] as number | undefined) ?? 0;
     } else {
       const countRows = await q(`SELECT COUNT(*) AS cnt FROM clips c ${where}`, params);
-      totalClips = (countRows[0]?.['cnt'] as number | undefined) ?? 0;
+      dbCount = (countRows[0]?.['cnt'] as number | undefined) ?? 0;
     }
     if (ctrl.signal.aborted) return;
-    state.setTotalClips(totalClips);
 
-    const offset = (state.currentPage - 1) * state.PAGE_SIZE;
-    const clips = await q(
-      `SELECT c.id, c.title, c.creator_name, c.view_count,
-              c.created_at, c.duration, c.thumbnail_url, c.url,
-              COALESCE(g.name, '') AS game_name
-       FROM clips c
-       LEFT JOIN games g ON c.game_id = g.id
-       ${where}
-       ORDER BY ${ORDER[state.sortBy]}
-       LIMIT ${state.PAGE_SIZE} OFFSET ${offset}`,
-      params,
-    );
+    // Sort live clips newest-first for the merged view. ISO 8601 strings are
+    // lexicographically ordered so string comparison is correct.
+    const sortedLive = merging
+      ? [...filteredLive].sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0))
+      : [];
+    const liveCount = sortedLive.length;
+
+    state.setTotalClips(merging ? liveCount + dbCount : dbCount);
+
+    // Compute how many live/DB clips fall on the current page.
+    //   Live clips occupy virtual positions 0..(liveCount-1).
+    //   DB clips occupy positions liveCount onwards.
+    const pageStart = (state.currentPage - 1) * state.PAGE_SIZE;
+    const liveOnPage = merging ? Math.max(0, Math.min(liveCount - pageStart, state.PAGE_SIZE)) : 0;
+    const dbOnPage   = state.PAGE_SIZE - liveOnPage;
+    const dbOffset   = merging ? Math.max(0, pageStart - liveCount) : pageStart;
+
+    const dbClips = dbOnPage > 0
+      ? await q(
+          `SELECT c.id, c.title, c.creator_name, c.view_count,
+                  c.created_at, c.duration, c.thumbnail_url, c.url,
+                  COALESCE(g.name, '') AS game_name
+           FROM clips c
+           LEFT JOIN games g ON c.game_id = g.id
+           ${where}
+           ORDER BY ${ORDER[state.sortBy]}
+           LIMIT ${dbOnPage} OFFSET ${dbOffset}`,
+          params,
+        )
+      : [];
     if (ctrl.signal.aborted) return;
 
     document.getElementById('result-count')!.textContent = t().resultCount(state.totalClips);
@@ -442,21 +491,27 @@ export async function render(): Promise<void> {
       document.removeEventListener('click', _onDocClickOutside);
     }
 
-    if (!clips.length) {
+    const liveSlice = sortedLive.slice(pageStart, pageStart + liveOnPage);
+    const hasClips  = liveSlice.length > 0 || dbClips.length > 0;
+
+    if (!hasClips) {
       grid.innerHTML = '';
       empty.style.display = 'block';
     } else {
       empty.style.display = 'none';
-      grid.innerHTML = clips.map(c => clipCardHtml({
-        url:           String(c['url']           ?? ''),
-        thumbnail_url: String(c['thumbnail_url'] ?? ''),
-        title:         String(c['title']         ?? ''),
-        duration:      Number(c['duration']      ?? 0),
-        view_count:    Number(c['view_count']    ?? 0),
-        game_name:     String(c['game_name']     ?? ''),
-        creator_name:  String(c['creator_name']  ?? ''),
-        created_at:    String(c['created_at']    ?? ''),
-      })).join('');
+      grid.innerHTML = [
+        ...liveSlice.map(c => clipCardHtml(c, ' live-clip')),
+        ...dbClips.map(c => clipCardHtml({
+          url:           String(c['url']           ?? ''),
+          thumbnail_url: String(c['thumbnail_url'] ?? ''),
+          title:         String(c['title']         ?? ''),
+          duration:      Number(c['duration']      ?? 0),
+          view_count:    Number(c['view_count']    ?? 0),
+          game_name:     String(c['game_name']     ?? ''),
+          creator_name:  String(c['creator_name']  ?? ''),
+          created_at:    String(c['created_at']    ?? ''),
+        })),
+      ].join('');
       attachImgErrorHandlers(grid);
     }
 
