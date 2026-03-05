@@ -131,8 +131,79 @@ async function updateGameFilter(): Promise<void> {
 
 // ── Main render ───────────────────────────────────────────────────────────
 
-// AbortController guard: if a new render() call starts while one is in
-// flight, the earlier one checks the signal and returns early.
+// ── Clip embed ─────────────────────────────────────────────────────────────
+
+function extractClipSlug(url: string): string | null {
+  try {
+    const u = new URL(url);
+    const parts = u.pathname.split('/').filter(Boolean);
+    // https://www.twitch.tv/{streamer}/clip/{slug}
+    const idx = parts.indexOf('clip');
+    if (idx !== -1 && parts[idx + 1]) return parts[idx + 1]!;
+    // https://clips.twitch.tv/{slug}
+    if (u.hostname === 'clips.twitch.tv' && parts[0]) return parts[0]!;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+const _thumbCache = new WeakMap<HTMLElement, HTMLElement>();
+let _expandedCard: HTMLElement | null = null;
+
+function _onDocClickOutside(e: MouseEvent): void {
+  if (_expandedCard && !_expandedCard.contains(e.target as Node)) {
+    collapseCard(_expandedCard);
+  }
+}
+
+function collapseCard(card: HTMLElement): void {
+  const savedThumb = _thumbCache.get(card);
+  const embedWrap = card.querySelector<HTMLElement>('.clip-embed-wrap');
+  if (embedWrap && savedThumb) embedWrap.replaceWith(savedThumb);
+  _thumbCache.delete(card);
+  card.classList.remove('expanded');
+  document.removeEventListener('click', _onDocClickOutside);
+  _expandedCard = null;
+}
+
+function expandCard(card: HTMLElement): void {
+  if (_expandedCard && _expandedCard !== card) collapseCard(_expandedCard);
+
+  const clipUrl = card.dataset['clipUrl'] ?? '';
+  const slug = extractClipSlug(clipUrl);
+  if (!slug) {
+    window.open(clipUrl, '_blank', 'noopener,noreferrer');
+    return;
+  }
+
+  const parent = encodeURIComponent(window.location.hostname || 'localhost');
+  const src = `https://clips.twitch.tv/embed?clip=${encodeURIComponent(slug)}&parent=${parent}&autoplay=false`;
+
+  const thumb = card.querySelector<HTMLElement>('.clip-thumb');
+  if (!thumb) return;
+
+  _thumbCache.set(card, thumb);
+
+  const embedWrap = document.createElement('div');
+  embedWrap.className = 'clip-embed-wrap';
+  embedWrap.innerHTML =
+    `<button class="clip-close-btn" aria-label="Close embed" type="button">&#x2715;</button>` +
+    `<iframe src="${escHtml(src)}" class="clip-iframe" allowfullscreen scrolling="no"></iframe>`;
+
+  thumb.replaceWith(embedWrap);
+  card.classList.add('expanded');
+  _expandedCard = card;
+  card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  // Add click-outside listener on the next tick so the current click
+  // doesn't immediately trigger it and collapse the card.
+  setTimeout(() => document.addEventListener('click', _onDocClickOutside), 0);
+}
+
+// ── AbortController guard ─────────────────────────────────────────────────
+
+// If a new render() call starts while one is in flight, the earlier one
+// checks the signal and returns early.
 let _renderController: AbortController | null = null;
 
 export async function render(): Promise<void> {
@@ -184,21 +255,24 @@ export async function render(): Promise<void> {
     const grid  = document.getElementById('clips-grid')!;
     const empty = document.getElementById('empty')!;
 
+    // Reset any expanded embed from the previous render — the DOM is about
+    // to be replaced entirely.
+    _expandedCard = null;
+    document.removeEventListener('click', _onDocClickOutside);
+
     if (!clips.length) {
       grid.innerHTML = '';
       empty.style.display = 'block';
     } else {
       empty.style.display = 'none';
       grid.innerHTML = clips.map(c => `
-        <div class="clip-card">
+        <div class="clip-card" data-clip-url="${escHtml(c['url'] as string)}">
           <div class="clip-thumb">
-            <a href="${escHtml(c['url'])}" target="_blank" rel="noopener noreferrer">
-              <img src="${escHtml(c['thumbnail_url'])}" alt="${escHtml(c['title'])}"
-                   loading="lazy" onerror="this.classList.add('broken')">
-              <div class="clip-play-icon">
-                <svg viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
-              </div>
-            </a>
+            <img src="${escHtml(c['thumbnail_url'])}" alt="${escHtml(c['title'])}"
+                 loading="lazy" onerror="this.classList.add('broken')">
+            <div class="clip-play-icon">
+              <svg viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
+            </div>
             <span class="clip-duration">${fmtDuration(c['duration'] as number)}</span>
           </div>
           <div class="clip-info">
@@ -314,6 +388,26 @@ function bindEvents(): void {
     state.setGameFilter((e.target as HTMLSelectElement).value);
     state.setCurrentPage(1);
     void render();
+  });
+
+  // Clip embed: delegated click handler on the grid (cards are re-created
+  // on every render so per-element listeners would be lost).
+  const clipsGrid = document.getElementById('clips-grid')!;
+  clipsGrid.addEventListener('click', e => {
+    const target = e.target as HTMLElement;
+    if (target.closest('.clip-close-btn')) {
+      const card = target.closest<HTMLElement>('.clip-card');
+      if (card) collapseCard(card);
+      return;
+    }
+    if (target.closest('.clip-thumb')) {
+      const card = target.closest<HTMLElement>('.clip-card');
+      if (card) expandCard(card);
+    }
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && _expandedCard) collapseCard(_expandedCard);
   });
 
 }
