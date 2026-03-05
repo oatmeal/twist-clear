@@ -36,37 +36,6 @@ cannot outrank DB clips beyond the cap — i.e. when the cap is large enough.
 
 ---
 
-## Game filter: large data transfers due to non-covering index
-
-When filtering by game, the main clips SELECT requires columns (`title`,
-`creator_name`, `view_count`, `duration`, `thumbnail_url`, `url`) that are not
-in the `clips_game_created` index `(game_id, created_at DESC)`. SQLite uses the
-index to find matching rowids in sort order, then does one random table-page
-lookup per row to fetch the remaining columns. With `LIMIT 24`, that is 24
-separate table-page reads. Because clips for a game are inserted interleaved
-with clips from other games, those rows are scattered across the table B-tree
-even after VACUUM; each lookup likely misses the cache and triggers a new
-exponential read-ahead cycle, totalling many MB.
-
-The COUNT fast path (`game_clip_counts`) was added to eliminate the separate
-count scan, but the main fetch is the dominant cost.
-
-Potential fixes (in order of implementation effort):
-
-- **Wider covering index** — add all selected columns to `clips_game_created`
-  so the query never touches the table. This duplicates storage but makes
-  game-filtered pages entirely index-resident.
-- **Table clustering by `(game_id, created_at DESC)`** — in
-  `prepare_web_db.py`, recreate the clips table with rows inserted in
-  `(game_id, created_at DESC)` order so rowids reflect that order and table
-  lookups are sequential. Requires rewriting the prepare script and a full
-  VACUUM. Effective for date-desc game queries; less so for view-count sorts.
-- **Precomputed per-game page table** — materialise the top-N clips per game
-  into a separate table during `prepare_web_db.py`, keeping all needed columns
-  contiguous on disk. Trades preparation complexity for near-zero runtime I/O.
-
----
-
 ## Live clips: calendar heat map integration
 
 The calendar year/month views aggregate clip counts directly from SQLite. Live

@@ -151,14 +151,29 @@ def prepare(src_path: str, dst_path: str) -> None:
     )
     print("  done.")
 
-    # (game_id, created_at DESC) index — lets the browser serve
-    # "WHERE game_id = ? ORDER BY created_at DESC LIMIT n" with early
-    # termination: SQLite walks the index in sorted order and stops after n
-    # rows instead of fetching all matching rows for an in-memory sort.
-    print("Creating clips_game_created index …")
+    # Covering index for game-filtered queries.  Includes every column
+    # selected by the browser's main clips fetch so SQLite can answer the
+    # query entirely from index pages — no table-row lookups required.
+    #
+    # Without this, each page of 24 results required 24 random table-page
+    # fetches (clips for a game are scattered across the B-tree), each one
+    # triggering sql.js-httpvfs's exponential read-ahead and totalling many
+    # MB per interaction.
+    #
+    # With this index:
+    #   date_desc sort  — walks (game_id, created_at DESC, …) and stops
+    #                     after 24 rows; a few KB downloaded.
+    #   view_count sort — must scan all rows for the game in the index and
+    #                     sort in memory, but the scan is sequential and
+    #                     bounded by the clip count for that game.
+    #   date filter     — narrows the created_at range, reducing the scan
+    #                     further for all sort orders.
+    print("Creating clips_game_created covering index …")
     dst_conn.execute(
         "CREATE INDEX IF NOT EXISTS clips_game_created"
-        " ON clips(game_id, created_at DESC)"
+        " ON clips(game_id, created_at DESC,"
+        "          id, title, creator_name, view_count, duration,"
+        "          thumbnail_url, url)"
     )
     print("  done.")
 
