@@ -19,7 +19,7 @@ export function serializeHash(s: HashState): string {
 
   if (s.currentView === 'calendar') p.set('view', 'calendar');
   if (s.searchQuery) p.set('q', s.searchQuery);
-  if (s.sortBy !== 'view_count_desc') p.set('sort', s.sortBy);
+  if (s.sortBy !== 'date_desc') p.set('sort', s.sortBy);
   if (s.gameFilter) p.set('game', s.gameFilter);
   if (s.currentPage > 1) p.set('page', String(s.currentPage));
 

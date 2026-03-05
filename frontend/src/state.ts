@@ -7,7 +7,7 @@ export const PAGE_SIZE = 24;
 export let currentPage: number = 1;
 export let totalClips: number = 0;
 export let searchQuery: string = '';
-export let sortBy: SortKey = 'view_count_desc';
+export let sortBy: SortKey = 'date_desc';
 export let gameFilter: string = '';
 export let currentView: 'grid' | 'calendar' = 'grid';
 

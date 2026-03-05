@@ -5,7 +5,7 @@ import type { HashState } from '../lib/hash';
 const defaultState: HashState = {
   currentView: 'grid',
   searchQuery: '',
-  sortBy: 'view_count_desc',
+  sortBy: 'date_desc',
   gameFilter: '',
   currentPage: 1,
   calDateFrom: null,
@@ -129,14 +129,14 @@ describe('deserializeHash', () => {
       ...defaultState,
       searchQuery: 'lol',
       currentPage: 2,
-      sortBy: 'date_desc',
+      sortBy: 'view_count_asc',
       gameFilter: '42',
     };
     const hash = serializeHash(original);
     const parsed = deserializeHash('#' + hash);
     expect(parsed.searchQuery).toBe('lol');
     expect(parsed.currentPage).toBe(2);
-    expect(parsed.sortBy).toBe('date_desc');
+    expect(parsed.sortBy).toBe('view_count_asc');
     expect(parsed.gameFilter).toBe('42');
   });
 

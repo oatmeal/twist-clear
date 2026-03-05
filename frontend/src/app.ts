@@ -38,7 +38,7 @@ function applyStateHash(hashStr: string): void {
   const partial = deserializeHash(hashStr);
 
   state.setSearchQuery(partial.searchQuery ?? '');
-  state.setSortBy((partial.sortBy ?? 'view_count_desc') as SortKey);
+  state.setSortBy((partial.sortBy ?? 'date_desc') as SortKey);
   state.setGameFilter(partial.gameFilter ?? '');
   state.setCurrentPage(partial.currentPage ?? 1);
   state.setCalDateFrom(partial.calDateFrom ?? null);
@@ -347,6 +347,7 @@ function applyTranslations(): void {
   sort.options[1]!.textContent = tr.sortLeastViewed;
   sort.options[2]!.textContent = tr.sortNewest;
   sort.options[3]!.textContent = tr.sortOldest;
+  sort.value = state.sortBy;
 
   (document.getElementById('date-from-input') as HTMLInputElement).title = tr.dateFrom;
   (document.getElementById('date-to-input')   as HTMLInputElement).title = tr.dateTo;
@@ -466,13 +467,13 @@ export async function init(): Promise<void> {
       } else {
         // Empty hash → reset to default state
         state.setSearchQuery('');
-        state.setSortBy('view_count_desc');
+        state.setSortBy('date_desc');
         state.setGameFilter('');
         state.setCurrentPage(1);
         state.setCurrentView('grid');
         clearCalDateFilter();
         (document.getElementById('search') as HTMLInputElement).value       = '';
-        (document.getElementById('sort') as HTMLSelectElement).value        = 'view_count_desc';
+        (document.getElementById('sort') as HTMLSelectElement).value        = 'date_desc';
         (document.getElementById('game-filter') as HTMLSelectElement).value = '';
         document.getElementById('btn-view-grid')!.classList.add('active');
         document.getElementById('btn-view-cal')!.classList.remove('active');
