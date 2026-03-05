@@ -350,7 +350,9 @@ function applyTranslations(): void {
   sort.value = state.sortBy;
 
   (document.getElementById('date-from-input') as HTMLInputElement).title = tr.dateFrom;
+  (document.getElementById('date-from-input') as HTMLInputElement).lang  = lang;
   (document.getElementById('date-to-input')   as HTMLInputElement).title = tr.dateTo;
+  (document.getElementById('date-to-input')   as HTMLInputElement).lang  = lang;
 
   (document.getElementById('btn-view-grid') as HTMLButtonElement).textContent = tr.viewGrid;
   (document.getElementById('btn-view-cal')  as HTMLButtonElement).textContent = tr.viewCalendar;

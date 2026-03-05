@@ -56,8 +56,18 @@ const en: Translations = {
   clipCount: (n) => `${n} clip${n !== 1 ? 's' : ''}`,
   dayTooltip: (date, n) => `${date}: ${n} clip${n !== 1 ? 's' : ''}`,
   monthTooltip: (name, n) => `${name}: ${n.toLocaleString()} clip${n !== 1 ? 's' : ''}`,
-  weekLabel: (date) => `Week of ${date}`,
-  selectWeek: (num, date) => `Select week ${num} (${date})`,
+  weekLabel: (date) => {
+    const parts = date.split('-');
+    const fmt = new Date(Number(parts[0]!), Number(parts[1]!) - 1, Number(parts[2]!))
+      .toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    return `Week of ${fmt}`;
+  },
+  selectWeek: (num, date) => {
+    const parts = date.split('-');
+    const fmt = new Date(Number(parts[0]!), Number(parts[1]!) - 1, Number(parts[2]!))
+      .toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    return `Select week ${num} (${fmt})`;
+  },
   monthShort: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
   monthLong: ['January', 'February', 'March', 'April', 'May', 'June',
               'July', 'August', 'September', 'October', 'November', 'December'],
@@ -84,10 +94,25 @@ const ja: Translations = {
   creatorLine: (creator, date) => `${creator} · ${date}`,
   resultCount: (n) => `${n.toLocaleString()}本のクリップ`,
   clipCount: (n) => `${n}本`,
-  dayTooltip: (date, n) => `${date}：${n}本`,
+  dayTooltip: (date, n) => {
+    const parts = date.split('-');
+    const fmt = new Date(Number(parts[0]!), Number(parts[1]!) - 1, Number(parts[2]!))
+      .toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' });
+    return `${fmt}：${n}本`;
+  },
   monthTooltip: (name, n) => `${name}：${n.toLocaleString()}本`,
-  weekLabel: (date) => `週：${date}`,
-  selectWeek: (num, date) => `第${num}週 (${date}) を選択`,
+  weekLabel: (date) => {
+    const parts = date.split('-');
+    const fmt = new Date(Number(parts[0]!), Number(parts[1]!) - 1, Number(parts[2]!))
+      .toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' });
+    return `週：${fmt}`;
+  },
+  selectWeek: (num, date) => {
+    const parts = date.split('-');
+    const fmt = new Date(Number(parts[0]!), Number(parts[1]!) - 1, Number(parts[2]!))
+      .toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' });
+    return `第${num}週 (${fmt}) を選択`;
+  },
   monthShort: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'],
   monthLong: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'],
   dayOfWeek: ['日', '月', '火', '水', '木', '金', '土'],
