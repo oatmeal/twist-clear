@@ -27,14 +27,17 @@ Create a new GitHub repository for your archive. It can be named anything (e.g. 
 
 ## Step 2 — Add Twitch credentials as secrets
 
-In your archive repo, go to **Settings → Secrets and variables → Actions** and add two repository secrets:
+In your archive repo, go to **Settings → Secrets and variables → Actions** and add the following repository secrets:
 
-| Secret name | Value |
-|---|---|
-| `TWITCH_CLIENT_ID` | Your Twitch application's client ID |
-| `TWITCH_CLIENT_SECRET` | Your Twitch application's client secret |
+| Secret name | Required | Value |
+|---|---|---|
+| `TWITCH_CLIENT_ID` | Yes | Client ID of your **Confidential** Twitch app (used by the scraper) |
+| `TWITCH_CLIENT_SECRET` | Yes | Client Secret of your **Confidential** Twitch app |
+| `TWITCH_WEB_CLIENT_ID` | No | Client ID of a separate **Public** Twitch app (enables "Login with Twitch" in the viewer) |
 
-If you haven't created a Twitch application yet, see [Setting up a Twitch application](../README.md#1-create-a-twitch-application) in the main README.
+If you haven't created Twitch applications yet, see [Setting up Twitch applications](../README.md#1-create-twitch-applications) in the main README.
+
+> **Live clips feature:** To enable the "Login with Twitch" button, add `TWITCH_WEB_CLIENT_ID` (a *Public* app — separate from the scraper's Confidential app). Register your GitHub Pages URL **without a trailing slash** (e.g. `https://you.github.io/my-clips`) as an OAuth Redirect URL in that app's settings. If the secret is omitted, the button is simply hidden.
 
 ---
 
@@ -68,6 +71,7 @@ jobs:
     secrets:
       TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
       TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
+      TWITCH_WEB_CLIENT_ID: ${{ secrets.TWITCH_WEB_CLIENT_ID }}  # optional, enables Login with Twitch
 ```
 
 Commit and push this file.

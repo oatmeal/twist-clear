@@ -3,6 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!--
+    Content-Security-Policy: GitHub Pages cannot set custom HTTP headers, so
+    the CSP is declared here as a meta tag. Note that frame-ancestors is ignored
+    in meta CSPs (HTTP header only); all other directives work in modern browsers.
+    worker-src blob: is required by sql.js-httpvfs which creates workers via blob URLs.
+    If the DB is hosted on a different origin (e.g. R2/S3), add it to connect-src.
+  -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self';
+    style-src 'self' 'unsafe-inline';
+    connect-src 'self' https://api.twitch.tv https://id.twitch.tv;
+    frame-src https://clips.twitch.tv;
+    img-src 'self' https://*.twitch.tv https://*.twitchsvc.net https://*.jtvnw.net data:;
+    worker-src 'self' blob:;
+  ">
   <title>Twitch Clips Viewer</title>
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="calendar.css">
@@ -13,8 +29,18 @@
 <header>
   <h1>Twitch Clips</h1>
   <span class="streamer-tag" id="streamer-tag"></span>
+  <div id="auth-indicator" style="display:none">
+    <span id="auth-username"></span>
+    <button id="btn-logout" class="auth-btn">Log out</button>
+  </div>
   <button id="lang-toggle" class="lang-toggle"></button>
 </header>
+
+<div id="login-banner" style="display:none">
+  <span id="banner-text"></span>
+  <button id="btn-login" class="login-btn">Login with Twitch</button>
+  <button id="btn-dismiss-banner" class="banner-dismiss" aria-label="Dismiss">&#x2715;</button>
+</div>
 
 <div id="controls">
   <input type="search" id="search" placeholder="Search clip titles…" autocomplete="off">
@@ -40,6 +66,14 @@
 </div>
 
 <main>
+  <div id="live-section" style="display:none">
+    <div id="live-section-header">
+      <span id="live-section-title"></span>
+      <button id="btn-live-toggle" class="live-toggle-btn" aria-label="Toggle new clips"></button>
+    </div>
+    <div id="live-clips-grid"></div>
+  </div>
+
   <div id="calendar-panel" style="display:none">
     <div id="cal-header">
       <div id="cal-breadcrumb"></div>

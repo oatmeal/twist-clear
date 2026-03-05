@@ -25,7 +25,7 @@ A daily Actions run scrapes all clips from scratch and redeploys the site. Each 
 
 1. **Twitch app** — create one at https://dev.twitch.tv/console/apps (see [step-by-step instructions](#1-create-a-twitch-application) below; you'll need Client ID and Client Secret).
 2. **Create the archive repo** — any name, public or private.
-3. **Add secrets** — `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET` under *Settings → Secrets and variables → Actions*.
+3. **Add secrets** — `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET` (required); `TWITCH_WEB_CLIENT_ID` (optional, enables Login with Twitch) under *Settings → Secrets and variables → Actions*.
 4. **Enable Pages** — *Settings → Pages*, source set to **GitHub Actions**.
 5. **Add this workflow file** as `.github/workflows/deploy.yml` in the archive repo, replacing `YOUR_USERNAME` and the streamer logins:
 
@@ -45,6 +45,7 @@ jobs:
     secrets:
       TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
       TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
+      TWITCH_WEB_CLIENT_ID: ${{ secrets.TWITCH_WEB_CLIENT_ID }}  # optional, enables Login with Twitch
 ```
 
 6. **Trigger the first run** manually from the Actions tab. Once it completes, your archive is live at `https://YOUR_USERNAME.github.io/my-clips/`.
@@ -62,9 +63,13 @@ For local development, ad-hoc scraping, or self-hosting on your own server.
 
 ### Setup
 
-#### 1. Create a Twitch application
+#### 1. Create Twitch applications
 
-The scraper uses the **Client Credentials** flow — an app access token with no user login required — to read public clip data.
+Two separate apps are required because the scraper and the browser viewer need different OAuth client types.
+
+**App 1 — Scraper (required)**
+
+The scraper uses the **Client Credentials** flow to read public clip data.
 
 1. Go to **https://dev.twitch.tv/console/apps** and sign in, then click **Register Your Application**.
 
@@ -73,11 +78,28 @@ The scraper uses the **Client Credentials** flow — an app access token with no
    | Field | What to enter |
    |---|---|
    | **Name** | Anything descriptive, e.g. `clips-scraper`. Must be unique on Twitch. |
-   | **OAuth Redirect URLs** | `http://localhost` — required by the form but never used by the client credentials flow. |
-   | **Category** | *Application Integration* (or any category; it doesn't affect the credentials). |
-   | **Client Type** | **Confidential** — this gives you a client secret. If you choose *Public* you won't get one. |
+   | **OAuth Redirect URLs** | `http://localhost` (placeholder; the scraper doesn't use OAuth redirects). |
+   | **Category** | *Application Integration* (doesn't affect credentials). |
+   | **Client Type** | **Confidential** — required to generate a client secret for the scraper. |
 
-3. Click **Create**, then click **Manage** next to your new app. Click **New Secret** to generate a client secret. Copy both the **Client ID** and **Client Secret** — the secret is only shown once (regenerate if lost).
+3. Click **Create**, then **Manage** next to your app. Click **New Secret**, then copy both the **Client ID** and **Client Secret** — the secret is only shown once.
+
+**App 2 — Browser login (optional)**
+
+Enables the **"Login with Twitch"** button in the viewer, which fetches clips newer than the archive date. Uses Twitch's implicit grant OAuth (response_type=token) — no secret is ever sent from the browser.
+
+1. Register a second application at the same URL.
+
+2. Fill in the registration form:
+
+   | Field | What to enter |
+   |---|---|
+   | **Name** | Anything descriptive, e.g. `clips-viewer`. Must be unique on Twitch. |
+   | **OAuth Redirect URLs** | All URLs where your viewer runs, **without trailing slashes**: `http://localhost:5173`, `http://localhost:4173`, and your deployed URL (e.g. `https://you.github.io/my-clips`). |
+   | **Category** | *Application Integration*. |
+   | **Client Type** | **Public** — required for browser OAuth; public apps have no client secret. |
+
+3. Click **Create**, then **Manage** and copy the **Client ID** (no secret is generated or needed).
 
 #### 2. Configure
 
@@ -91,8 +113,11 @@ Edit `config.toml`:
 
 ```toml
 [twitch]
-client_id     = "..."   # from the app management page
-client_secret = "..."   # the secret you generated above
+client_id     = "..."   # Scraper app (Confidential) — Client ID
+client_secret = "..."   # Scraper app (Confidential) — Client Secret
+
+# Optional: enables "Login with Twitch" in the viewer (separate Public app).
+# web_client_id = "..."
 
 [scraper]
 db_path = "data/clips.db"   # created automatically on first run
@@ -168,7 +193,8 @@ Requires `frontend/public/clips.db` — run `prepare-db` first. Serve `frontend/
 - Search by title, filter by game, sort by views or date
 - Date range filter and calendar view (year heatmap → month grid, selectable by day or week)
 - URL hash preserves all filter state — links are bookmarkable and shareable
-- Each thumbnail links directly to the clip on Twitch
+- Click a thumbnail to embed the clip inline; click outside or press Escape to close
+- **Login with Twitch** — fetches clips newer than the archive date live from the Twitch API and displays them above the archive grid (no backend required; uses Twitch's implicit grant OAuth)
 
 ---
 
@@ -231,7 +257,7 @@ uv run ruff format .       # format
 
 ```sh
 cd frontend
-npm test           # Vitest unit tests (88 tests — query builder, hash, date utils, formatting)
+npm test           # Vitest unit tests (123 tests — query builder, hash, date utils, formatting, live filter, OAuth helpers)
 npx tsc --noEmit   # type-check
 ```
 

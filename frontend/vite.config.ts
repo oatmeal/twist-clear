@@ -1,5 +1,5 @@
 import { defineConfig } from 'vitest/config';
-import { createReadStream, realpathSync, statSync, accessSync, constants } from 'node:fs';
+import { createReadStream, realpathSync, statSync, accessSync, constants, readFileSync } from 'node:fs';
 import { join, isAbsolute } from 'node:path';
 import type { Plugin } from 'vite';
 
@@ -87,6 +87,22 @@ function dbRangePlugin(): Plugin {
   };
 }
 
+// Inject VITE_TWITCH_CLIENT_ID from config.toml for local dev so users don't
+// need a separate .env.local file. In CI, the env var is set explicitly by
+// the workflow and takes precedence (process.env check runs first).
+//
+// The frontend requires a *Public* Twitch app (implicit grant, no client_secret), which
+// must be separate from the scraper's Confidential app. Its client_id is stored
+// under the key web_client_id in config.toml to avoid confusion with the
+// scraper's client_id.
+if (!process.env['VITE_TWITCH_CLIENT_ID']) {
+  try {
+    const toml  = readFileSync('../config.toml', 'utf-8');
+    const match = /web_client_id\s*=\s*"([^"]+)"/.exec(toml);
+    if (match?.[1]) process.env['VITE_TWITCH_CLIENT_ID'] = match[1];
+  } catch { /* config.toml absent — VITE_TWITCH_CLIENT_ID must be set externally */ }
+}
+
 export default defineConfig({
   root: '.',
   publicDir: 'public',
@@ -97,6 +113,12 @@ export default defineConfig({
       // Allow resolving symlinks that point outside the package root (e.g. public/clips.db)
       allow: ['..'],
     },
+  },
+  preview: {
+    // Explicit port so `vite preview` is always on 4173 regardless of whether
+    // Vite inherits server.port (behaviour varies across Vite versions).
+    port: parseInt(process.env['PREVIEW_PORT'] ?? '4173', 10),
+    host: '127.0.0.1',
   },
   plugins: [dbRangePlugin()],
   optimizeDeps: {

@@ -41,6 +41,12 @@ on:
         required: true
       TWITCH_CLIENT_SECRET:
         required: true
+      TWITCH_WEB_CLIENT_ID:
+        description: >
+          Client ID of a *Public* Twitch app used for implicit grant login in the browser.
+          Must be a separate app from TWITCH_CLIENT_ID (which is Confidential).
+          Optional — if omitted, the "Login with Twitch" button is hidden.
+        required: false
 
 permissions:
   pages: write
@@ -119,6 +125,12 @@ jobs:
 
       - name: Build frontend
         run: npm --prefix frontend run build
+        env:
+          # Client ID of the Public Twitch app used for implicit grant login in the browser.
+          # This is a different app from the Confidential app used by the scraper.
+          # Safe to bake into the JS bundle — client_id is a public identifier.
+          # If the secret is not set, the "Login with Twitch" button is hidden.
+          VITE_TWITCH_CLIENT_ID: ${{ secrets.TWITCH_WEB_CLIENT_ID }}
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b  # v4.0.0

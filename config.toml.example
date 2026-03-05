@@ -1,7 +1,17 @@
 [twitch]
-# Create an application at https://dev.twitch.tv/console/apps to get these.
+# Scraper credentials — create a Confidential app at https://dev.twitch.tv/console/apps.
 client_id     = "your_client_id_here"
 client_secret = "your_client_secret_here"
+
+# (Optional) Client ID for the browser "Login with Twitch" feature.
+# Must be a SEPARATE Public app (no client_secret) — browser OAuth requires a
+# Public client type. Create a second app and set its Client Type to "Public".
+# Register your redirect URIs WITHOUT a trailing slash, e.g.:
+#   http://localhost:5173
+#   http://localhost:4173
+#   https://you.github.io/my-clips
+# If omitted, the "Login with Twitch" button is hidden in the viewer.
+# web_client_id = "your_public_app_client_id_here"
 
 [scraper]
 db_path = "data/clips.db"

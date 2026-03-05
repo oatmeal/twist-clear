@@ -14,6 +14,11 @@ import {
   rebuildMonthSelect,
 } from './calendar';
 import { setUseMeta } from './state';
+import * as auth from './auth';
+import * as twitch from './twitch';
+import type { LiveClip } from './twitch';
+import { filterLiveClips } from './lib/liveFilter';
+import { ensureRfc3339 } from './lib/dateUtils';
 
 // ── URL hash state ────────────────────────────────────────────────────────
 
@@ -75,15 +80,21 @@ function applyStateHash(hashStr: string): void {
 
 // ── DB query helpers ──────────────────────────────────────────────────────
 
-async function setStreamerTag(): Promise<void> {
-  const rows = await q('SELECT display_name, login FROM streamers LIMIT 1');
+// Broadcaster ID and DB cutoff date — set once during init, never change.
+let _broadcasterId: string | null = null;
+let _dbCutoffDate:  string | null = null;
+
+async function setStreamerTag(): Promise<string | null> {
+  const rows = await q('SELECT id, display_name, login FROM streamers LIMIT 1');
   if (rows.length) {
-    const row = rows[0]!;
+    const row     = rows[0]!;
     const display = row['display_name'];
     const login   = row['login'];
     document.getElementById('streamer-tag')!.textContent =
       display ? `${String(display)} (${String(login)})` : String(login);
+    return String(row['id']);
   }
+  return null;
 }
 
 async function updateGameFilter(): Promise<void> {
@@ -129,7 +140,47 @@ async function updateGameFilter(): Promise<void> {
   sel.value = state.gameFilter;
 }
 
-// ── Main render ───────────────────────────────────────────────────────────
+// ── Clip card HTML helper ─────────────────────────────────────────────────
+
+// Shared template for DB clips (render) and live clips (renderLiveSection).
+// The onerror attribute is intentionally omitted — broken images are handled
+// by attachImgErrorHandlers() after setting innerHTML, avoiding inline JS
+// which is blocked by the Content-Security-Policy.
+function clipCardHtml(clip: {
+  url: string; thumbnail_url: string; title: string; duration: number;
+  view_count: number; game_name: string; creator_name: string; created_at: string;
+}, extraClass = ''): string {
+  return `
+    <div class="clip-card${extraClass}" data-clip-url="${escHtml(clip.url)}">
+      <div class="clip-thumb">
+        <img src="${escHtml(clip.thumbnail_url)}" alt="${escHtml(clip.title)}" loading="lazy">
+        <div class="clip-play-icon">
+          <svg viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
+        </div>
+        <span class="clip-duration">${fmtDuration(clip.duration)}</span>
+      </div>
+      <div class="clip-info">
+        <div class="clip-title">
+          <a href="${escHtml(clip.url)}" target="_blank" rel="noopener noreferrer">
+            ${escHtml(clip.title)}
+          </a>
+        </div>
+        <div class="clip-meta">
+          <span class="views">${t().views(fmtViews(clip.view_count))}</span>
+          ${clip.game_name ? `<span>${escHtml(clip.game_name)}</span>` : ''}
+          <span>${t().creatorLine(escHtml(clip.creator_name), fmtDateTime(clip.created_at, lang))}</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+// Attach img error handlers after innerHTML is set (avoids inline onerror
+// attributes which are blocked by the Content-Security-Policy).
+function attachImgErrorHandlers(container: HTMLElement): void {
+  container.querySelectorAll<HTMLImageElement>('.clip-thumb img').forEach(img => {
+    img.addEventListener('error', () => img.classList.add('broken'), { once: true });
+  });
+}
 
 // ── Clip embed ─────────────────────────────────────────────────────────────
 
@@ -200,6 +251,131 @@ function expandCard(card: HTMLElement): void {
   setTimeout(() => document.addEventListener('click', _onDocClickOutside), 0);
 }
 
+// ── Live clips ────────────────────────────────────────────────────────────
+
+/** Fetch clips newer than the DB cutoff and store in state. */
+async function fetchLiveClips(): Promise<void> {
+  if (!_broadcasterId || !_dbCutoffDate) return;
+
+  const token = await auth.getValidToken();
+  if (!token) { auth.logout(); syncAuthUI(); return; }
+
+  state.setLiveFetching(true);
+
+  // clips_meta stores max_date as YYYY-MM-DD (date-only) for calendar use.
+  // Twitch's started_at parameter requires full RFC3339; ensureRfc3339 appends
+  // midnight UTC when the string has no time component.
+  const sinceDate = ensureRfc3339(_dbCutoffDate);
+
+  const clips = await twitch.fetchNewClips(_broadcasterId, sinceDate, token);
+
+  if (clips.length > 0) {
+    const gameIds   = clips.map(c => c.game_id);
+    const gameNames = await twitch.fetchGameNames(gameIds, token);
+    for (const c of clips) c.game_name = gameNames[c.game_id] ?? '';
+  }
+
+  state.setLiveFetching(false);
+  state.setLiveClips(clips);
+  void render();
+}
+
+/** Filter live clips against current filter state. */
+function _filteredLiveClips(): LiveClip[] {
+  return filterLiveClips({
+    clips:        state.liveClips,
+    dbCutoffDate: _dbCutoffDate,
+    calDateTo:    state.calDateTo,
+    calDateFrom:  state.calDateFrom,
+    gameFilter:   state.gameFilter,
+    searchQuery:  state.searchQuery,
+  });
+}
+
+/** Render (or hide) the live clips section above the main grid. */
+function renderLiveSection(): void {
+  const section  = document.getElementById('live-section')!;
+  const titleEl  = document.getElementById('live-section-title')!;
+  const toggleEl = document.getElementById('btn-live-toggle')!;
+  const grid     = document.getElementById('live-clips-grid')!;
+
+  // If an expanded card was in the live section, it's about to be wiped.
+  if (_expandedCard?.closest('#live-section')) {
+    _expandedCard = null;
+    document.removeEventListener('click', _onDocClickOutside);
+  }
+
+  if (!auth.isLoggedIn() || state.liveClips.length === 0) {
+    section.style.display = 'none';
+    grid.innerHTML = '';
+    return;
+  }
+
+  const filtered = _filteredLiveClips();
+  if (filtered.length === 0) {
+    section.style.display = 'none';
+    grid.innerHTML = '';
+    return;
+  }
+
+  const dateLabel = _dbCutoffDate
+    ? new Date(_dbCutoffDate).toLocaleDateString(lang, { year: 'numeric', month: 'short', day: 'numeric' })
+    : '';
+  const plural    = filtered.length === 1 ? 'clip' : 'clips';
+  titleEl.textContent = `${filtered.length} new ${plural}${dateLabel ? ` since ${dateLabel}` : ''}`;
+
+  const collapsed = localStorage.getItem('tc_live_collapsed') === '1';
+  toggleEl.textContent = collapsed ? '▶' : '▼';
+  toggleEl.title       = collapsed ? 'Show' : 'Collapse';
+  grid.style.display   = collapsed ? 'none' : '';
+
+  grid.innerHTML = filtered.map(c => clipCardHtml(c, ' live-clip')).join('');
+  attachImgErrorHandlers(grid);
+
+  section.style.display = 'block';
+}
+
+// ── Auth UI ───────────────────────────────────────────────────────────────
+
+/**
+ * Update the login banner and auth indicator to match current auth state.
+ * Must be called after _dbCutoffDate is set.
+ */
+function syncAuthUI(): void {
+  const banner     = document.getElementById('login-banner')!;
+  const indicator  = document.getElementById('auth-indicator')!;
+  const usernameEl = document.getElementById('auth-username')!;
+  const bannerText = document.getElementById('banner-text')!;
+
+  if (!auth.hasClientId) {
+    // No Client ID configured at build time — hide auth UI entirely.
+    banner.style.display    = 'none';
+    indicator.style.display = 'none';
+    return;
+  }
+
+  if (auth.isLoggedIn()) {
+    banner.style.display    = 'none';
+    indicator.style.display = 'flex';
+    usernameEl.textContent  = state.twitchUsername ?? auth.getUsername() ?? '';
+  } else {
+    indicator.style.display = 'none';
+
+    const dismissed = localStorage.getItem('tc_banner_dismissed') === '1';
+    if (dismissed) {
+      banner.style.display = 'none';
+    } else {
+      const dateLabel = _dbCutoffDate
+        ? new Date(_dbCutoffDate).toLocaleDateString(lang, { year: 'numeric', month: 'short', day: 'numeric' })
+        : '';
+      bannerText.textContent = dateLabel
+        ? `This archive has clips through ${dateLabel}. Log in with Twitch to see newer clips.`
+        : 'Log in with Twitch to see clips newer than this archive.';
+      banner.style.display = 'flex';
+    }
+  }
+}
+
 // ── AbortController guard ─────────────────────────────────────────────────
 
 // If a new render() call starts while one is in flight, the earlier one
@@ -212,6 +388,10 @@ export async function render(): Promise<void> {
   _renderController = ctrl;
 
   try {
+    // Live section is pure in-memory — no async DB reads needed.
+    renderLiveSection();
+    if (ctrl.signal.aborted) return;
+
     await updateGameFilter();
     if (ctrl.signal.aborted) return;
 
@@ -257,38 +437,27 @@ export async function render(): Promise<void> {
 
     // Reset any expanded embed from the previous render — the DOM is about
     // to be replaced entirely.
-    _expandedCard = null;
-    document.removeEventListener('click', _onDocClickOutside);
+    if (_expandedCard?.closest('#clips-grid')) {
+      _expandedCard = null;
+      document.removeEventListener('click', _onDocClickOutside);
+    }
 
     if (!clips.length) {
       grid.innerHTML = '';
       empty.style.display = 'block';
     } else {
       empty.style.display = 'none';
-      grid.innerHTML = clips.map(c => `
-        <div class="clip-card" data-clip-url="${escHtml(c['url'] as string)}">
-          <div class="clip-thumb">
-            <img src="${escHtml(c['thumbnail_url'])}" alt="${escHtml(c['title'])}"
-                 loading="lazy" onerror="this.classList.add('broken')">
-            <div class="clip-play-icon">
-              <svg viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
-            </div>
-            <span class="clip-duration">${fmtDuration(c['duration'] as number)}</span>
-          </div>
-          <div class="clip-info">
-            <div class="clip-title">
-              <a href="${escHtml(c['url'])}" target="_blank" rel="noopener noreferrer">
-                ${escHtml(c['title'])}
-              </a>
-            </div>
-            <div class="clip-meta">
-              <span class="views">${t().views(fmtViews(c['view_count'] as number))}</span>
-              ${c['game_name'] ? `<span>${escHtml(c['game_name'])}</span>` : ''}
-              <span>${t().creatorLine(escHtml(c['creator_name']), fmtDateTime(c['created_at'] as string, lang))}</span>
-            </div>
-          </div>
-        </div>
-      `).join('');
+      grid.innerHTML = clips.map(c => clipCardHtml({
+        url:           String(c['url']           ?? ''),
+        thumbnail_url: String(c['thumbnail_url'] ?? ''),
+        title:         String(c['title']         ?? ''),
+        duration:      Number(c['duration']      ?? 0),
+        view_count:    Number(c['view_count']    ?? 0),
+        game_name:     String(c['game_name']     ?? ''),
+        creator_name:  String(c['creator_name']  ?? ''),
+        created_at:    String(c['created_at']    ?? ''),
+      })).join('');
+      attachImgErrorHandlers(grid);
     }
 
     renderPagination();
@@ -393,10 +562,10 @@ function bindEvents(): void {
     void render();
   });
 
-  // Clip embed: delegated click handler on the grid (cards are re-created
-  // on every render so per-element listeners would be lost).
-  const clipsGrid = document.getElementById('clips-grid')!;
-  clipsGrid.addEventListener('click', e => {
+  // Clip embed: delegated click handler on <main> covers both #clips-grid
+  // and #live-clips-grid (cards are re-created on every render so per-element
+  // listeners would be lost).
+  document.querySelector('main')!.addEventListener('click', e => {
     const target = e.target as HTMLElement;
     if (target.closest('.clip-close-btn')) {
       const card = target.closest<HTMLElement>('.clip-card');
@@ -413,6 +582,29 @@ function bindEvents(): void {
     if (e.key === 'Escape' && _expandedCard) collapseCard(_expandedCard);
   });
 
+  // ── Auth buttons ──────────────────────────────────────────────────────────
+
+  document.getElementById('btn-login')?.addEventListener('click', () => {
+    void auth.initiateLogin();
+  });
+
+  document.getElementById('btn-logout')?.addEventListener('click', () => {
+    auth.logout();
+    localStorage.removeItem('tc_banner_dismissed'); // show banner again after logout
+    syncAuthUI();
+    void render();
+  });
+
+  document.getElementById('btn-dismiss-banner')?.addEventListener('click', () => {
+    localStorage.setItem('tc_banner_dismissed', '1');
+    document.getElementById('login-banner')!.style.display = 'none';
+  });
+
+  document.getElementById('btn-live-toggle')?.addEventListener('click', () => {
+    const collapsed = localStorage.getItem('tc_live_collapsed') === '1';
+    localStorage.setItem('tc_live_collapsed', collapsed ? '0' : '1');
+    renderLiveSection();
+  });
 }
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────
@@ -432,6 +624,14 @@ export async function init(): Promise<void> {
     if (state.currentView === 'calendar') void renderCalendar();
   });
 
+  // Handle OAuth redirect before anything else. Reads the token from the URL
+  // hash (implicit grant) and cleans it before applyStateHash() runs.
+  await auth.handleOAuthCallback();
+
+  // Restore username from localStorage so the auth indicator shows immediately.
+  const storedUsername = auth.getUsername();
+  if (storedUsername) state.setTwitchUsername(storedUsername);
+
   try {
     await initDb(DB_URL);
 
@@ -450,12 +650,24 @@ export async function init(): Promise<void> {
     );
     setUseMeta(metaRows.length > 0);
 
+    // Get the DB cutoff date for the login banner and the live-clip fetch.
+    // Always use MAX(created_at) directly — clips_meta.max_date is truncated to
+    // YYYY-MM-DD for calendar use, which would cause clips already in the DB to
+    // be re-fetched as "new" when passed as started_at to the Twitch API.
+    // The clips_created_at index makes this a single B-tree leaf read.
+    const cutoffRows = await q('SELECT MAX(created_at) AS max_date FROM clips');
+    _dbCutoffDate = (cutoffRows[0]?.['max_date'] as string | undefined) ?? null;
+
     document.getElementById('loading')!.style.display = 'none';
     document.getElementById('controls')!.style.display = 'flex';
 
-    void setStreamerTag();
+    _broadcasterId = await setStreamerTag();
     bindEvents();
+    syncAuthUI();
     await initCalendar(render); // must await: queries clip date range for nav bounds
+
+    // Fetch live clips in the background; render() is called again when done.
+    if (auth.isLoggedIn()) void fetchLiveClips();
 
     if (location.hash && location.hash.length > 1) {
       applyStateHash(location.hash);

@@ -45,3 +45,12 @@ export function isoWeekNumber(dateStr: string): number {
   const yearStart = new Date(dt.getFullYear(), 0, 1);
   return Math.ceil(((dt.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
 }
+
+/**
+ * Ensures a date string carries a time component, as required by Twitch's
+ * started_at parameter (RFC 3339). Date-only strings from clips_meta.max_date
+ * (YYYY-MM-DD) get 'T00:00:00Z' appended; full timestamps pass through unchanged.
+ */
+export function ensureRfc3339(date: string): string {
+  return date.includes('T') ? date : `${date}T00:00:00Z`;
+}

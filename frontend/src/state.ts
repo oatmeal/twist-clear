@@ -1,4 +1,5 @@
 import type { SortKey } from './lib/query';
+import type { LiveClip } from './twitch';
 
 export const PAGE_SIZE = 24;
 
@@ -49,3 +50,13 @@ export function setCalMinDate(v: string | null): void { calMinDate = v; }
 export function setCalMaxDate(v: string | null): void { calMaxDate = v; }
 export function setUseFts(v: boolean): void { useFts = v; }
 export function setUseMeta(v: boolean): void { useMeta = v; }
+
+// ── Live clips (fetched from Twitch API at runtime) ────────────────────────
+
+export let liveClips: LiveClip[] = [];
+export let twitchUsername: string | null = null;
+export let liveFetching: boolean = false;
+
+export function setLiveClips(v: LiveClip[]): void { liveClips = v; }
+export function setTwitchUsername(v: string | null): void { twitchUsername = v; }
+export function setLiveFetching(v: boolean): void { liveFetching = v; }

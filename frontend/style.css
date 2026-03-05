@@ -37,6 +37,29 @@ header .streamer-tag {
   font-size: 13px;
   color: var(--muted);
 }
+/* ── Auth indicator (logged-in state in header) ── */
+#auth-indicator {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#auth-username {
+  font-size: 13px;
+  color: var(--muted);
+}
+.auth-btn {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+}
+.auth-btn:hover { border-color: var(--accent); color: var(--text); }
+
 .lang-toggle {
   margin-left: auto;
   background: var(--surface2);
@@ -49,6 +72,44 @@ header .streamer-tag {
   transition: border-color 0.12s, color 0.12s;
 }
 .lang-toggle:hover { border-color: var(--accent); color: var(--text); }
+
+/* ── Login banner ── */
+#login-banner {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+#banner-text { flex: 1; }
+.login-btn {
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  padding: 7px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s;
+}
+.login-btn:hover { background: var(--accent-h); }
+.banner-dismiss {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 6px;
+  line-height: 1;
+  border-radius: 4px;
+  transition: color 0.12s;
+}
+.banner-dismiss:hover { color: var(--text); }
 
 /* ── Controls bar ── */
 #controls {
@@ -114,6 +175,44 @@ select:focus { border-color: var(--accent); }
 }
 .date-range-filter input[type="date"]:focus { border-color: var(--accent); }
 .date-range-sep { color: var(--muted); font-size: 13px; }
+
+/* ── Live clips section ── */
+#live-section {
+  border-bottom: 1px solid var(--border);
+  padding: 16px 24px 20px;
+}
+#live-section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+#live-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-h);
+}
+.live-toggle-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: color 0.12s;
+}
+.live-toggle-btn:hover { color: var(--text); }
+#live-clips-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+/* Accent border on live clip cards to distinguish them from archive clips */
+.clip-card.live-clip {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+.clip-card.live-clip:hover { border-color: var(--accent); }
 
 /* ── Main area ── */
 main { padding: 24px; }

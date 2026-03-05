@@ -6,6 +6,7 @@ import {
   addDays,
   weekStart,
   isoWeekNumber,
+  ensureRfc3339,
 } from '../lib/dateUtils';
 
 describe('daysInMonth', () => {
@@ -50,4 +51,22 @@ describe('isoWeekNumber', () => {
   it('returns 2 for 2024-01-08 (Monday)', () => expect(isoWeekNumber('2024-01-08')).toBe(2));
   it('returns 52 for 2023-12-31', () => expect(isoWeekNumber('2023-12-31')).toBe(52));
   it('returns 53 for 2015-12-31 (year with 53 weeks)', () => expect(isoWeekNumber('2015-12-31')).toBe(53));
+});
+
+describe('ensureRfc3339', () => {
+  it('appends T00:00:00Z to a date-only string', () => {
+    expect(ensureRfc3339('2024-06-15')).toBe('2024-06-15T00:00:00Z');
+  });
+
+  it('passes a full ISO timestamp through unchanged', () => {
+    expect(ensureRfc3339('2024-06-15T12:30:45Z')).toBe('2024-06-15T12:30:45Z');
+  });
+
+  it('passes a midnight UTC timestamp through unchanged', () => {
+    expect(ensureRfc3339('2024-06-15T00:00:00Z')).toBe('2024-06-15T00:00:00Z');
+  });
+
+  it('passes a timestamp with non-zero offset through unchanged', () => {
+    expect(ensureRfc3339('2024-06-15T08:00:00+09:00')).toBe('2024-06-15T08:00:00+09:00');
+  });
 });
