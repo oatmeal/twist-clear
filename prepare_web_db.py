@@ -127,6 +127,18 @@ def prepare(src_path: str, dst_path: str) -> None:
     """)
     print("  done.")
 
+    # Replace the single-column view_count index (if carried over from an older
+    # source DB) with the composite (view_count, created_at) index that makes
+    # the secondary tiebreak sort index-accelerated.  DROP IF EXISTS is safe to
+    # run repeatedly; CREATE IF NOT EXISTS is a no-op when already present.
+    print("Replacing clips_view_count index …")
+    dst_conn.execute("DROP INDEX IF EXISTS clips_view_count")
+    dst_conn.execute(
+        "CREATE INDEX IF NOT EXISTS clips_view_count"
+        " ON clips(view_count DESC, created_at DESC)"
+    )
+    print("  done.")
+
     # Standalone created_at index — makes date-filtered COUNT(*) queries and
     # general range scans efficient without a full table scan.
     print("Creating clips_created_at index …")

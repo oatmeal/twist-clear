@@ -1,8 +1,8 @@
 export type SortKey = 'view_count_desc' | 'view_count_asc' | 'date_desc' | 'date_asc';
 
 export const ORDER: Record<SortKey, string> = {
-  view_count_desc: 'c.view_count DESC',
-  view_count_asc: 'c.view_count ASC',
+  view_count_desc: 'c.view_count DESC, c.created_at DESC',
+  view_count_asc: 'c.view_count ASC, c.created_at ASC',
   date_desc: 'c.created_at DESC',
   date_asc: 'c.created_at ASC',
 };
