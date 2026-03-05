@@ -105,3 +105,35 @@ Japanese translations added to the `t()` locale map in `app.ts`:
 - Live section toggle button labels ("Show" / "Collapse")
 - Auth indicator / username display area
 - Any error or loading states in the live clips section
+
+---
+
+## buildWhere: calDateTo null edge case
+
+When `calDateFrom` is non-null but `calDateTo` is null, the non-null assertion
+`opts.calDateTo!` in `buildWhere` silently binds `null`, producing
+`created_at < NULL` which is always false and returns no results.
+
+Low practical risk — the UI always sets both date fields together — but could
+bite a future caller that sets only one. Fix: add an explicit guard in
+`buildWhere` and/or remove the non-null assertion. Documented in
+`query.test.ts`.
+
+---
+
+## LIKE search: unescaped wildcards
+
+`buildWhere` passes the raw user search string into a `LIKE` pattern without
+escaping `%` or `_`, so those characters act as SQL wildcards. Mostly harmless
+for a personal viewer; to fix, escape them before interpolation and add an
+`ESCAPE` clause. Documented in tests.
+
+---
+
+## FTS5 MATCH: raw user string
+
+`buildWhere` passes the user's search string directly to `clips_fts MATCH`,
+so FTS5 operators (`OR`, `AND`, `*`, `"phrase"`) are interpreted literally.
+This is occasionally useful but can also produce confusing results or errors
+for malformed queries. Fix: sanitize or quote the input before passing to
+MATCH. Documented in tests.
