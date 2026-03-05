@@ -37,7 +37,8 @@ const LS = {
 } as const;
 
 const SS = {
-  oauthState: 'tc_oauth_state',
+  oauthState:  'tc_oauth_state',
+  preAuthHash: 'tc_pre_auth_hash',
 } as const;
 
 // ── Public API ────────────────────────────────────────────────────────────
@@ -46,6 +47,14 @@ const SS = {
 export function initiateLogin(): void {
   const oauthState = randomBase64url(16);
   sessionStorage.setItem(SS.oauthState, oauthState);
+
+  // Preserve the current filter state so it can be restored after the redirect
+  // overwrites the URL hash with the OAuth response fragment.
+  if (window.location.hash) {
+    sessionStorage.setItem(SS.preAuthHash, window.location.hash);
+  } else {
+    sessionStorage.removeItem(SS.preAuthHash);
+  }
 
   const params = new URLSearchParams({
     client_id:     CLIENT_ID,
@@ -74,9 +83,11 @@ export async function handleOAuthCallback(): Promise<boolean> {
   const returnedState = hashParams.get('state');
   const expiresIn     = hashParams.get('expires_in');
 
-  // Strip the hash immediately so the token is not visible in the URL and
-  // the app's own hash-state parser (applyStateHash) sees a clean URL.
-  history.replaceState(null, '', window.location.pathname + window.location.search);
+  // Strip the token hash and restore any pre-login filter state so the app's
+  // hash-state parser (applyStateHash) picks up the user's previous filters.
+  const savedHash = sessionStorage.getItem(SS.preAuthHash) ?? '';
+  sessionStorage.removeItem(SS.preAuthHash);
+  history.replaceState(null, '', window.location.pathname + window.location.search + savedHash);
 
   const expectedState = sessionStorage.getItem(SS.oauthState);
   sessionStorage.removeItem(SS.oauthState);

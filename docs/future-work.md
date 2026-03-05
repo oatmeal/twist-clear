@@ -82,18 +82,6 @@ enable this protection.
 
 ---
 
-## Auth: preserve filter state across login redirect
-
-The implicit grant flow redirects the browser away to Twitch and back, which
-discards the app's URL hash state (e.g. `#game=foo&sort=views`). The hash is
-overwritten by Twitch's `#access_token=…` response.
-
-Fix: in `initiateLogin()`, save `window.location.hash` to `sessionStorage`
-before redirecting. In `handleOAuthCallback()`, after stripping the token hash,
-restore the saved value with `history.replaceState`.
-
----
-
 ## i18n: translate new auth/live-clips UI to Japanese
 
 The following strings added with the login feature are English-only and need
