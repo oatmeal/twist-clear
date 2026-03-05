@@ -40,10 +40,16 @@ export function buildWhere(opts: BuildWhereOpts): WhereClause {
     params[':game'] = opts.gameFilter;
   }
 
-  if (opts.calDateFrom !== null) {
+  if (opts.calDateFrom !== null && opts.calDateTo !== null) {
     parts.push('c.created_at >= :dateFrom AND c.created_at < :dateTo');
     params[':dateFrom'] = opts.calDateFrom;
-    params[':dateTo'] = opts.calDateTo!;
+    params[':dateTo'] = opts.calDateTo;
+  } else if (opts.calDateFrom !== null) {
+    parts.push('c.created_at >= :dateFrom');
+    params[':dateFrom'] = opts.calDateFrom;
+  } else if (opts.calDateTo !== null) {
+    parts.push('c.created_at < :dateTo');
+    params[':dateTo'] = opts.calDateTo;
   }
 
   return {

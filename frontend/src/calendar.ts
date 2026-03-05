@@ -73,23 +73,15 @@ export function syncDateInputs(): void {
   fromEl.value = fromVal;
   toEl.value   = toVal;
 
-  // Absolute lower bound: never before first clip
-  if (state.calMinDate) fromEl.setAttribute('min', state.calMinDate);
-  else                  fromEl.removeAttribute('min');
+  // Cross-constraint: from can't exceed to (but no absolute DB-content bound)
+  if (toVal) fromEl.setAttribute('max', toVal);
+  else       fromEl.removeAttribute('max');
+  fromEl.removeAttribute('min');
 
-  // Absolute upper bound: never after last clip; tightened by cross-constraint
-  const fromMax = toVal || state.calMaxDate;
-  if (fromMax) fromEl.setAttribute('max', fromMax);
-  else         fromEl.removeAttribute('max');
-
-  // Cross-constraint lower bound for to-input
-  const toMin = fromVal || state.calMinDate;
-  if (toMin) toEl.setAttribute('min', toMin);
-  else       toEl.removeAttribute('min');
-
-  // Absolute upper bound for to-input
-  if (state.calMaxDate) toEl.setAttribute('max', state.calMaxDate);
-  else                  toEl.removeAttribute('max');
+  // Cross-constraint: to can't be before from (but no absolute DB-content bound)
+  if (fromVal) toEl.setAttribute('min', fromVal);
+  else         toEl.removeAttribute('min');
+  toEl.removeAttribute('max');
 }
 
 // ── DB queries ────────────────────────────────────────────────────────────
@@ -658,9 +650,7 @@ export async function initCalendar(onRender: () => Promise<void>): Promise<void>
     state.setCalDay(null);
     state.setCalWeek(null);
     const toVal = (document.getElementById('date-to-input') as HTMLInputElement).value;
-    state.setCalDateTo(
-      toVal ? addDays(toVal, 1) : (state.calDateFrom ? addDays(state.calDateFrom, 1) : null),
-    );
+    state.setCalDateTo(toVal ? addDays(toVal, 1) : null);
     state.setCurrentPage(1);
     callRender();
   });

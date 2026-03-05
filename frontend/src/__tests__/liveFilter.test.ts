@@ -68,16 +68,27 @@ describe('filterLiveClips', () => {
     })).toHaveLength(1);
   });
 
-  it('skips the cutoff guard when dbCutoffDate is null', () => {
-    const clips = [makeClip()];
-    // Even with a very old calDateTo, no guard fires when dbCutoffDate is null.
+  it('skips the cutoff guard when dbCutoffDate is null, but upper-bound filter still applies', () => {
+    const clips = [makeClip()]; // created_at: '2024-06-15T12:00:00Z'
+    // The cutoff guard requires dbCutoffDate, so it does not fire here.
+    // However, the upper-bound date filter still excludes clips after calDateTo.
     const result = filterLiveClips({
       ...base,
       clips,
       dbCutoffDate: null,
       calDateTo:    '2020-01-01T00:00:00Z',
     });
-    // calDateFrom is null so no further filtering; clip passes through.
+    expect(result).toEqual([]);
+  });
+
+  it('skips the cutoff guard when dbCutoffDate is null and clip is within calDateTo', () => {
+    const clips = [makeClip()]; // created_at: '2024-06-15T12:00:00Z'
+    const result = filterLiveClips({
+      ...base,
+      clips,
+      dbCutoffDate: null,
+      calDateTo:    '2024-07-01T00:00:00Z',
+    });
     expect(result).toHaveLength(1);
   });
 
@@ -99,6 +110,33 @@ describe('filterLiveClips', () => {
   it('includes clips exactly at calDateFrom (>= boundary)', () => {
     const clip = makeClip({ created_at: '2024-06-10T00:00:00Z' });
     expect(filterLiveClips({ ...base, clips: [clip], calDateFrom: '2024-06-10T00:00:00Z' })).toHaveLength(1);
+  });
+
+  // ── calDateTo upper bound ─────────────────────────────────────────────────
+
+  it('excludes clips at or after calDateTo (exclusive upper bound)', () => {
+    const older  = makeClip({ id: 'old', created_at: '2024-06-05T00:00:00Z' });
+    const newer  = makeClip({ id: 'new', created_at: '2024-06-20T00:00:00Z' });
+    // calDateTo acts as exclusive upper bound; '2024-06-20' is not before it
+    const result = filterLiveClips({
+      ...base,
+      clips: [older, newer],
+      calDateTo: '2024-06-20T00:00:00Z',
+      dbCutoffDate: null,
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe('old');
+  });
+
+  it('includes clips strictly before calDateTo', () => {
+    const clip = makeClip({ created_at: '2024-06-19T23:59:59Z' });
+    const result = filterLiveClips({
+      ...base,
+      clips: [clip],
+      calDateTo: '2024-06-20T00:00:00Z',
+      dbCutoffDate: null,
+    });
+    expect(result).toHaveLength(1);
   });
 
   // ── gameFilter ────────────────────────────────────────────────────────────
@@ -137,6 +175,21 @@ describe('filterLiveClips', () => {
   });
 
   // ── Combined filters ──────────────────────────────────────────────────────
+
+  it('both calDateFrom and calDateTo applied together as a closed range', () => {
+    const before  = makeClip({ id: 'before',  created_at: '2024-06-09T23:59:59Z' });
+    const inside  = makeClip({ id: 'inside',  created_at: '2024-06-10T00:00:00Z' });
+    const inside2 = makeClip({ id: 'inside2', created_at: '2024-06-19T23:59:59Z' });
+    const after   = makeClip({ id: 'after',   created_at: '2024-06-20T00:00:00Z' });
+    const result = filterLiveClips({
+      ...base,
+      clips:       [before, inside, inside2, after],
+      calDateFrom: '2024-06-10T00:00:00Z',
+      calDateTo:   '2024-06-20T00:00:00Z',
+      dbCutoffDate: null,
+    });
+    expect(result.map(c => c.id)).toEqual(['inside', 'inside2']);
+  });
 
   it('applies all filters together', () => {
     const match     = makeClip({ id: 'match',     title: 'Great Pog Clip', game_id: 'game1', created_at: '2024-06-15T00:00:00Z' });
@@ -188,7 +241,8 @@ describe('filterLiveClips', () => {
 
   it('cutoff guard does not fire when date-only calDateTo is the day after ISO dbCutoffDate', () => {
     // '2024-06-02' > '2024-06-01T15:30:00Z' (day digit differs), guard does not fire.
-    const clips = [makeClip()];
+    // Use a clip created between dbCutoffDate and calDateTo so it passes both guards.
+    const clips = [makeClip({ created_at: '2024-06-01T20:00:00Z' })];
     expect(filterLiveClips({
       ...base,
       clips,

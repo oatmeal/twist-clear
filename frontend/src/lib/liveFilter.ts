@@ -30,6 +30,12 @@ export function filterLiveClips(opts: LiveFilterOpts): LiveClip[] {
     clips = clips.filter(c => c.created_at >= from);
   }
 
+  // Apply upper date bound.
+  if (opts.calDateTo !== null) {
+    const to = opts.calDateTo;
+    clips = clips.filter(c => c.created_at < to);
+  }
+
   // Apply game filter.
   if (opts.gameFilter) {
     const g = opts.gameFilter;

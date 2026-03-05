@@ -89,15 +89,20 @@ describe('buildWhere', () => {
 });
 
 describe('buildWhere filter interactions', () => {
-  it('calDateFrom with null calDateTo: :dateTo is bound to null at runtime', () => {
+  it('calDateFrom with null calDateTo: emits only the lower-bound clause', () => {
     const { where, params } = buildWhere({ ...base, calDateFrom: '2024-01-01', calDateTo: null });
-    // The date clause is still emitted. The non-null assertion (!) in buildWhere
-    // bypasses TypeScript's type check, so :dateTo receives null at runtime.
-    // SQLite evaluates `created_at < NULL` as NULL — no rows will match.
-    expect(where).toContain(':dateTo');
+    expect(where).toContain(':dateFrom');
+    expect(where).not.toContain(':dateTo');
     expect(params[':dateFrom']).toBe('2024-01-01');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    expect((params as any)[':dateTo']).toBeNull();
+    expect(params[':dateTo']).toBeUndefined();
+  });
+
+  it('null calDateFrom with calDateTo set: emits only the upper-bound clause', () => {
+    const { where, params } = buildWhere({ ...base, calDateFrom: null, calDateTo: '2024-02-01' });
+    expect(where).toContain(':dateTo');
+    expect(where).not.toContain(':dateFrom');
+    expect(params[':dateTo']).toBe('2024-02-01');
+    expect(params[':dateFrom']).toBeUndefined();
   });
 
   it('LIKE search: % in query is not escaped and acts as a SQL wildcard', () => {
