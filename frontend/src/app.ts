@@ -19,6 +19,10 @@ import * as twitch from './twitch';
 import type { LiveClip } from './twitch';
 import { filterLiveClips } from './lib/liveFilter';
 import { ensureRfc3339 } from './lib/dateUtils';
+import {
+  rankLiveClips, computeViewCountPage, interleavePage,
+} from './lib/liveRank';
+import type { ViewCountSortKey } from './lib/liveRank';
 
 // ── URL hash state ────────────────────────────────────────────────────────
 
@@ -389,13 +393,16 @@ export async function render(): Promise<void> {
 
   try {
     // Decide whether to merge live clips into the main grid.
-    // Live clips are always newer than any archived clip, so they naturally sit
-    // at the head (date_desc) or tail (date_asc) of the sorted sequence.
-    // For view-count sorts the separate live-section panel is shown instead.
+    // date_desc/date_asc: live clips are always newest, so they sit at the head
+    //   or tail of the sequence — simple offset math.
+    // view_count_desc/asc: per-clip COUNT queries determine each live clip's rank
+    //   in the sorted DB sequence; see rankLiveClips() in lib/liveRank.ts.
     const filteredLive = _filteredLiveClips();
-    const mergingDesc = state.sortBy === 'date_desc' && filteredLive.length > 0;
-    const mergingAsc  = state.sortBy === 'date_asc'  && filteredLive.length > 0;
-    const merging = mergingDesc || mergingAsc;
+    const mergingDesc       = state.sortBy === 'date_desc'       && filteredLive.length > 0;
+    const mergingAsc        = state.sortBy === 'date_asc'        && filteredLive.length > 0;
+    const mergingViewCount  = (state.sortBy === 'view_count_desc' || state.sortBy === 'view_count_asc')
+                              && filteredLive.length > 0;
+    const merging = mergingDesc || mergingAsc || mergingViewCount;
 
     if (merging) {
       // Hide the collapsible panel — live clips appear inline in the main grid.
@@ -449,23 +456,33 @@ export async function render(): Promise<void> {
     }
     if (ctrl.signal.aborted) return;
 
+    // For view_count sorts, compute each live clip's rank in the DB sequence.
+    // One COUNT(*) per unique (view_count, created_at) pair; uses the composite
+    // clips_view_count index so each query is O(log N).
+    const rankedLive = mergingViewCount
+      ? await rankLiveClips(filteredLive, state.sortBy as ViewCountSortKey, where, params, q)
+      : [];
+    if (ctrl.signal.aborted) return;
+
     // ISO 8601 strings are lexicographically ordered so string comparison is correct.
     // date_desc: newest-first among live clips; date_asc: oldest-first.
-    const sortedLive = merging
+    const sortedLive = (mergingDesc || mergingAsc)
       ? [...filteredLive].sort((a, b) => {
           const cmp = a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0;
           return mergingDesc ? -cmp : cmp;
         })
       : [];
-    const liveCount = sortedLive.length;
+    const liveCount = mergingViewCount ? rankedLive.length : sortedLive.length;
 
     state.setTotalClips(merging ? liveCount + dbCount : dbCount);
 
     // Compute how many live/DB clips fall on the current page.
-    //   date_desc: live clips occupy positions 0..(liveCount-1), DB clips follow.
-    //   date_asc:  DB clips occupy positions 0..(dbCount-1),  live clips follow.
+    //   date_desc:       live clips occupy positions 0..(liveCount-1), DB follows.
+    //   date_asc:        DB clips occupy positions 0..(dbCount-1), live follows.
+    //   view_count_desc/asc: live clips are scattered; computeViewCountPage() handles it.
     const pageStart = (state.currentPage - 1) * state.PAGE_SIZE;
     let liveOnPage: number, dbOnPage: number, dbOffset: number, liveStart: number;
+    let vcPage: ReturnType<typeof computeViewCountPage> | null = null;
     if (mergingDesc) {
       liveOnPage = Math.max(0, Math.min(liveCount - pageStart, state.PAGE_SIZE));
       dbOnPage   = state.PAGE_SIZE - liveOnPage;
@@ -476,6 +493,12 @@ export async function render(): Promise<void> {
       liveOnPage = state.PAGE_SIZE - dbOnPage;
       dbOffset   = pageStart;
       liveStart  = Math.max(0, pageStart - dbCount);
+    } else if (mergingViewCount) {
+      vcPage     = computeViewCountPage(rankedLive, pageStart, state.PAGE_SIZE);
+      liveOnPage = vcPage.liveOnPage.length;
+      dbOnPage   = vcPage.dbOnPage;
+      dbOffset   = vcPage.dbOffset;
+      liveStart  = 0; // unused for view_count
     } else {
       liveOnPage = 0;
       dbOnPage   = state.PAGE_SIZE;
@@ -511,28 +534,49 @@ export async function render(): Promise<void> {
     }
 
     const liveSlice = sortedLive.slice(liveStart, liveStart + liveOnPage);
-    const hasClips  = liveSlice.length > 0 || dbClips.length > 0;
+    const hasClips  = liveSlice.length > 0 || dbClips.length > 0 ||
+                      (vcPage !== null && vcPage.liveOnPage.length > 0);
 
     if (!hasClips) {
       grid.innerHTML = '';
       empty.style.display = 'block';
     } else {
       empty.style.display = 'none';
-      const liveCards = liveSlice.map(c => clipCardHtml(c, ' live-clip'));
-      const dbCards   = dbClips.map(c => clipCardHtml({
-        url:           String(c['url']           ?? ''),
-        thumbnail_url: String(c['thumbnail_url'] ?? ''),
-        title:         String(c['title']         ?? ''),
-        duration:      Number(c['duration']      ?? 0),
-        view_count:    Number(c['view_count']    ?? 0),
-        game_name:     String(c['game_name']     ?? ''),
-        creator_name:  String(c['creator_name']  ?? ''),
-        created_at:    String(c['created_at']    ?? ''),
-      }));
-      // date_desc: live (newest) first; date_asc: DB (oldest) first, live appended.
-      grid.innerHTML = mergingAsc
-        ? [...dbCards, ...liveCards].join('')
-        : [...liveCards, ...dbCards].join('');
+
+      if (mergingViewCount && vcPage !== null) {
+        // Interleave live clips at their exact ranked positions within the page.
+        const items = interleavePage(dbClips, vcPage.liveOnPage, pageStart, state.PAGE_SIZE);
+        grid.innerHTML = items.map(item =>
+          item.kind === 'live'
+            ? clipCardHtml(item.clip, ' live-clip')
+            : clipCardHtml({
+                url:           String(item.row['url']           ?? ''),
+                thumbnail_url: String(item.row['thumbnail_url'] ?? ''),
+                title:         String(item.row['title']         ?? ''),
+                duration:      Number(item.row['duration']      ?? 0),
+                view_count:    Number(item.row['view_count']    ?? 0),
+                game_name:     String(item.row['game_name']     ?? ''),
+                creator_name:  String(item.row['creator_name']  ?? ''),
+                created_at:    String(item.row['created_at']    ?? ''),
+              }),
+        ).join('');
+      } else {
+        const liveCards = liveSlice.map(c => clipCardHtml(c, ' live-clip'));
+        const dbCards   = dbClips.map(c => clipCardHtml({
+          url:           String(c['url']           ?? ''),
+          thumbnail_url: String(c['thumbnail_url'] ?? ''),
+          title:         String(c['title']         ?? ''),
+          duration:      Number(c['duration']      ?? 0),
+          view_count:    Number(c['view_count']    ?? 0),
+          game_name:     String(c['game_name']     ?? ''),
+          creator_name:  String(c['creator_name']  ?? ''),
+          created_at:    String(c['created_at']    ?? ''),
+        }));
+        // date_desc: live (newest) first; date_asc: DB (oldest) first, live appended.
+        grid.innerHTML = mergingAsc
+          ? [...dbCards, ...liveCards].join('')
+          : [...liveCards, ...dbCards].join('');
+      }
       attachImgErrorHandlers(grid);
     }
 

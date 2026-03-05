@@ -4,35 +4,15 @@ Deferred items with rationale. See the relevant source files for implementation 
 
 ---
 
-## Live clips: merge into view-count sort orders
+~~Live clips: merge into view-count sort orders~~ — **Implemented.**
 
-Live clips are merged into the main grid for both `date_desc` and `date_asc`
-(see `render()` in `app.ts`). For the two view-count sort orders
-(**Most Viewed**, **Least Viewed**) they fall back to the separate collapsible
-panel.
-
-For `date_asc` the merge is symmetric with `date_desc`: live clips are always
-newer than any archived clip, so they sit at the tail of the ascending sequence
-and the offset math is equally simple.
-
-True interleaving for view-count sorts requires ranking live clips against
-archive clips in a single sorted sequence. Because live clips are in memory
-and archive clips are in the DB, a correct merge would require one of:
-
-- **Load all DB clips into memory** and sort the combined set client-side.
-  Defeats the sql.js-httpvfs range-request optimisation for large archives.
-- **Push live clips into a temporary in-memory SQLite table** via the worker,
-  then join against archive clips in SQL. The sql.js-httpvfs worker API does
-  not currently expose DDL/write commands on the HTTP-backed database, so this
-  would require a patched or separate in-memory db instance.
-- **Server-side merge** — only applicable if the site is ever served by a
-  backend rather than GitHub Pages.
-
-If the number of live clips is small (typical between scraper runs), a
-simpler approach may be acceptable: fetch all live clips client-side (already
-in memory), fetch all DB clips up to some cap (e.g. top N by view count),
-merge and re-sort. This is correct only when live clips cannot outrank DB
-clips beyond the cap — i.e. when the cap is large enough.
+Live clips are now merged into the main grid for all four sort orders. For
+`view_count_desc`/`view_count_asc`, `rankLiveClips()` in `lib/liveRank.ts`
+runs one `COUNT(*)` per unique `(view_count, created_at)` pair to find each
+live clip's rank in the DB sequence. The composite
+`clips_view_count(view_count DESC, created_at DESC)` index makes each COUNT
+an O(log N) range scan. Multiple live clips sharing the same sort key
+(same view count and timestamp) share a single query.
 
 ---
 
