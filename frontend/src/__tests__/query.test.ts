@@ -7,6 +7,7 @@ const base = {
   calDateFrom: null,
   calDateTo: null,
   useFts: false,
+  tzOffset: 0,
 };
 
 describe('buildWhere', () => {
@@ -55,7 +56,7 @@ describe('buildWhere', () => {
     expect(params[':game']).toBe('123');
   });
 
-  it('adds date range clauses', () => {
+  it('adds date range clauses (UTC bounds at tzOffset 0)', () => {
     const { where, params } = buildWhere({
       ...base,
       calDateFrom: '2024-01-01',
@@ -63,8 +64,9 @@ describe('buildWhere', () => {
     });
     expect(where).toContain(':dateFrom');
     expect(where).toContain(':dateTo');
-    expect(params[':dateFrom']).toBe('2024-01-01');
-    expect(params[':dateTo']).toBe('2024-02-01');
+    // localDateToUtcBound('2024-01-01', 0) = midnight UTC
+    expect(params[':dateFrom']).toBe('2024-01-01T00:00:00.000Z');
+    expect(params[':dateTo']).toBe('2024-02-01T00:00:00.000Z');
   });
 
   it('combines search and game filter with AND', () => {
@@ -81,6 +83,7 @@ describe('buildWhere', () => {
       calDateFrom: '2024-01-01',
       calDateTo: '2024-02-01',
       useFts: false,
+      tzOffset: 0,
     });
     // Should have WHERE and two AND connectors
     const andCount = (where.match(/\bAND\b/g) ?? []).length;
@@ -93,7 +96,7 @@ describe('buildWhere filter interactions', () => {
     const { where, params } = buildWhere({ ...base, calDateFrom: '2024-01-01', calDateTo: null });
     expect(where).toContain(':dateFrom');
     expect(where).not.toContain(':dateTo');
-    expect(params[':dateFrom']).toBe('2024-01-01');
+    expect(params[':dateFrom']).toBe('2024-01-01T00:00:00.000Z');
     expect(params[':dateTo']).toBeUndefined();
   });
 
@@ -101,7 +104,7 @@ describe('buildWhere filter interactions', () => {
     const { where, params } = buildWhere({ ...base, calDateFrom: null, calDateTo: '2024-02-01' });
     expect(where).toContain(':dateTo');
     expect(where).not.toContain(':dateFrom');
-    expect(params[':dateTo']).toBe('2024-02-01');
+    expect(params[':dateTo']).toBe('2024-02-01T00:00:00.000Z');
     expect(params[':dateFrom']).toBeUndefined();
   });
 
@@ -134,6 +137,7 @@ describe('buildWhere filter interactions', () => {
       calDateFrom: '2024-01-01',
       calDateTo: '2024-02-01',
       useFts: true,
+      tzOffset: 0,
     });
     expect(where).toContain('clips_fts');
     expect(where).toContain('game_id');
@@ -144,19 +148,31 @@ describe('buildWhere filter interactions', () => {
     expect(andCount).toBeGreaterThanOrEqual(3);
     expect(params[':search']).toBe('pog');
     expect(params[':game']).toBe('123');
-    expect(params[':dateFrom']).toBe('2024-01-01');
-    expect(params[':dateTo']).toBe('2024-02-01');
+    expect(params[':dateFrom']).toBe('2024-01-01T00:00:00.000Z');
+    expect(params[':dateTo']).toBe('2024-02-01T00:00:00.000Z');
   });
 
-  it('date range where from equals to: params are set as provided', () => {
+  it('date range where from equals to: params are UTC ISO strings', () => {
     // At SQL level `created_at >= X AND created_at < X` matches nothing;
-    // buildWhere passes the values through unchanged.
+    // buildWhere converts both to UTC ISO bounds.
     const { params } = buildWhere({
       ...base,
       calDateFrom: '2024-06-01',
       calDateTo: '2024-06-01',
     });
-    expect(params[':dateFrom']).toBe('2024-06-01');
-    expect(params[':dateTo']).toBe('2024-06-01');
+    expect(params[':dateFrom']).toBe('2024-06-01T00:00:00.000Z');
+    expect(params[':dateTo']).toBe('2024-06-01T00:00:00.000Z');
+  });
+
+  it('non-zero tzOffset shifts UTC bounds correctly', () => {
+    // UTC-5 (-300 minutes): local midnight on Jun 15 = 2024-06-15T05:00:00Z in UTC
+    const { params } = buildWhere({
+      ...base,
+      calDateFrom: '2024-06-15',
+      calDateTo: '2024-06-16',
+      tzOffset: -300,
+    });
+    expect(params[':dateFrom']).toBe('2024-06-15T05:00:00.000Z');
+    expect(params[':dateTo']).toBe('2024-06-16T05:00:00.000Z');
   });
 });

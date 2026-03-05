@@ -5,11 +5,21 @@ import {
   firstDayOfMonth,
   localDateStr,
   addDays,
-  todayStr,
   weekStart,
   isoWeekNumber,
+  todayStrInOffset,
+  tzToSqlModifier,
+  localDateToUtcBound,
+  utcTimestampToLocalDate,
 } from './lib/dateUtils';
 import { t } from './lib/i18n';
+
+// ── Raw timestamp storage ─────────────────────────────────────────────────
+// Stored at init time so that recomputeDateBounds() can re-derive calMinDate /
+// calMaxDate for the selected timezone without another round-trip to the DB.
+
+let _rawMinTimestamp: string | null = null;
+let _rawMaxTimestamp: string | null = null;
 
 // ── Render callback ───────────────────────────────────────────────────────
 // Injected by app.ts via initCalendar() to avoid a circular import.
@@ -87,36 +97,45 @@ export function syncDateInputs(): void {
 // ── DB queries ────────────────────────────────────────────────────────────
 
 async function queryYearDays(year: number): Promise<{ day: string; cnt: number }[]> {
+  const mod  = tzToSqlModifier(state.tzOffset);
+  const from = localDateToUtcBound(`${year}-01-01`, state.tzOffset);
+  const to   = localDateToUtcBound(`${year + 1}-01-01`, state.tzOffset);
   return (await q(
-    `SELECT strftime('%Y-%m-%d', created_at) AS day, COUNT(*) AS cnt
+    `SELECT strftime('%Y-%m-%d', created_at, ?) AS day, COUNT(*) AS cnt
      FROM clips
      WHERE created_at >= ? AND created_at < ?
      GROUP BY day`,
-    [`${year}-01-01`, `${year + 1}-01-01`],
+    [mod, from, to],
   )) as { day: string; cnt: number }[];
 }
 
 async function queryMonthDays(year: number, month: number): Promise<{ day: string; cnt: number }[]> {
-  const from = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-  const to   = month === 11
-    ? `${year + 1}-01-01`
-    : `${year}-${String(month + 2).padStart(2, '0')}-01`;
+  const pad  = (n: number) => String(n).padStart(2, '0');
+  const from = localDateToUtcBound(`${year}-${pad(month + 1)}-01`, state.tzOffset);
+  const to   = localDateToUtcBound(
+    month === 11 ? `${year + 1}-01-01` : `${year}-${pad(month + 2)}-01`,
+    state.tzOffset,
+  );
+  const mod  = tzToSqlModifier(state.tzOffset);
   return (await q(
-    `SELECT strftime('%Y-%m-%d', created_at) AS day, COUNT(*) AS cnt
+    `SELECT strftime('%Y-%m-%d', created_at, ?) AS day, COUNT(*) AS cnt
      FROM clips
      WHERE created_at >= ? AND created_at < ?
      GROUP BY day`,
-    [from, to],
+    [mod, from, to],
   )) as { day: string; cnt: number }[];
 }
 
 async function queryYearMonthTotals(year: number): Promise<{ month: string; cnt: number }[]> {
+  const mod  = tzToSqlModifier(state.tzOffset);
+  const from = localDateToUtcBound(`${year}-01-01`, state.tzOffset);
+  const to   = localDateToUtcBound(`${year + 1}-01-01`, state.tzOffset);
   return (await q(
-    `SELECT strftime('%Y-%m', created_at) AS month, COUNT(*) AS cnt
+    `SELECT strftime('%Y-%m', created_at, ?) AS month, COUNT(*) AS cnt
      FROM clips
      WHERE created_at >= ? AND created_at < ?
      GROUP BY month`,
-    [`${year}-01-01`, `${year + 1}-01-01`],
+    [mod, from, to],
   )) as { month: string; cnt: number }[];
 }
 
@@ -307,7 +326,7 @@ async function renderMonthGrid(): Promise<void> {
 
   const totalDays  = daysInMonth(state.calYear, state.calMonth!);
   const firstDow   = firstDayOfMonth(state.calYear, state.calMonth!);
-  const today      = todayStr();
+  const today      = todayStrInOffset(state.tzOffset);
   const totalSlots = Math.ceil((firstDow + totalDays) / 7) * 7;
 
   const container = document.getElementById('cal-month-grid')!;
@@ -575,40 +594,87 @@ export function rebuildMonthSelect(): void {
   mSel.value = currentVal;
 }
 
+/**
+ * Recomputes calMinDate / calMaxDate from the stored raw timestamps using the
+ * current timezone offset, then rebuilds the year-select option list.
+ * Called on init and whenever the user changes timezone.
+ */
+export function recomputeDateBounds(tzOff: number): void {
+  if (!_rawMinTimestamp || !_rawMaxTimestamp) return;
+
+  const minDate = utcTimestampToLocalDate(_rawMinTimestamp, tzOff);
+  const maxDate = utcTimestampToLocalDate(_rawMaxTimestamp, tzOff);
+  state.setCalMinDate(minDate);
+  state.setCalMaxDate(maxDate);
+
+  const minY = parseInt(minDate.slice(0, 4), 10);
+  const maxY = parseInt(maxDate.slice(0, 4), 10);
+
+  // Clamp calYear to the new valid range.
+  if (state.calYear > maxY) state.setCalYear(maxY);
+  else if (state.calYear < minY) state.setCalYear(minY);
+
+  // Rebuild the year select options.
+  const ySel = document.getElementById('cal-year-select') as HTMLSelectElement | null;
+  if (ySel) {
+    ySel.innerHTML = '';
+    for (let y = maxY; y >= minY; y--) {
+      const opt = document.createElement('option');
+      opt.value = String(y);
+      opt.textContent = String(y);
+      ySel.appendChild(opt);
+    }
+    ySel.value = String(state.calYear);
+  }
+}
+
+/** Called by app.ts when the user changes the timezone setting. */
+export function onTzChange(): void {
+  recomputeDateBounds(state.tzOffset);
+  void renderCalendar();
+  callRender();
+}
+
 export async function initCalendar(onRender: () => Promise<void>): Promise<void> {
   _onRender = onRender;
 
-  // When the prepared DB is present, clips_meta holds precomputed min/max
-  // dates as a single-row lookup — avoiding a full table scan that would
-  // trigger sql.js-httpvfs's exponential read-ahead (O(n) → O(1) page reads).
+  // Fetch raw min/max timestamps so we can derive local calendar boundaries
+  // for any timezone via recomputeDateBounds().
+  //
+  // When the prepared DB is present, clips_meta holds precomputed values as a
+  // single-row lookup — avoiding a full table scan that would trigger
+  // sql.js-httpvfs's exponential read-ahead (O(n) → O(1) page reads).
   // Falls back to the live aggregate for the raw dev-symlink database.
-  const rangeRow = state.useMeta
-    ? await q('SELECT min_date AS minD, max_date AS maxD FROM clips_meta')
-    : await q(`
-        SELECT substr(MIN(created_at), 1, 10) AS minD,
-               substr(MAX(created_at), 1, 10) AS maxD
-        FROM clips
-      `);
-  if (rangeRow.length && rangeRow[0]!['minD']) {
-    state.setCalMinDate(rangeRow[0]!['minD'] as string);
-    state.setCalMaxDate(rangeRow[0]!['maxD'] as string);
+  if (state.useMeta) {
+    try {
+      // Prefer the new min_timestamp / max_timestamp columns (present after
+      // running the updated prepare_web_db.py).
+      const row = await q('SELECT min_timestamp AS minTs, max_timestamp AS maxTs FROM clips_meta');
+      if (row.length && row[0]!['minTs']) {
+        _rawMinTimestamp = row[0]!['minTs'] as string;
+        _rawMaxTimestamp = row[0]!['maxTs'] as string;
+      }
+    } catch {
+      // Old prepared DB without min_timestamp — fall back to date columns.
+      const row = await q('SELECT min_date AS minD, max_date AS maxD FROM clips_meta');
+      if (row.length && row[0]!['minD']) {
+        _rawMinTimestamp = (row[0]!['minD'] as string) + 'T00:00:00Z';
+        _rawMaxTimestamp = (row[0]!['maxD'] as string) + 'T00:00:00Z';
+      }
+    }
+  } else {
+    const row = await q('SELECT MIN(created_at) AS minTs, MAX(created_at) AS maxTs FROM clips');
+    if (row.length && row[0]!['minTs']) {
+      _rawMinTimestamp = row[0]!['minTs'] as string;
+      _rawMaxTimestamp = row[0]!['maxTs'] as string;
+    }
   }
 
-  const minY = state.calMinDate ? parseInt(state.calMinDate.slice(0, 4), 10) : new Date().getFullYear();
-  const maxY = state.calMaxDate ? parseInt(state.calMaxDate.slice(0, 4), 10) : new Date().getFullYear();
-  state.setCalYear(maxY);
-
-  const ySel = document.getElementById('cal-year-select') as HTMLSelectElement;
-  for (let y = maxY; y >= minY; y--) {
-    const opt = document.createElement('option');
-    opt.value = String(y);
-    opt.textContent = String(y);
-    ySel.appendChild(opt);
-  }
-  ySel.value = String(state.calYear);
+  recomputeDateBounds(state.tzOffset);
 
   syncDateInputs();
 
+  const ySel = document.getElementById('cal-year-select') as HTMLSelectElement;
   ySel.addEventListener('change', () => {
     state.setCalYear(parseInt(ySel.value, 10));
     state.setCalMonth(null);

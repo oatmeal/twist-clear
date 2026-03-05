@@ -1,5 +1,6 @@
 import type { SortKey } from './lib/query';
 import type { LiveClip } from './twitch';
+import { browserTzOffset } from './lib/dateUtils';
 
 export const PAGE_SIZE = 24;
 
@@ -22,6 +23,14 @@ export let calDateFrom: string | null = null;
 export let calDateTo: string | null = null;
 export let calMinDate: string | null = null;
 export let calMaxDate: string | null = null;
+
+// ── Timezone ───────────────────────────────────────────────────────────────
+// UTC offset in minutes, east = positive (e.g. UTC-5 → -300, UTC+5:30 → +330).
+// Defaults to the browser's own offset; overridable via the settings gear icon
+// and persisted in localStorage ('tc_tz_offset') and the URL hash ('tz').
+
+export let tzOffset: number = browserTzOffset();
+export function setTzOffset(v: number): void { tzOffset = v; }
 
 // ── DB capability flags ────────────────────────────────────────────────────
 

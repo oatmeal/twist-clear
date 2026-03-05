@@ -25,6 +25,7 @@ const base = {
   calDateFrom:  null,
   gameFilter:   '',
   searchQuery:  '',
+  tzOffset:     0,
 };
 
 describe('filterLiveClips', () => {
@@ -40,13 +41,16 @@ describe('filterLiveClips', () => {
   });
 
   // ── DB cutoff guard ───────────────────────────────────────────────────────
+  // calDateTo is a YYYY-MM-DD local date; the guard converts it to UTC midnight
+  // before comparing with the ISO dbCutoffDate.
 
-  it('returns [] when calDateTo equals dbCutoffDate', () => {
+  it('returns [] when calDateTo (local date) converts to dbCutoffDate in UTC', () => {
+    // localDateToUtcBound('2024-06-01', 0) = '2024-06-01T00:00:00.000Z' <= '2024-06-01T00:00:00Z' → guard fires
     const clips = [makeClip()];
     expect(filterLiveClips({
       ...base,
       clips,
-      calDateTo: '2024-06-01T00:00:00Z', // equal → still in archived range
+      calDateTo: '2024-06-01',
     })).toEqual([]);
   });
 
@@ -55,7 +59,7 @@ describe('filterLiveClips', () => {
     expect(filterLiveClips({
       ...base,
       clips,
-      calDateTo: '2024-05-01T00:00:00Z',
+      calDateTo: '2024-05-01',
     })).toEqual([]);
   });
 
@@ -64,7 +68,7 @@ describe('filterLiveClips', () => {
     expect(filterLiveClips({
       ...base,
       clips,
-      calDateTo: '2024-07-01T00:00:00Z',
+      calDateTo: '2024-07-01',
     })).toHaveLength(1);
   });
 
@@ -76,7 +80,7 @@ describe('filterLiveClips', () => {
       ...base,
       clips,
       dbCutoffDate: null,
-      calDateTo:    '2020-01-01T00:00:00Z',
+      calDateTo:    '2020-01-01',
     });
     expect(result).toEqual([]);
   });
@@ -87,7 +91,7 @@ describe('filterLiveClips', () => {
       ...base,
       clips,
       dbCutoffDate: null,
-      calDateTo:    '2024-07-01T00:00:00Z',
+      calDateTo:    '2024-07-01',
     });
     expect(result).toHaveLength(1);
   });
@@ -102,26 +106,28 @@ describe('filterLiveClips', () => {
   it('excludes clips older than calDateFrom', () => {
     const older  = makeClip({ id: 'old', created_at: '2024-06-05T00:00:00Z' });
     const newer  = makeClip({ id: 'new', created_at: '2024-06-10T00:00:00Z' });
-    const result = filterLiveClips({ ...base, clips: [older, newer], calDateFrom: '2024-06-10T00:00:00Z' });
+    const result = filterLiveClips({ ...base, clips: [older, newer], calDateFrom: '2024-06-10' });
     expect(result).toHaveLength(1);
     expect(result[0]!.id).toBe('new');
   });
 
-  it('includes clips exactly at calDateFrom (>= boundary)', () => {
+  it('includes clips exactly at local midnight of calDateFrom (>= boundary)', () => {
+    // localDateToUtcBound('2024-06-10', 0) = '2024-06-10T00:00:00.000Z'
+    // '2024-06-10T00:00:00Z' > '2024-06-10T00:00:00.000Z' (Z > . at index 19) → included
     const clip = makeClip({ created_at: '2024-06-10T00:00:00Z' });
-    expect(filterLiveClips({ ...base, clips: [clip], calDateFrom: '2024-06-10T00:00:00Z' })).toHaveLength(1);
+    expect(filterLiveClips({ ...base, clips: [clip], calDateFrom: '2024-06-10' })).toHaveLength(1);
   });
 
   // ── calDateTo upper bound ─────────────────────────────────────────────────
 
-  it('excludes clips at or after calDateTo (exclusive upper bound)', () => {
+  it('excludes clips at local midnight of calDateTo (exclusive upper bound)', () => {
     const older  = makeClip({ id: 'old', created_at: '2024-06-05T00:00:00Z' });
     const newer  = makeClip({ id: 'new', created_at: '2024-06-20T00:00:00Z' });
-    // calDateTo acts as exclusive upper bound; '2024-06-20' is not before it
+    // calDateToUtc = '2024-06-20T00:00:00.000Z'; '2024-06-20T00:00:00Z' > it (Z > .) → excluded
     const result = filterLiveClips({
       ...base,
       clips: [older, newer],
-      calDateTo: '2024-06-20T00:00:00Z',
+      calDateTo: '2024-06-20',
       dbCutoffDate: null,
     });
     expect(result).toHaveLength(1);
@@ -133,7 +139,7 @@ describe('filterLiveClips', () => {
     const result = filterLiveClips({
       ...base,
       clips: [clip],
-      calDateTo: '2024-06-20T00:00:00Z',
+      calDateTo: '2024-06-20',
       dbCutoffDate: null,
     });
     expect(result).toHaveLength(1);
@@ -183,9 +189,9 @@ describe('filterLiveClips', () => {
     const after   = makeClip({ id: 'after',   created_at: '2024-06-20T00:00:00Z' });
     const result = filterLiveClips({
       ...base,
-      clips:       [before, inside, inside2, after],
-      calDateFrom: '2024-06-10T00:00:00Z',
-      calDateTo:   '2024-06-20T00:00:00Z',
+      clips:        [before, inside, inside2, after],
+      calDateFrom:  '2024-06-10',
+      calDateTo:    '2024-06-20',
       dbCutoffDate: null,
     });
     expect(result.map(c => c.id)).toEqual(['inside', 'inside2']);
@@ -202,7 +208,7 @@ describe('filterLiveClips', () => {
       clips:       [match, wrongGame, wrongTitle, tooOld],
       gameFilter:  'game1',
       searchQuery: 'pog',
-      calDateFrom: '2024-06-10T00:00:00Z',
+      calDateFrom: '2024-06-10',
     });
 
     expect(result).toHaveLength(1);
@@ -215,21 +221,20 @@ describe('filterLiveClips', () => {
     const result = filterLiveClips({
       ...base,
       clips:       [clip],
-      calDateTo:   '2024-05-15T00:00:00Z', // before dbCutoffDate
+      calDateTo:   '2024-05-15', // before dbCutoffDate
       gameFilter:  'game1',
       searchQuery: 'pog',
     });
     expect(result).toEqual([]);
   });
 
-  // ── Real-world mixed date formats ─────────────────────────────────────────
-  // _dbCutoffDate always comes from MAX(created_at) — a full ISO timestamp.
-  // calDateTo comes from the calendar — a date-only YYYY-MM-DD string.
-  // The cutoff guard uses string comparison, so the formats must be compatible.
+  // ── Cutoff guard: YYYY-MM-DD calDateTo vs full ISO dbCutoffDate ───────────
+  // _dbCutoffDate is a full ISO UTC timestamp (MAX(created_at) from DB).
+  // calDateTo is a YYYY-MM-DD local date; the guard converts it to UTC before
+  // comparing, so comparison is always between two UTC ISO strings.
 
-  it('cutoff guard fires when date-only calDateTo matches date portion of ISO dbCutoffDate', () => {
-    // '2024-06-01' < '2024-06-01T15:30:00Z' lexicographically (prefix rule),
-    // so <= holds and the guard correctly hides live clips.
+  it('cutoff guard fires when calDateTo converts to a UTC bound <= dbCutoffDate', () => {
+    // localDateToUtcBound('2024-06-01', 0) = '2024-06-01T00:00:00.000Z' <= '2024-06-01T15:30:00Z' → fires
     const clips = [makeClip()];
     expect(filterLiveClips({
       ...base,
@@ -240,7 +245,7 @@ describe('filterLiveClips', () => {
   });
 
   it('cutoff guard does not fire when date-only calDateTo is the day after ISO dbCutoffDate', () => {
-    // '2024-06-02' > '2024-06-01T15:30:00Z' (day digit differs), guard does not fire.
+    // localDateToUtcBound('2024-06-02', 0) = '2024-06-02T00:00:00.000Z' > '2024-06-01T15:30:00Z' → no fire
     // Use a clip created between dbCutoffDate and calDateTo so it passes both guards.
     const clips = [makeClip({ created_at: '2024-06-01T20:00:00Z' })];
     expect(filterLiveClips({
@@ -259,5 +264,24 @@ describe('filterLiveClips', () => {
       dbCutoffDate: '2024-06-01T15:30:00Z',
       calDateTo:    '2024-07-01',
     })).toHaveLength(1);
+  });
+
+  // ── Timezone offset ───────────────────────────────────────────────────────
+
+  it('non-zero tzOffset shifts the UTC cutoff correctly (UTC-5)', () => {
+    // UTC-5 (-300 min): local Jun 2 midnight = 2024-06-02T05:00:00Z in UTC
+    // dbCutoffDate = '2024-06-02T03:00:00Z' — a clip timestamped Jun 1 local time
+    // calDateTo = '2024-06-02' local → calDateToUtc = '2024-06-02T05:00:00.000Z'
+    // '2024-06-02T05:00:00.000Z' > '2024-06-02T03:00:00Z' → guard does NOT fire
+    // clip at '2024-06-01T20:00:00Z' (local Jun 1 3pm UTC-5) < '2024-06-02T05:00:00.000Z' → included
+    const clip = makeClip({ created_at: '2024-06-01T20:00:00Z' });
+    const result = filterLiveClips({
+      ...base,
+      clips:        [clip],
+      dbCutoffDate: '2024-06-02T03:00:00Z',
+      calDateTo:    '2024-06-02',
+      tzOffset:     -300,
+    });
+    expect(result).toHaveLength(1);
   });
 });

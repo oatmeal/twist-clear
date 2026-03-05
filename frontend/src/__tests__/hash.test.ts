@@ -14,6 +14,7 @@ const defaultState: HashState = {
   calMonth: null,
   calDay: null,
   calWeek: null,
+  tzOffset: 0,
 };
 
 describe('serializeHash', () => {

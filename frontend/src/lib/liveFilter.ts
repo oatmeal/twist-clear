@@ -1,4 +1,5 @@
 import type { LiveClip } from '../twitch';
+import { localDateToUtcBound } from './dateUtils';
 
 export interface LiveFilterOpts {
   clips: LiveClip[];
@@ -7,6 +8,7 @@ export interface LiveFilterOpts {
   calDateFrom: string | null;
   gameFilter: string;
   searchQuery: string;
+  tzOffset: number;
 }
 
 /**
@@ -20,20 +22,24 @@ export function filterLiveClips(opts: LiveFilterOpts): LiveClip[] {
 
   // Date filter: hide live clips entirely when the range ends at or before the
   // DB cutoff (the user is looking at archived history, not recent clips).
-  if (opts.dbCutoffDate && opts.calDateTo !== null && opts.calDateTo <= opts.dbCutoffDate) {
+  // calDateTo is a local YYYY-MM-DD date; convert to UTC before comparing with
+  // the ISO dbCutoffDate.
+  const calDateToUtc = opts.calDateTo !== null
+    ? localDateToUtcBound(opts.calDateTo, opts.tzOffset)
+    : null;
+  if (opts.dbCutoffDate && calDateToUtc !== null && calDateToUtc <= opts.dbCutoffDate) {
     return [];
   }
 
-  // Apply lower date bound.
+  // Apply lower date bound (calDateFrom is a local YYYY-MM-DD date).
   if (opts.calDateFrom !== null) {
-    const from = opts.calDateFrom;
+    const from = localDateToUtcBound(opts.calDateFrom, opts.tzOffset);
     clips = clips.filter(c => c.created_at >= from);
   }
 
   // Apply upper date bound.
-  if (opts.calDateTo !== null) {
-    const to = opts.calDateTo;
-    clips = clips.filter(c => c.created_at < to);
+  if (calDateToUtc !== null) {
+    clips = clips.filter(c => c.created_at < calDateToUtc);
   }
 
   // Apply game filter.

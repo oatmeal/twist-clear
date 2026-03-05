@@ -10,6 +10,7 @@ export interface HashState {
   calMonth: number | null;
   calDay: string | null;
   calWeek: string | null;
+  tzOffset: number;
 }
 
 // Serialize app state into a URLSearchParams string. Default values are
@@ -32,6 +33,8 @@ export function serializeHash(s: HashState): string {
     if (s.calDay !== null) p.set('day', s.calDay);
     if (s.calWeek !== null) p.set('week', s.calWeek);
   }
+
+  if (s.tzOffset !== 0) p.set('tz', String(s.tzOffset));
 
   return p.toString();
 }
@@ -76,6 +79,9 @@ export function deserializeHash(hashStr: string): Partial<HashState> {
 
   const week = p.get('week');
   if (week !== null) result.calWeek = week;
+
+  const tz = p.get('tz');
+  if (tz !== null) result.tzOffset = parseInt(tz, 10);
 
   return result;
 }

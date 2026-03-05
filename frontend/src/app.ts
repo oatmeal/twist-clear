@@ -1,6 +1,6 @@
 import * as state from './state';
 import { initDb, q, DB_URL } from './db';
-import { escHtml, fmtDuration, fmtViews, fmtDateTime } from './lib/format';
+import { escHtml, fmtDuration, fmtViews, fmtDateTime, fmtDate } from './lib/format';
 import { buildWhere, ORDER } from './lib/query';
 import type { SortKey } from './lib/query';
 import { serializeHash, deserializeHash } from './lib/hash';
@@ -12,13 +12,14 @@ import {
   clearCalDateFilter,
   syncDateInputs,
   rebuildMonthSelect,
+  onTzChange,
 } from './calendar';
 import { setUseMeta } from './state';
 import * as auth from './auth';
 import * as twitch from './twitch';
 import type { LiveClip } from './twitch';
 import { filterLiveClips } from './lib/liveFilter';
-import { ensureRfc3339 } from './lib/dateUtils';
+import { ensureRfc3339, localDateToUtcBound } from './lib/dateUtils';
 import {
   rankLiveClips, computeViewCountPage, interleavePage,
 } from './lib/liveRank';
@@ -39,6 +40,7 @@ function pushHash(): void {
     calMonth: state.calMonth,
     calDay: state.calDay,
     calWeek: state.calWeek,
+    tzOffset: state.tzOffset,
   });
   history.replaceState(null, '', s ? '#' + s : location.pathname + location.search);
 }
@@ -57,6 +59,12 @@ function applyStateHash(hashStr: string): void {
   state.setCalMonth(partial.calMonth ?? null);
   state.setCalDay(partial.calDay ?? null);
   state.setCalWeek(partial.calWeek ?? null);
+
+  if (partial.tzOffset !== undefined) {
+    state.setTzOffset(partial.tzOffset);
+    const tzSel = document.getElementById('tz-select') as HTMLSelectElement | null;
+    if (tzSel) tzSel.value = String(state.tzOffset);
+  }
 
   // Sync DOM controls
   (document.getElementById('search') as HTMLInputElement).value      = state.searchQuery;
@@ -112,8 +120,8 @@ async function updateGameFilter(): Promise<void> {
     // when running against the raw dev-symlink DB without clips_meta).
     const params: Record<string, string> = {};
     const dateClause = state.calDateFrom !== null
-      ? (params[':dateFrom'] = state.calDateFrom,
-         params[':dateTo']   = state.calDateTo!,
+      ? (params[':dateFrom'] = localDateToUtcBound(state.calDateFrom, state.tzOffset),
+         params[':dateTo']   = localDateToUtcBound(state.calDateTo!, state.tzOffset),
          'WHERE c.created_at >= :dateFrom AND c.created_at < :dateTo')
       : '';
     rows = await q(
@@ -172,7 +180,7 @@ function clipCardHtml(clip: {
         <div class="clip-meta">
           <span class="views">${t().views(fmtViews(clip.view_count))}</span>
           ${clip.game_name ? `<span>${escHtml(clip.game_name)}</span>` : ''}
-          <span>${t().creatorLine(escHtml(clip.creator_name), fmtDateTime(clip.created_at, lang))}</span>
+          <span>${t().creatorLine(escHtml(clip.creator_name), fmtDateTime(clip.created_at, lang, state.tzOffset))}</span>
         </div>
       </div>
     </div>`;
@@ -293,6 +301,7 @@ function _filteredLiveClips(): LiveClip[] {
     calDateFrom:  state.calDateFrom,
     gameFilter:   state.gameFilter,
     searchQuery:  state.searchQuery,
+    tzOffset:     state.tzOffset,
   });
 }
 
@@ -322,9 +331,7 @@ function renderLiveSection(): void {
     return;
   }
 
-  const dateLabel = _dbCutoffDate
-    ? new Date(_dbCutoffDate).toLocaleDateString(lang, { year: 'numeric', month: 'short', day: 'numeric' })
-    : '';
+  const dateLabel = _dbCutoffDate ? fmtDate(_dbCutoffDate, state.tzOffset) : '';
   const plural    = filtered.length === 1 ? 'clip' : 'clips';
   titleEl.textContent = `${filtered.length} new ${plural}${dateLabel ? ` since ${dateLabel}` : ''}`;
 
@@ -369,9 +376,7 @@ function syncAuthUI(): void {
     if (dismissed) {
       banner.style.display = 'none';
     } else {
-      const dateLabel = _dbCutoffDate
-        ? new Date(_dbCutoffDate).toLocaleDateString(lang, { year: 'numeric', month: 'short', day: 'numeric' })
-        : '';
+      const dateLabel = _dbCutoffDate ? fmtDate(_dbCutoffDate, state.tzOffset) : '';
       bannerText.textContent = dateLabel
         ? `This archive has clips through ${dateLabel}. Log in with Twitch to see newer clips.`
         : 'Log in with Twitch to see clips newer than this archive.';
@@ -428,6 +433,7 @@ export async function render(): Promise<void> {
       calDateFrom: state.calDateFrom,
       calDateTo: state.calDateTo,
       useFts: state.useFts,
+      tzOffset: state.tzOffset,
     });
 
     // Fast path: avoid a full COUNT(*) scan when precomputed totals are available.
@@ -653,6 +659,33 @@ function applyTranslations(): void {
   (document.getElementById('lang-toggle') as HTMLButtonElement).textContent = tr.langToggle;
 }
 
+// ── Settings panel ───────────────────────────────────────────────────────
+
+/** Populate #tz-select with one option per 30-minute UTC offset, showing the
+ *  current time in each zone so the user can identify the right one. */
+function populateTzSelect(): void {
+  const sel = document.getElementById('tz-select') as HTMLSelectElement | null;
+  if (!sel) return;
+  const now = Date.now();
+  sel.innerHTML = '';
+  for (let off = -720; off <= 840; off += 30) {
+    const absH  = Math.floor(Math.abs(off) / 60);
+    const absM  = Math.abs(off) % 60;
+    const sign  = off >= 0 ? '+' : '-';
+    const label = `UTC${sign}${String(absH).padStart(2, '0')}:${String(absM).padStart(2, '0')}`;
+    const shifted = new Date(now + off * 60000);
+    const timeLabel = shifted.toLocaleString(undefined, {
+      timeZone: 'UTC',
+      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+    });
+    const opt = document.createElement('option');
+    opt.value = String(off);
+    opt.textContent = `${label} — ${timeLabel}`;
+    if (off === state.tzOffset) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
 // ── Event binding ─────────────────────────────────────────────────────────
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -725,6 +758,41 @@ function bindEvents(): void {
     localStorage.setItem('tc_live_collapsed', collapsed ? '0' : '1');
     renderLiveSection();
   });
+
+  // ── Settings panel ─────────────────────────────────────────────────────────
+
+  const settingsBtn   = document.getElementById('btn-settings');
+  const settingsPanel = document.getElementById('settings-panel');
+
+  function openSettings(): void {
+    if (!settingsPanel) return;
+    populateTzSelect(); // refresh "now" labels on each open
+    settingsPanel.removeAttribute('hidden');
+  }
+  function closeSettings(): void {
+    settingsPanel?.setAttribute('hidden', '');
+  }
+
+  settingsBtn?.addEventListener('click', e => {
+    e.stopPropagation();
+    settingsPanel?.hasAttribute('hidden') ? openSettings() : closeSettings();
+  });
+
+  document.addEventListener('click', e => {
+    if (settingsPanel && !settingsPanel.hasAttribute('hidden') &&
+        !settingsPanel.contains(e.target as Node) &&
+        e.target !== settingsBtn) {
+      closeSettings();
+    }
+  });
+
+  document.getElementById('tz-select')?.addEventListener('change', e => {
+    const v = parseInt((e.target as HTMLSelectElement).value, 10);
+    state.setTzOffset(v);
+    localStorage.setItem('tc_tz_offset', String(v));
+    onTzChange();
+    pushHash();
+  });
 }
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────
@@ -747,6 +815,20 @@ export async function init(): Promise<void> {
   // Handle OAuth redirect before anything else. Reads the token from the URL
   // hash (implicit grant) and cleans it before applyStateHash() runs.
   await auth.handleOAuthCallback();
+
+  // Initialise tzOffset: URL hash > localStorage > browser default (from state.ts).
+  // Must run after handleOAuthCallback() so the hash is clean.
+  {
+    const hashPartial = (location.hash && location.hash.length > 1)
+      ? deserializeHash(location.hash) : {};
+    if (hashPartial.tzOffset !== undefined) {
+      state.setTzOffset(hashPartial.tzOffset);
+    } else {
+      const stored = localStorage.getItem('tc_tz_offset');
+      if (stored !== null) state.setTzOffset(parseInt(stored, 10));
+      // else keep the browserTzOffset() default set in state.ts
+    }
+  }
 
   // Restore username from localStorage so the auth indicator shows immediately.
   const storedUsername = auth.getUsername();

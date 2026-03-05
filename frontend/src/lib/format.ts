@@ -18,16 +18,22 @@ export function fmtViews(n: number): string {
   return n.toLocaleString();
 }
 
-export function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
+export function fmtDate(iso: string, tzOffset = 0): string {
+  // Shift the UTC timestamp by the selected timezone offset, then render as
+  // UTC — equivalent to displaying in the target timezone.
+  const shifted = new Date(new Date(iso).getTime() + tzOffset * 60000);
+  return shifted.toLocaleDateString(undefined, {
+    timeZone: 'UTC',
     year: 'numeric',
     month: 'short',
     day: 'numeric',
   });
 }
 
-export function fmtDateTime(iso: string, locale?: string): string {
-  return new Date(iso).toLocaleString(locale, {
+export function fmtDateTime(iso: string, locale?: string, tzOffset = 0): string {
+  const shifted = new Date(new Date(iso).getTime() + tzOffset * 60000);
+  return shifted.toLocaleString(locale, {
+    timeZone: 'UTC',
     year: 'numeric',
     month: 'short',
     day: 'numeric',

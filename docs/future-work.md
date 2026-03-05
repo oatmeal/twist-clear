@@ -83,16 +83,33 @@ Japanese translations added to the `t()` locale map in `app.ts`:
 
 ---
 
-## buildWhere: calDateTo null edge case
+## Timezone: DST transition edge case
 
-When `calDateFrom` is non-null but `calDateTo` is null, the non-null assertion
-`opts.calDateTo!` in `buildWhere` silently binds `null`, producing
-`created_at < NULL` which is always false and returns no results.
+Calendar grouping and date filtering use a fixed UTC offset per query
+(the user's selected offset from the settings gear). On days when Daylight
+Saving Time changes, local midnight shifts by ±1 hour, so a small number of
+clips created within ~1 hour of midnight on DST-transition nights may be
+bucketed to the wrong calendar day.
 
-Low practical risk — the UI always sets both date fields together — but could
-bite a future caller that sets only one. Fix: add an explicit guard in
-`buildWhere` and/or remove the non-null assertion. Documented in
-`query.test.ts`.
+Fully DST-correct bucketing would require knowing the exact DST rules for the
+chosen region (not just a UTC offset) and applying per-clip offset lookups —
+significantly more complex and not worth it for a clip viewer. The fixed-offset
+approach is correct for all other nights and is an accepted trade-off.
+
+---
+
+## i18n: translate new settings UI to Japanese
+
+The timezone settings panel (gear icon in the controls bar) added with the
+configurable-timezone feature is English-only:
+
+- "Timezone" label on the `<select>`
+- Gear button tooltip ("Settings")
+- Timezone option labels (UTC+HH:MM format is language-neutral, but the
+  datetime preview appended to each option uses the browser's locale)
+
+Deferred — the settings panel is functional for all users regardless of
+language; the datetime preview automatically adapts to the browser locale.
 
 ---
 

@@ -27,7 +27,7 @@ src/
   state.ts      # All shared mutable state + explicit typed setters
   twitch.ts     # Helix API client for live clips (auto-paginates, resolves game names)
   lib/
-    dateUtils.ts  # Local-timezone date arithmetic (avoids string parsing)
+    dateUtils.ts  # Timezone-aware date arithmetic + UTC-offset helpers
     format.ts     # escHtml, fmtDuration, fmtViews, fmtDateTime
     hash.ts       # Pure serializeHash() / deserializeHash() — URL hash state
     i18n.ts       # English & Japanese translations; t(), detectLang(), setLang()
@@ -84,6 +84,14 @@ if (ctrl.signal.aborted) return;
 `setSearchQuery`). Importing modules must use setters — ES module live bindings
 are read-only from outside the declaring module.
 
+`tzOffset` (UTC offset in signed integer minutes, east = positive) is included
+in state. It defaults to `browserTzOffset()` (negation of
+`Date.getTimezoneOffset()`). Initialization priority at startup: URL hash `tz`
+param > `localStorage.getItem('tc_tz_offset')` > browser default. Changes are
+saved to both localStorage and the URL hash. The settings gear icon in the
+controls bar opens a panel with a `<select>` populated by `populateTzSelect()`
+in `app.ts`.
+
 ### Circular dependency: calendar ↔ app
 
 `calendar.ts` needs to trigger a re-render in `app.ts`, but `app.ts` imports
@@ -117,7 +125,10 @@ of these chains and can transfer several MB from a cold cache.
 `prepare_web_db.py` precomputes several things to replace the most expensive
 startup aggregates with cheap single-page lookups:
 
-- `clips_meta` — one row: `min_date`, `max_date`, `total_clips`
+- `clips_meta` — one row: `min_date`, `max_date`, `min_timestamp`,
+  `max_timestamp`, `total_clips`. The raw `min/max_timestamp` columns store full
+  UTC ISO timestamps so `initCalendar` can compute local calendar boundaries for
+  any timezone via `utcTimestampToLocalDate`.
 - `game_clip_counts` — one row per game: `id`, `name`, `cnt` (no date filter)
 - `clips_created_at` — index on `clips(created_at)` for date-range COUNT(*)
 - `clips_created_at_game` — covering index `(created_at, game_id)` for
@@ -146,13 +157,26 @@ DB, or a DB prepared before this feature was added).
   written by `prepare-db`.
 - The symlink is gitignored; the prepared DB is also gitignored (too large for git).
 
-### Date arithmetic
+### Date arithmetic and timezone
 
 All date utilities (`lib/dateUtils.ts`) use integer-argument `Date` constructors
 (`new Date(y, m, d)`) and avoid string parsing to prevent UTC/local timezone
 pitfalls. The `calDateTo` stored in state is always an *exclusive* upper bound
 (e.g. "Feb 1" for a Jan 31 selection); `syncDateInputs()` converts it to
 inclusive for display.
+
+`calDateFrom` and `calDateTo` are stored as `YYYY-MM-DD` local date strings.
+All SQL queries and live-clip filters convert them to UTC ISO bounds via
+`localDateToUtcBound(dateStr, state.tzOffset)` before comparison with
+`created_at` (which is always stored as UTC ISO). Calendar SQL uses
+`tzToSqlModifier(state.tzOffset)` as a strftime modifier so clips group by
+local date. Display timestamps are shifted by `state.tzOffset` minutes and
+rendered with `timeZone: 'UTC'` to produce the equivalent local time.
+
+Caveat: a fixed offset is used per query. Clips within ~1 hour of midnight on
+DST-transition nights may bucket to the wrong calendar day (see
+`docs/future-work.md`). localStorage key for persisting user preference:
+`tc_tz_offset`.
 
 ### Twitch OAuth login (`auth.ts`, `lib/pkce.ts`)
 

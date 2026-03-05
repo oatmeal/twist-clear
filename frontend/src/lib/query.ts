@@ -1,3 +1,5 @@
+import { localDateToUtcBound } from './dateUtils';
+
 export type SortKey = 'view_count_desc' | 'view_count_asc' | 'date_desc' | 'date_asc';
 
 export const ORDER: Record<SortKey, string> = {
@@ -18,6 +20,7 @@ export interface BuildWhereOpts {
   calDateFrom: string | null;
   calDateTo: string | null;
   useFts: boolean;
+  tzOffset: number;
 }
 
 export function buildWhere(opts: BuildWhereOpts): WhereClause {
@@ -42,14 +45,14 @@ export function buildWhere(opts: BuildWhereOpts): WhereClause {
 
   if (opts.calDateFrom !== null && opts.calDateTo !== null) {
     parts.push('c.created_at >= :dateFrom AND c.created_at < :dateTo');
-    params[':dateFrom'] = opts.calDateFrom;
-    params[':dateTo'] = opts.calDateTo;
+    params[':dateFrom'] = localDateToUtcBound(opts.calDateFrom, opts.tzOffset);
+    params[':dateTo']   = localDateToUtcBound(opts.calDateTo,   opts.tzOffset);
   } else if (opts.calDateFrom !== null) {
     parts.push('c.created_at >= :dateFrom');
-    params[':dateFrom'] = opts.calDateFrom;
+    params[':dateFrom'] = localDateToUtcBound(opts.calDateFrom, opts.tzOffset);
   } else if (opts.calDateTo !== null) {
     parts.push('c.created_at < :dateTo');
-    params[':dateTo'] = opts.calDateTo;
+    params[':dateTo']   = localDateToUtcBound(opts.calDateTo, opts.tzOffset);
   }
 
   return {

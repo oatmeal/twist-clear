@@ -100,6 +100,8 @@ def prepare(src_path: str, dst_path: str) -> None:
     # O(n) scan that triggers sql.js-httpvfs's exponential read-ahead.
 
     # clips_meta: min/max clip dates + total clip count
+    # min_timestamp / max_timestamp store the full ISO-8601 UTC strings so the
+    # browser can compute the correct local calendar boundary for any timezone.
     print("Creating clips_meta table …")
     dst_conn.execute("DROP TABLE IF EXISTS clips_meta")
     dst_conn.execute("""
@@ -107,6 +109,8 @@ def prepare(src_path: str, dst_path: str) -> None:
         SELECT
             substr(MIN(created_at), 1, 10) AS min_date,
             substr(MAX(created_at), 1, 10) AS max_date,
+            MIN(created_at) AS min_timestamp,
+            MAX(created_at) AS max_timestamp,
             COUNT(*) AS total_clips
         FROM clips
     """)

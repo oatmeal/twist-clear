@@ -54,3 +54,50 @@ export function isoWeekNumber(dateStr: string): number {
 export function ensureRfc3339(date: string): string {
   return date.includes('T') ? date : `${date}T00:00:00Z`;
 }
+
+// ── Timezone helpers ──────────────────────────────────────────────────────────
+// offsetMinutes convention: positive = east of UTC (UTC+5 → +300, UTC-5 → -300).
+// This is the negation of Date.prototype.getTimezoneOffset(), which uses the
+// opposite sign convention.
+
+/** Returns the browser's current UTC offset in minutes (east = positive). */
+export function browserTzOffset(): number {
+  return -new Date().getTimezoneOffset();
+}
+
+/**
+ * Returns a SQLite strftime modifier string for the given offset, e.g.
+ * '+330 minutes' (UTC+5:30) or '-300 minutes' (UTC-5).
+ */
+export function tzToSqlModifier(offsetMinutes: number): string {
+  return (offsetMinutes >= 0 ? '+' : '') + offsetMinutes + ' minutes';
+}
+
+/**
+ * Converts a YYYY-MM-DD local date to the UTC ISO timestamp of midnight in
+ * the given timezone offset.
+ * e.g. '2024-06-15' at UTC-5 (-300) → '2024-06-15T05:00:00.000Z'
+ */
+export function localDateToUtcBound(dateStr: string, offsetMinutes: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number) as [number, number, number];
+  return new Date(Date.UTC(y, m - 1, d) - offsetMinutes * 60000).toISOString();
+}
+
+/**
+ * Converts a UTC ISO timestamp to a local YYYY-MM-DD date string in the given
+ * timezone offset.
+ * e.g. '2024-06-15T02:00:00Z' at UTC-5 (-300) → '2024-06-14'
+ */
+export function utcTimestampToLocalDate(ts: string, offsetMinutes: number): string {
+  const shifted = new Date(new Date(ts).getTime() + offsetMinutes * 60000);
+  return [
+    shifted.getUTCFullYear(),
+    String(shifted.getUTCMonth() + 1).padStart(2, '0'),
+    String(shifted.getUTCDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+/** Returns today's date as YYYY-MM-DD in the given timezone offset. */
+export function todayStrInOffset(offsetMinutes: number): string {
+  return utcTimestampToLocalDate(new Date().toISOString(), offsetMinutes);
+}

@@ -176,6 +176,44 @@ select:focus { border-color: var(--accent); }
 .date-range-filter input[type="date"]:focus { border-color: var(--accent); }
 .date-range-sep { color: var(--muted); font-size: 13px; }
 
+/* ── View switcher ── */
+.view-switcher { display: flex; gap: 4px; }
+.view-btn {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+}
+.view-btn:hover { border-color: var(--accent); color: var(--text); }
+.view-btn.active { border-color: var(--accent); color: var(--accent); }
+
+/* ── Settings panel ── */
+.settings-wrapper { position: relative; }
+.settings-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  min-width: 320px;
+  z-index: 20;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+}
+.settings-panel label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+#tz-select { font-size: 12px; width: 100%; }
+
 /* ── Live clips section ── */
 #live-section {
   border-bottom: 1px solid var(--border);
