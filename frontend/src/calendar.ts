@@ -94,6 +94,49 @@ export function syncDateInputs(): void {
   toEl.removeAttribute('max');
 }
 
+// ── Live clip counts ──────────────────────────────────────────────────────
+// These helpers aggregate in-memory live clips into the same bucketed formats
+// as the DB queries, so they can be merged into the heat-map counts.
+
+/** day → count for live clips falling in the given calendar year (local time). */
+function liveDayCountsForYear(year: number): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const c of state.liveClips) {
+    const day = utcTimestampToLocalDate(c.created_at, state.tzOffset);
+    if (day.startsWith(`${year}-`)) {
+      counts[day] = (counts[day] ?? 0) + 1;
+    }
+  }
+  return counts;
+}
+
+/** YYYY-MM → count for live clips falling in the given calendar year (local time). */
+function liveMonthCountsForYear(year: number): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const c of state.liveClips) {
+    const day = utcTimestampToLocalDate(c.created_at, state.tzOffset);
+    if (day.startsWith(`${year}-`)) {
+      const month = day.slice(0, 7);
+      counts[month] = (counts[month] ?? 0) + 1;
+    }
+  }
+  return counts;
+}
+
+/** day → count for live clips falling in the given calendar month (local time). */
+function liveDayCountsForMonth(year: number, month: number): Record<string, number> {
+  const pad    = (n: number) => String(n).padStart(2, '0');
+  const prefix = `${year}-${pad(month + 1)}-`;
+  const counts: Record<string, number> = {};
+  for (const c of state.liveClips) {
+    const day = utcTimestampToLocalDate(c.created_at, state.tzOffset);
+    if (day.startsWith(prefix)) {
+      counts[day] = (counts[day] ?? 0) + 1;
+    }
+  }
+  return counts;
+}
+
 // ── DB queries ────────────────────────────────────────────────────────────
 
 async function queryYearDays(year: number): Promise<{ day: string; cnt: number }[]> {
@@ -227,6 +270,12 @@ async function renderYearView(): Promise<void> {
   const yearData = await queryYearDays(state.calYear);
   const dayMap   = Object.fromEntries(yearData.map(r => [r.day, r.cnt]));
 
+  // Merge live clip counts (live clips are always newer than the DB cutoff,
+  // so they appear at the end and never overlap archived days).
+  for (const [day, cnt] of Object.entries(liveDayCountsForYear(state.calYear))) {
+    dayMap[day] = ((dayMap[day] as number | undefined) ?? 0) + cnt;
+  }
+
   const monthTotals = new Array<number>(12).fill(0);
   for (const [key, cnt] of Object.entries(dayMap)) {
     monthTotals[parseInt(key.slice(5, 7), 10) - 1]! += cnt as number;
@@ -293,6 +342,11 @@ async function renderYearStrip(): Promise<void> {
   const totals   = await queryYearMonthTotals(state.calYear);
   const monthMap = Object.fromEntries(totals.map(r => [r.month, r.cnt]));
 
+  // Merge live clip counts into month totals.
+  for (const [month, cnt] of Object.entries(liveMonthCountsForYear(state.calYear))) {
+    monthMap[month] = ((monthMap[month] as number | undefined) ?? 0) + cnt;
+  }
+
   const strip = document.getElementById('cal-year-strip')!;
   strip.innerHTML = '';
 
@@ -323,6 +377,11 @@ async function renderYearStrip(): Promise<void> {
 async function renderMonthGrid(): Promise<void> {
   const monthData = await queryMonthDays(state.calYear, state.calMonth!);
   const dayMap    = Object.fromEntries(monthData.map(r => [r.day, r.cnt]));
+
+  // Merge live clip counts into day map.
+  for (const [day, cnt] of Object.entries(liveDayCountsForMonth(state.calYear, state.calMonth!))) {
+    dayMap[day] = ((dayMap[day] as number | undefined) ?? 0) + cnt;
+  }
 
   const totalDays  = daysInMonth(state.calYear, state.calMonth!);
   const firstDow   = firstDayOfMonth(state.calYear, state.calMonth!);
@@ -633,6 +692,29 @@ export function onTzChange(): void {
   recomputeDateBounds(state.tzOffset);
   void renderCalendar();
   callRender();
+}
+
+/**
+ * Called by app.ts after live clips are fetched. If any live clip is newer
+ * than the DB's max timestamp, extends _rawMaxTimestamp so that calMaxDate
+ * covers those clips and the calendar year/month navigation can reach them.
+ * The calendar will pick up the updated counts on its next render — app.ts
+ * must call renderCalendar() if the calendar view is currently visible.
+ */
+export function updateLiveClipBounds(): void {
+  if (state.liveClips.length === 0) return;
+
+  let maxTs = '';
+  for (const c of state.liveClips) {
+    if (c.created_at > maxTs) maxTs = c.created_at;
+  }
+  if (!maxTs) return;
+
+  // Only extend; never shrink the range.
+  if (_rawMaxTimestamp && maxTs <= _rawMaxTimestamp) return;
+
+  _rawMaxTimestamp = maxTs;
+  recomputeDateBounds(state.tzOffset);
 }
 
 export async function initCalendar(onRender: () => Promise<void>): Promise<void> {

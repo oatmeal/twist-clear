@@ -13,6 +13,7 @@ import {
   syncDateInputs,
   rebuildMonthSelect,
   onTzChange,
+  updateLiveClipBounds,
 } from './calendar';
 import { setUseMeta } from './state';
 import * as auth from './auth';
@@ -289,7 +290,9 @@ async function fetchLiveClips(): Promise<void> {
 
   state.setLiveFetching(false);
   state.setLiveClips(clips);
+  updateLiveClipBounds();
   void render();
+  if (state.currentView === 'calendar') void renderCalendar();
 }
 
 /** Filter live clips against current filter state. */

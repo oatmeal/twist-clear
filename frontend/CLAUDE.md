@@ -208,6 +208,13 @@ pagination math computes `liveOnPage`/`dbOnPage`/`dbOffset` for each page.
 For other sort orders the separate `renderLiveSection()` panel is shown instead,
 because true interleaving would require loading all DB clips into memory.
 
+After `fetchLiveClips()` completes, `updateLiveClipBounds()` in `calendar.ts`
+is called to extend `calMaxDate` (and the year-select options) if live clips are
+newer than the DB cutoff. The calendar heat-map counts also include live clips:
+`liveDayCountsForYear/Month` aggregate `state.liveClips` in-memory and merge
+into the DB query results in `renderYearView`, `renderYearStrip`, and
+`renderMonthGrid`.
+
 ### Internationalization (`lib/i18n.ts`)
 
 Supports **English** (`en`) and **Japanese** (`ja`). Key exports:

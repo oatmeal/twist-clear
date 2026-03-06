@@ -42,22 +42,6 @@ When filtering to a specific day (or week, even?) show clips as dots on a timeli
 
 ---
 
-## Live clips: calendar heat map integration
-
-The calendar year/month views aggregate clip counts directly from SQLite. Live
-clips exist only in memory and are not reflected in the heat map or day-count
-queries.
-
-Adding them would require either a separate in-memory aggregation pass (summing
-live clips per day/month) and merging the result into the calendar cell rendering,
-or injecting live counts into the calendar after the DB query returns.
-
-Deferred as low priority — the "New clips since [date]" label in the live section
-makes the archive cutoff visible, and the calendar is primarily useful for
-navigating the historical archive.
-
----
-
 ## i18n: translate new auth/live-clips UI to Japanese
 
 The following strings added with the login feature are English-only and need
