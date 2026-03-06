@@ -7,8 +7,6 @@ Deferred items with rationale. See the relevant source files for implementation 
 ## Small issues
 
 Fixes:
-- Possibly an older request, but switching to calendar view changes to date-asc sorting? Maybe applying a filter should not affect the ordering (Check for other weird sorting / filtering bugs)
-- Week view is misaligned? Clicking on the week filters at the left seems to act strangely (don't seem to match up with the actual dates in the row, sometimes two buttons end up highlighted); weeks start on Mondays and go to Sunday?
 - "Today" is outlined on the calendar. Confusing with the actual day we're filtering to?
 - Highlight date range on calendar more clearly with outlines / shading?
 - date inputs require both to be set? Maybe make a little more obvious with an explicit "set" button or more feedback?

@@ -5,7 +5,6 @@ import {
   firstDayOfMonth,
   localDateStr,
   addDays,
-  weekStart,
   isoWeekNumber,
   todayStrInOffset,
   tzToSqlModifier,
@@ -413,16 +412,19 @@ async function renderMonthGrid(): Promise<void> {
       currentRow.className = 'month-week-row';
       container.appendChild(currentRow);
 
-      const firstRealDay = Math.max(1, Math.min(day, totalDays));
-      const rowDateStr   = localDateStr(state.calYear, state.calMonth!, firstRealDay);
-      const rowWeekMon   = weekStart(rowDateStr);
-      const weekNum      = isoWeekNumber(rowDateStr);
+      // The Sunday that this grid row starts on (may fall outside the current
+      // month). Using addDays from the 1st avoids clamping to firstRealDay,
+      // which previously caused the same ISO Monday to appear on two rows when
+      // a month starts on Saturday (both clamped to days with the same Monday).
+      const rowSunday = addDays(localDateStr(state.calYear, state.calMonth!, 1), day - 1);
+      // ISO week number: use the Monday in the row so the number is unambiguous.
+      const weekNum   = isoWeekNumber(addDays(rowSunday, 1));
 
       const weekBtn = document.createElement('div');
-      weekBtn.className = 'week-number-btn' + (state.calWeek === rowWeekMon ? ' selected' : '');
+      weekBtn.className = 'week-number-btn' + (state.calWeek === rowSunday ? ' selected' : '');
       weekBtn.textContent = String(weekNum);
-      weekBtn.title = t().selectWeek(weekNum, rowWeekMon);
-      weekBtn.addEventListener('click', () => selectWeek(rowWeekMon));
+      weekBtn.title = t().selectWeek(weekNum, rowSunday);
+      weekBtn.addEventListener('click', () => selectWeek(rowSunday));
       currentRow.appendChild(weekBtn);
     }
 
@@ -555,8 +557,6 @@ export function switchView(view: 'grid' | 'calendar'): void {
   } else {
     calBtn.classList.add('active');
     gridBtn.classList.remove('active');
-    state.setSortBy('date_asc');
-    (document.getElementById('sort') as HTMLSelectElement).value = 'date_asc';
     setYearFilter(state.calYear);
     void renderCalendar();
     state.setCurrentPage(1);
