@@ -4,15 +4,41 @@ Deferred items with rationale. See the relevant source files for implementation 
 
 ---
 
-~~Live clips: merge into view-count sort orders~~ — **Implemented.**
+## Small issues
 
-Live clips are now merged into the main grid for all four sort orders. For
-`view_count_desc`/`view_count_asc`, `rankLiveClips()` in `lib/liveRank.ts`
-runs one `COUNT(*)` per unique `(view_count, created_at)` pair to find each
-live clip's rank in the DB sequence. The composite
-`clips_view_count(view_count DESC, created_at DESC)` index makes each COUNT
-an O(log N) range scan. Multiple live clips sharing the same sort key
-(same view count and timestamp) share a single query.
+Fixes:
+- Possibly an older request, but switching to calendar view changes to date-asc sorting? Maybe applying a filter should not affect the ordering (Check for other weird sorting / filtering bugs)
+- Week view is misaligned? Clicking on the week filters at the left seems to act strangely (don't seem to match up with the actual dates in the row, sometimes two buttons end up highlighted); weeks start on Mondays and go to Sunday?
+- "Today" is outlined on the calendar. Confusing with the actual day we're filtering to?
+- Highlight date range on calendar more clearly with outlines / shading?
+- date inputs require both to be set? Maybe make a little more obvious with an explicit "set" button or more feedback?
+- Logged in user element is positioned weirdly in the top middle of the page. When is the twitch API queried for new clips? Only on page load? Maybe we should have a refresh button as part of this?
+- Browse clears time filter; but it's not that obvious yet
+
+i18n:
+- i18n, localize view counts. In Japanese not K, M, etc. but 万, 億
+- i18n, Japanese names for games (use IGDB?)
+
+Other stuff required before release:
+- Link to streamer(s)' twitch pages
+- Change "Twitch clips" "Twitch clips viewer" (configurable with deploy.yml?)
+- opengraph stuff: description, thumbnail, etc. (generate with deploy.yml?)
+- About page with more description linking to GitHub, etc. (generate with deploy.yml?)
+
+Later:
+- template repo: fork + change settings to deploy an archive for a streamer
+
+---
+
+## Combine language / timezone in settings?
+
+Maybe there's a neater UI for this?
+
+---
+
+## Daily timeline with clips as dots
+
+When filtering to a specific day (or week, even?) show clips as dots on a timeline. Bigger dots mean more views?
 
 ---
 
@@ -29,6 +55,69 @@ or injecting live counts into the calendar after the DB query returns.
 Deferred as low priority — the "New clips since [date]" label in the live section
 makes the archive cutoff visible, and the calendar is primarily useful for
 navigating the historical archive.
+
+---
+
+## i18n: translate new auth/live-clips UI to Japanese
+
+The following strings added with the login feature are English-only and need
+Japanese translations added to the `t()` locale map in `app.ts`:
+
+- Login banner text ("This archive has clips through … Log in with Twitch to
+  see newer clips.")
+- Live section title ("N new clips since …")
+- Live section toggle button labels ("Show" / "Collapse")
+- Auth indicator / username display area
+- Any error or loading states in the live clips section
+
+---
+
+## i18n: translate new settings UI to Japanese
+
+The timezone settings panel (gear icon in the controls bar) added with the
+configurable-timezone feature is English-only:
+
+- "Timezone" label on the `<select>`
+- Gear button tooltip ("Settings")
+- Timezone option labels (UTC+HH:MM format is language-neutral, but the
+  datetime preview appended to each option uses the browser's locale)
+
+Deferred — the settings panel is functional for all users regardless of
+language; the datetime preview automatically adapts to the browser locale.
+
+---
+
+## LIKE search: unescaped wildcards
+
+`buildWhere` passes the raw user search string into a `LIKE` pattern without
+escaping `%` or `_`, so those characters act as SQL wildcards. Mostly harmless
+for a personal viewer; to fix, escape them before interpolation and add an
+`ESCAPE` clause. Documented in tests.
+
+---
+
+## FTS5 MATCH: raw user string
+
+`buildWhere` passes the user's search string directly to `clips_fts MATCH`,
+so FTS5 operators (`OR`, `AND`, `*`, `"phrase"`) are interpreted literally.
+This is occasionally useful but can also produce confusing results or errors
+for malformed queries. Fix: sanitize or quote the input before passing to
+MATCH. Documented in tests.
+
+---
+
+## Timezone: DST transition edge case
+
+Calendar grouping and date filtering use a fixed UTC offset per query
+(the user's selected offset from the settings gear). On days when Daylight
+Saving Time changes, local midnight shifts by ±1 hour, so a small number of
+clips created within ~1 hour of midnight on DST-transition nights may be
+bucketed to the wrong calendar day.
+
+Fully DST-correct bucketing would require knowing the exact DST rules for the
+chosen region (not just a UTC offset) and applying per-clip offset lookups —
+significantly more complex and not worth it for a clip viewer. The fixed-offset
+approach is correct for all other nights and is an accepted trade-off.
 
 ---
 
@@ -66,66 +155,3 @@ ignored in meta-tag CSPs; it is only effective as an HTTP header.
 If the site is ever deployed behind a proxy or server that can set custom headers
 (Cloudflare, nginx, etc.), add `frame-ancestors 'self'` as an HTTP header to
 enable this protection.
-
----
-
-## i18n: translate new auth/live-clips UI to Japanese
-
-The following strings added with the login feature are English-only and need
-Japanese translations added to the `t()` locale map in `app.ts`:
-
-- Login banner text ("This archive has clips through … Log in with Twitch to
-  see newer clips.")
-- Live section title ("N new clips since …")
-- Live section toggle button labels ("Show" / "Collapse")
-- Auth indicator / username display area
-- Any error or loading states in the live clips section
-
----
-
-## Timezone: DST transition edge case
-
-Calendar grouping and date filtering use a fixed UTC offset per query
-(the user's selected offset from the settings gear). On days when Daylight
-Saving Time changes, local midnight shifts by ±1 hour, so a small number of
-clips created within ~1 hour of midnight on DST-transition nights may be
-bucketed to the wrong calendar day.
-
-Fully DST-correct bucketing would require knowing the exact DST rules for the
-chosen region (not just a UTC offset) and applying per-clip offset lookups —
-significantly more complex and not worth it for a clip viewer. The fixed-offset
-approach is correct for all other nights and is an accepted trade-off.
-
----
-
-## i18n: translate new settings UI to Japanese
-
-The timezone settings panel (gear icon in the controls bar) added with the
-configurable-timezone feature is English-only:
-
-- "Timezone" label on the `<select>`
-- Gear button tooltip ("Settings")
-- Timezone option labels (UTC+HH:MM format is language-neutral, but the
-  datetime preview appended to each option uses the browser's locale)
-
-Deferred — the settings panel is functional for all users regardless of
-language; the datetime preview automatically adapts to the browser locale.
-
----
-
-## LIKE search: unescaped wildcards
-
-`buildWhere` passes the raw user search string into a `LIKE` pattern without
-escaping `%` or `_`, so those characters act as SQL wildcards. Mostly harmless
-for a personal viewer; to fix, escape them before interpolation and add an
-`ESCAPE` clause. Documented in tests.
-
----
-
-## FTS5 MATCH: raw user string
-
-`buildWhere` passes the user's search string directly to `clips_fts MATCH`,
-so FTS5 operators (`OR`, `AND`, `*`, `"phrase"`) are interpreted literally.
-This is occasionally useful but can also produce confusing results or errors
-for malformed queries. Fix: sanitize or quote the input before passing to
-MATCH. Documented in tests.
