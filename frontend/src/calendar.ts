@@ -136,6 +136,77 @@ function liveDayCountsForMonth(year: number, month: number): Record<string, numb
   return counts;
 }
 
+// ── Date-range helpers ────────────────────────────────────────────────────
+
+/**
+ * True when dateStr (YYYY-MM-DD) falls within the active calendar filter range.
+ * calDateTo is exclusive, matching the rest of the codebase convention.
+ */
+function isInRange(dateStr: string): boolean {
+  return !!(
+    state.calDateFrom &&
+    state.calDateTo &&
+    dateStr >= state.calDateFrom &&
+    dateStr < state.calDateTo
+  );
+}
+
+/**
+ * Compute the combined box-shadow for an in-range day cell: a perimeter
+ * accent border on whichever edges are not shared with another in-range cell,
+ * plus a subtle tint layer covering the whole cell.
+ *
+ * dayOfWeek: 0=Sun, 6=Sat — used to force left/right edges at the grid
+ * boundary regardless of whether the neighbouring date is in range.
+ *
+ * Technique: inset box-shadows with a large spread (1000px) act as a
+ * semitransparent fill without clobbering the heat-map background colour.
+ * Smaller inset shadows (spread 0, blur 0, large offset) produce edge-only
+ * stripes that stack in front of the fill.
+ */
+function inRangeBoxShadow(dateKey: string, dayOfWeek: number, borderPx = 2, tintOpacity = 0.10): string {
+  const b = borderPx;
+  const shadows: string[] = [];
+  if (!isInRange(addDays(dateKey, -7))) shadows.push(`inset 0 ${b}px 0 0 var(--accent)`);   // top
+  if (!isInRange(addDays(dateKey,  7))) shadows.push(`inset 0 -${b}px 0 0 var(--accent)`);  // bottom
+  if (dayOfWeek === 0 || !isInRange(addDays(dateKey, -1))) shadows.push(`inset ${b}px 0 0 0 var(--accent)`);  // left
+  if (dayOfWeek === 6 || !isInRange(addDays(dateKey,  1))) shadows.push(`inset -${b}px 0 0 0 var(--accent)`); // right
+  // Tint is listed last so it renders behind the edge stripes.
+  shadows.push(`inset 0 0 0 1000px rgba(145, 71, 255, ${tintOpacity})`);
+  return shadows.join(', ');
+}
+
+/**
+ * True when the entire calendar month (0-based) is covered by the active filter.
+ * Used to draw the card-level border on mini-month cards in the year view — the
+ * border only appears when every day of the month is included in the selection.
+ */
+function monthFullyInRange(year: number, month: number): boolean {
+  if (!state.calDateFrom || !state.calDateTo) return false;
+  const pad    = (n: number) => String(n).padStart(2, '0');
+  const mStart = `${year}-${pad(month + 1)}-01`;
+  const mEnd   = month === 11 ? `${year + 1}-01-01` : `${year}-${pad(month + 2)}-01`;
+  return state.calDateFrom <= mStart && state.calDateTo >= mEnd;
+}
+
+/**
+ * True when the calendar month (0-based) overlaps the active filter range at all.
+ * Used to highlight year-strip pills that touch the selection.
+ */
+function monthOverlapsRange(year: number, month: number): boolean {
+  if (!state.calDateFrom && !state.calDateTo) return false;
+  const pad      = (n: number) => String(n).padStart(2, '0');
+  const mStart   = `${year}-${pad(month + 1)}-01`;
+  const mEnd     = month === 11 ? `${year + 1}-01-01` : `${year}-${pad(month + 2)}-01`;
+  const from     = state.calDateFrom;
+  const to       = state.calDateTo;
+  // Both bounds present: overlap if from < mEnd AND to > mStart.
+  if (from && to)   return from < mEnd && to > mStart;
+  if (from)         return mEnd  > from;  // open upper bound
+  if (to)           return mStart < to;   // open lower bound
+  return false;
+}
+
 // ── DB queries ────────────────────────────────────────────────────────────
 
 async function queryYearDays(year: number): Promise<{ day: string; cnt: number }[]> {
@@ -288,8 +359,11 @@ async function renderYearView(): Promise<void> {
     const totalDays = daysInMonth(state.calYear, m);
     const firstDow  = firstDayOfMonth(state.calYear, m);
 
+    // Pre-compute for use in both the card className and the mini-day loop.
+    const isFullMonth = monthFullyInRange(state.calYear, m);
+
     const card = document.createElement('div');
-    card.className = 'mini-month';
+    card.className = 'mini-month' + (isFullMonth ? ' in-range' : '');
 
     const title = document.createElement('div');
     title.className = 'mini-month-title';
@@ -310,6 +384,17 @@ async function renderYearView(): Promise<void> {
       const cell = document.createElement('div');
       cell.className = 'mini-day';
       cell.style.background = heatColor(cnt);
+      if (isInRange(key)) {
+        const dayOfWeek = (firstDow + day - 1) % 7; // 0=Sun, 6=Sat
+        if (isFullMonth) {
+          // Card border already shows the full-month selection — just tint the
+          // cells without drawing per-cell left/right column-edge borders, which
+          // would create a noisy grid of vertical stripes across all week rows.
+          cell.style.boxShadow = 'inset 0 0 0 1000px rgba(145, 71, 255, 0.12)';
+        } else {
+          cell.style.boxShadow = inRangeBoxShadow(key, dayOfWeek, 2, 0.12);
+        }
+      }
       if (cnt > 0) cell.title = t().dayTooltip(key, cnt);
       grid.appendChild(cell);
     }
@@ -354,7 +439,10 @@ async function renderYearStrip(): Promise<void> {
     const cnt = (monthMap[key] as number | undefined) ?? 0;
 
     const el = document.createElement('div');
-    el.className = 'strip-month' + (m === state.calMonth ? ' active' : '');
+    const classes = ['strip-month'];
+    if (m === state.calMonth)               classes.push('active');
+    if (monthOverlapsRange(state.calYear, m)) classes.push('in-range');
+    el.className = classes.join(' ');
     el.textContent = t().monthShort[m]!;
     el.title = t().monthTooltip(t().monthLong[m]!, cnt);
     el.style.background = heatColor(cnt);
@@ -442,6 +530,13 @@ async function renderMonthGrid(): Promise<void> {
       cell.className = classes.join(' ');
       cell.style.background = heatColor(cnt);
       cell.dataset.heat = String(heatLevel(cnt));
+
+      // Perimeter border + tint for in-range cells.
+      // dayOfWeek derived from firstDow so we avoid a Date allocation per cell.
+      if (isInRange(dateKey)) {
+        const dayOfWeek = (firstDow + day - 1) % 7; // 0=Sun, 6=Sat
+        cell.style.boxShadow = inRangeBoxShadow(dateKey, dayOfWeek);
+      }
 
       const numEl = document.createElement('div');
       numEl.className = 'day-number';
@@ -800,6 +895,7 @@ export async function initCalendar(onRender: () => Promise<void>): Promise<void>
     const toVal = (document.getElementById('date-to-input') as HTMLInputElement).value;
     state.setCalDateTo(toVal ? addDays(toVal, 1) : null);
     state.setCurrentPage(1);
+    void renderCalendar();
     callRender();
   });
 
@@ -810,6 +906,7 @@ export async function initCalendar(onRender: () => Promise<void>): Promise<void>
     state.setCalDay(null);
     state.setCalWeek(null);
     state.setCurrentPage(1);
+    void renderCalendar();
     callRender();
   });
 

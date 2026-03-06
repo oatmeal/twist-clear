@@ -150,6 +150,9 @@
   border-color: var(--accent);
   transform: translateY(-2px);
 }
+.mini-month.in-range {
+  border-color: var(--accent);
+}
 
 .mini-month-title {
   font-size: 10px;
@@ -196,8 +199,9 @@
   cursor: pointer;
   transition: border-color 0.1s, color 0.1s;
 }
-.strip-month:hover { border-color: var(--accent); color: var(--text); }
-.strip-month.active { border-color: var(--accent); color: var(--text); }
+.strip-month:hover,
+.strip-month.active,
+.strip-month.in-range { border-color: var(--accent); color: var(--text); }
 
 /* ── Month view: full calendar grid ── */
 #cal-month-grid {
@@ -261,12 +265,22 @@
   cursor: default;
 }
 .month-day-cell.empty:hover { filter: none; }
-.month-day-cell.selected {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-.month-day-cell.today {
-  box-shadow: inset 0 0 0 2px var(--accent-h);
+/* Selected day: no separate outline — the perimeter border from inRangeBoxShadow
+   (applied inline) already draws all four edges for a single-day selection. */
+
+/* Today indicator: a small neutral dot at the bottom of the cell, distinct from
+   the accent-colour selection system so it is not confused with a filter. */
+.month-day-cell.today::before {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--muted);
+  pointer-events: none;
 }
 
 .day-number {
@@ -306,7 +320,9 @@
 .strip-month[data-heat="3"]:hover,
 .strip-month[data-heat="4"]:hover,
 .strip-month[data-heat="3"].active,
-.strip-month[data-heat="4"].active { color: #0a2010; }
+.strip-month[data-heat="4"].active,
+.strip-month[data-heat="3"].in-range,
+.strip-month[data-heat="4"].in-range { color: #0a2010; }
 
 /* ── Responsive ── */
 @media (max-width: 900px) {

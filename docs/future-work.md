@@ -7,8 +7,6 @@ Deferred items with rationale. See the relevant source files for implementation 
 ## Small issues
 
 Fixes:
-- "Today" is outlined on the calendar. Confusing with the actual day we're filtering to?
-- Highlight date range on calendar more clearly with outlines / shading?
 - date inputs require both to be set? Maybe make a little more obvious with an explicit "set" button or more feedback?
 - Logged in user element is positioned weirdly in the top middle of the page. When is the twitch API queried for new clips? Only on page load? Maybe we should have a refresh button as part of this?
 - Browse clears time filter; but it's not that obvious yet
