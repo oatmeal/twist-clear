@@ -139,16 +139,31 @@ function liveDayCountsForMonth(year: number, month: number): Record<string, numb
 // ── Date-range helpers ────────────────────────────────────────────────────
 
 /**
+ * Returns the effective [from, to) bounds for range highlighting.
+ * When a bound is absent, it falls back to the loaded data edge
+ * (calMinDate / calMaxDate) so highlighting never extends beyond available
+ * clip data.  Returns { from: null, to: null } when no filter is active.
+ */
+function effectiveRangeBounds(): { from: string | null; to: string | null } {
+  const { calDateFrom, calDateTo } = state;
+  if (!calDateFrom && !calDateTo) return { from: null, to: null };
+  return {
+    from: calDateFrom ?? state.calMinDate,
+    to:   calDateTo   ?? (state.calMaxDate ? addDays(state.calMaxDate, 1) : null),
+  };
+}
+
+/**
  * True when dateStr (YYYY-MM-DD) falls within the active calendar filter range.
  * calDateTo is exclusive, matching the rest of the codebase convention.
+ * Either bound may be absent; open ends are clamped to the loaded data bounds.
  */
 function isInRange(dateStr: string): boolean {
-  return !!(
-    state.calDateFrom &&
-    state.calDateTo &&
-    dateStr >= state.calDateFrom &&
-    dateStr < state.calDateTo
-  );
+  const { from, to } = effectiveRangeBounds();
+  if (!from && !to) return false;
+  if (from && dateStr < from) return false;
+  if (to   && dateStr >= to)  return false;
+  return true;
 }
 
 /**
@@ -180,30 +195,33 @@ function inRangeBoxShadow(dateKey: string, dayOfWeek: number, borderPx = 2, tint
  * True when the entire calendar month (0-based) is covered by the active filter.
  * Used to draw the card-level border on mini-month cards in the year view — the
  * border only appears when every day of the month is included in the selection.
+ * Open ends are clamped to the loaded data bounds.
  */
 function monthFullyInRange(year: number, month: number): boolean {
-  if (!state.calDateFrom || !state.calDateTo) return false;
+  const { from, to } = effectiveRangeBounds();
+  if (!from && !to) return false;
   const pad    = (n: number) => String(n).padStart(2, '0');
   const mStart = `${year}-${pad(month + 1)}-01`;
   const mEnd   = month === 11 ? `${year + 1}-01-01` : `${year}-${pad(month + 2)}-01`;
-  return state.calDateFrom <= mStart && state.calDateTo >= mEnd;
+  if (from && mStart < from) return false;
+  if (to   && mEnd   > to)   return false;
+  return true;
 }
 
 /**
  * True when the calendar month (0-based) overlaps the active filter range at all.
  * Used to highlight year-strip pills that touch the selection.
+ * Open ends are clamped to the loaded data bounds.
  */
 function monthOverlapsRange(year: number, month: number): boolean {
-  if (!state.calDateFrom && !state.calDateTo) return false;
-  const pad      = (n: number) => String(n).padStart(2, '0');
-  const mStart   = `${year}-${pad(month + 1)}-01`;
-  const mEnd     = month === 11 ? `${year + 1}-01-01` : `${year}-${pad(month + 2)}-01`;
-  const from     = state.calDateFrom;
-  const to       = state.calDateTo;
-  // Both bounds present: overlap if from < mEnd AND to > mStart.
-  if (from && to)   return from < mEnd && to > mStart;
-  if (from)         return mEnd  > from;  // open upper bound
-  if (to)           return mStart < to;   // open lower bound
+  const { from, to } = effectiveRangeBounds();
+  if (!from && !to) return false;
+  const pad    = (n: number) => String(n).padStart(2, '0');
+  const mStart = `${year}-${pad(month + 1)}-01`;
+  const mEnd   = month === 11 ? `${year + 1}-01-01` : `${year}-${pad(month + 2)}-01`;
+  if (from && to) return from < mEnd && to > mStart;
+  if (from)       return mEnd  > from;
+  if (to)         return mStart < to;
   return false;
 }
 
