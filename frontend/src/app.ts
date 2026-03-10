@@ -914,12 +914,15 @@ function bindEvents(): void {
 
 export async function init(): Promise<void> {
   applyColorOverrides();
-  setLang(detectLang());
+  // Language init: localStorage > browser locale detection.
+  const storedLang = localStorage.getItem('tc_lang') as Lang | null;
+  setLang(storedLang ?? detectLang());
   applyTranslations();
 
   // Bind the lang toggle immediately so it works even if DB fails to load.
   document.getElementById('lang-toggle')!.addEventListener('click', () => {
     const newLang: Lang = lang === 'en' ? 'ja' : 'en';
+    localStorage.setItem('tc_lang', newLang);
     setLang(newLang);
     applyTranslations();
     rebuildMonthSelect();

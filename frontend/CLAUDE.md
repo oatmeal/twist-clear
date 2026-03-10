@@ -92,6 +92,10 @@ saved to both localStorage and the URL hash. The settings gear icon in the
 controls bar opens a panel with a `<select>` populated by `populateTzSelect()`
 in `app.ts`.
 
+Language preference is persisted to `localStorage` under `tc_lang` (`'en'` or
+`'ja'`). Initialization priority: `localStorage.getItem('tc_lang')` >
+`detectLang()` (browser locale). The lang toggle saves immediately on click.
+
 ### Colour theming (`VITE_COLOR_*`)
 
 `applyColorOverrides()` in `app.ts` is called at the very top of `init()`. It
