@@ -57,15 +57,15 @@
 </div>
 
 <div id="controls">
-  <input type="search" id="search" placeholder="Search clip titles…" autocomplete="off">
+  <input type="search" id="search" placeholder="クリップタイトルを検索…" autocomplete="off">
   <select id="sort">
-    <option value="view_count_desc">Most Viewed</option>
-    <option value="view_count_asc">Least Viewed</option>
-    <option value="date_desc" selected>Newest First</option>
-    <option value="date_asc">Oldest First</option>
+    <option value="view_count_desc">再生回数が多い順</option>
+    <option value="view_count_asc">再生回数が少ない順</option>
+    <option value="date_desc" selected>新しい順</option>
+    <option value="date_asc">古い順</option>
   </select>
   <select id="game-filter">
-    <option value="">All Games</option>
+    <option value="">すべてのゲーム</option>
   </select>
   <div class="date-range-filter">
     <input type="date" id="date-from-input" title="From date">
@@ -73,8 +73,8 @@
     <input type="date" id="date-to-input" title="To date (inclusive)">
   </div>
   <div class="view-switcher">
-    <button id="btn-view-grid" class="view-btn active">Grid</button>
-    <button id="btn-view-cal"  class="view-btn">Calendar</button>
+    <button id="btn-view-grid" class="view-btn active">一覧</button>
+    <button id="btn-view-cal"  class="view-btn">カレンダー</button>
   </div>
   <span id="result-count"></span>
 </div>
@@ -118,10 +118,10 @@
 
   <div id="loading">
     <div class="spinner"></div>
-    <p id="loading-text">Loading clips database…</p>
+    <p id="loading-text">クリップデータベースを読み込み中…</p>
   </div>
   <div id="error"></div>
-  <div id="empty">No clips match your search.</div>
+  <div id="empty">検索に一致するクリップがありません。</div>
   <div id="clips-grid"></div>
   <div id="pagination"></div>
 </main>
