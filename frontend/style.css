@@ -381,6 +381,40 @@ main { padding: 24px; }
   border-color: var(--accent);
 }
 
+/* ── Prev / next navigation row (below embedded video) ── */
+.clip-nav-row {
+  display: flex;
+  align-items: stretch;
+}
+.clip-nav-row .clip-info {
+  flex: 1;
+  min-width: 0;
+}
+.clip-nav-btn {
+  flex-shrink: 0;
+  width: 40px;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.clip-nav-btn:hover:not(:disabled) {
+  background: var(--surface2);
+  color: var(--accent);
+}
+.clip-nav-btn:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+.clip-prev-btn { border-right: 1px solid var(--border); }
+.clip-next-btn { border-left: 1px solid var(--border); }
+
 .clip-play-icon {
   position: absolute;
   inset: 0;

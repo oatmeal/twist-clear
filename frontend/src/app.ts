@@ -273,6 +273,10 @@ function collapseCard(card: HTMLElement): void {
   const embedWrap = card.querySelector<HTMLElement>('.clip-embed-wrap');
   if (embedWrap && savedThumb) embedWrap.replaceWith(savedThumb);
   _thumbCache.delete(card);
+  // Restore clip-info from nav row if present
+  const navRow = card.querySelector<HTMLElement>('.clip-nav-row');
+  const info = navRow?.querySelector<HTMLElement>('.clip-info');
+  if (navRow && info) navRow.replaceWith(info);
   card.classList.remove('expanded');
   document.removeEventListener('click', _onDocClickOutside);
   _expandedCard = null;
@@ -303,12 +307,44 @@ function expandCard(card: HTMLElement): void {
     `<iframe src="${escHtml(src)}" class="clip-iframe" allowfullscreen scrolling="no"></iframe>`;
 
   thumb.replaceWith(embedWrap);
+
+  // Wrap clip-info with prev/next navigation buttons
+  const info = card.querySelector<HTMLElement>('.clip-info');
+  if (info) {
+    const allCards = Array.from(card.parentElement?.querySelectorAll<HTMLElement>('.clip-card') ?? []);
+    const idx = allCards.indexOf(card);
+    const navRow = document.createElement('div');
+    navRow.className = 'clip-nav-row';
+    const prevBtn = document.createElement('button');
+    prevBtn.className = 'clip-nav-btn clip-prev-btn';
+    prevBtn.type = 'button';
+    prevBtn.setAttribute('aria-label', t().prevClip);
+    prevBtn.disabled = idx <= 0;
+    prevBtn.innerHTML = '&#8592;';
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'clip-nav-btn clip-next-btn';
+    nextBtn.type = 'button';
+    nextBtn.setAttribute('aria-label', t().nextClip);
+    nextBtn.disabled = idx >= allCards.length - 1;
+    nextBtn.innerHTML = '&#8594;';
+    info.replaceWith(navRow);
+    navRow.append(prevBtn, info, nextBtn);
+  }
+
   card.classList.add('expanded');
   _expandedCard = card;
   card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   // Add click-outside listener on the next tick so the current click
   // doesn't immediately trigger it and collapse the card.
   setTimeout(() => document.addEventListener('click', _onDocClickOutside), 0);
+}
+
+function navigateClip(direction: 'prev' | 'next'): void {
+  if (!_expandedCard) return;
+  const allCards = Array.from(_expandedCard.parentElement?.querySelectorAll<HTMLElement>('.clip-card') ?? []);
+  const idx = allCards.indexOf(_expandedCard);
+  const target = allCards[direction === 'prev' ? idx - 1 : idx + 1];
+  if (target) expandCard(target);
 }
 
 // ── Live clips ────────────────────────────────────────────────────────────
@@ -850,6 +886,14 @@ function bindEvents(): void {
     if (target.closest('.clip-close-btn')) {
       const card = target.closest<HTMLElement>('.clip-card');
       if (card) collapseCard(card);
+      return;
+    }
+    if (target.closest('.clip-prev-btn')) {
+      navigateClip('prev');
+      return;
+    }
+    if (target.closest('.clip-next-btn')) {
+      navigateClip('next');
       return;
     }
     if (target.closest('.clip-thumb')) {

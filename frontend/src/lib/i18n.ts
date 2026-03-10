@@ -34,6 +34,8 @@ export interface Translations {
   tzLabel: string;
   // Embed
   closeEmbed: string;
+  prevClip: string;
+  nextClip: string;
   // Dynamic clip card text
   views: (formatted: string) => string;
   creatorLine: (creator: string, date: string) => string;
@@ -78,6 +80,8 @@ const en: Translations = {
   liveSectionCollapse: 'Collapse',
   tzLabel: 'Timezone',
   closeEmbed: 'Close embed',
+  prevClip: 'Previous clip',
+  nextClip: 'Next clip',
   views: (f) => `${f} views`,
   creatorLine: (creator, date) => `by ${creator} · ${date}`,
   resultCount: (n) => `${n.toLocaleString()} clip${n !== 1 ? 's' : ''}`,
@@ -130,6 +134,8 @@ const ja: Translations = {
   liveSectionCollapse: '折りたたむ',
   tzLabel: 'タイムゾーン',
   closeEmbed: '閉じる',
+  prevClip: '前のクリップ',
+  nextClip: '次のクリップ',
   views: (f) => `${f}回視聴`,
   creatorLine: (creator, date) => `作成者: ${creator}さん · ${date}`,
   resultCount: (n) => `${n.toLocaleString()}本のクリップ`,
