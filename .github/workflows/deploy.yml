@@ -244,6 +244,13 @@ jobs:
           VITE_COLOR_MUTED:    ${{ inputs.color_muted }}
           VITE_COLOR_CAL_ACCENT: ${{ inputs.cal_accent_color }}
 
+      - name: Generate OG screenshot
+        # Uses system Chrome (pre-installed on ubuntu-24.04) via playwright-core
+        # channel: 'chrome' — no browser download needed, no cache required.
+        # Starts vite preview (port 4174), waits for the clip grid to render,
+        # screenshots at 1200×630, writes frontend/dist/og-image.png.
+        run: npm --prefix frontend run screenshot-og
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b  # v4.0.0
         with:

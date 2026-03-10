@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "screenshot-og": "vite-node scripts/screenshot-og.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepare-db": "cd .. && python3 prepare_web_db.py data/clips.db frontend/public/clips.db"
@@ -16,6 +17,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "playwright-core": "^1.50.0",
     "typescript": "^5.0.0",
     "vite": "^6.0.0",
     "vitest": "^3.0.0"

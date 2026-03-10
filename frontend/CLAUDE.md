@@ -39,6 +39,12 @@ src/
 `main.ts` is the Vite entry point; it just calls `init()` from `app.ts`.
 `index.html`, `vite.config.ts`, `tsconfig.json`, `package.json` are standard.
 
+```
+scripts/
+  screenshot-og.ts  # Post-build: starts vite preview, screenshots at 1200×630,
+                    #   writes frontend/dist/og-image.png for og:image
+```
+
 ## Key design decisions
 
 ### sql.js-httpvfs — async query model
@@ -95,6 +101,31 @@ in `app.ts`.
 Language preference is persisted to `localStorage` under `tc_lang` (`'en'` or
 `'ja'`). Initialization priority: `localStorage.getItem('tc_lang')` >
 `detectLang()` (browser locale). The lang toggle saves immediately on click.
+
+### OG screenshot (`scripts/screenshot-og.ts`)
+
+`npm run screenshot-og` (run after `npm run build`) generates `frontend/dist/og-image.png`
+for the `<meta property="og:image">` tag. It uses `playwright-core` with
+`channel: 'chrome'` — no browser download is needed because:
+
+- **CI (ubuntu-24.04)**: Google Chrome is pre-installed on the runner image.
+- **Local (macOS)**: Playwright locates Chrome at its standard install path.
+
+The script spawns `vite preview` on port 4174 (rather than the default 4173, to
+avoid colliding with a running dev server) and polls until it responds. It then
+waits for `#loading` to be hidden (the signal app.ts fires after the DB
+initialises), then for `networkidle` (thumbnail images are `loading="lazy"` and
+arrive from Twitch's CDN after the cards render), before capturing a 1200×630
+viewport screenshot.
+
+`vite preview` is used (not a generic static server) because `dbRangePlugin`
+patches `configurePreviewServer` to handle HTTP Range requests for the DB file.
+Without it, sql.js-httpvfs would download the entire DB on every query.
+
+The `og:image` URL in `index.html` is `%VITE_SITE_URL%og-image.png` — a fixed
+path that requires no post-build HTML surgery. When `VITE_SITE_URL` is empty
+(local dev without the env var set) the tag resolves to a relative path, which
+crawlers won't follow, but that's fine since og:image only matters in production.
 
 ### Colour theming (`VITE_COLOR_*`)
 

@@ -150,4 +150,6 @@ npm run prepare-db   # → writes frontend/public/clips.db
 
 npm run build        # production Vite build → frontend/dist/
                      # requires frontend/public/clips.db (run prepare-db first)
+npm run screenshot-og  # take 1200×630 og:image screenshot → frontend/dist/og-image.png
+                       # requires a build (run build first); uses system Chrome
 ```
