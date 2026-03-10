@@ -231,7 +231,7 @@ jobs:
           CACHE_HIT: ${{ steps.restore-cache.outputs.cache-hit }}
 
       - name: Verify database available
-        if: ${{ inputs.scrape_mode == 'skip' && steps.restore-cache.outputs.cache-hit != 'true' }}
+        if: ${{ inputs.scrape_mode == 'skip' && !steps.restore-cache.outputs.cache-matched-key }}
         run: |
           echo "::error::scrape_mode=skip but no cached database was found. Run once without skip to populate the cache."
           exit 1
