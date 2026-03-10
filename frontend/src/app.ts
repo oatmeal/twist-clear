@@ -93,9 +93,15 @@ function applyStateHash(hashStr: string): void {
 
 // ── DB query helpers ──────────────────────────────────────────────────────
 
-// Broadcaster ID and DB cutoff date — set once during init, never change.
+// Broadcaster ID and DB metadata — set once during init, never change.
 let _broadcasterId: string | null = null;
+// MAX(created_at) from clips — used as started_at for the Twitch live-clip
+// API call and as the deduplication boundary in filterLiveClips.
 let _dbCutoffDate:  string | null = null;
+// MAX(last_scraped_at) from streamers — shown in the login banner because it
+// reflects when the scraper last ran (always >= _dbCutoffDate), giving a more
+// accurate "archive current as of" time than the newest clip timestamp.
+let _dbScrapeDate:  string | null = null;
 
 async function setStreamerTag(): Promise<string | null> {
   const rows = await q('SELECT id, display_name, login FROM streamers');
@@ -447,7 +453,7 @@ function renderLiveSection(): void {
 
 /**
  * Update the login banner and auth indicator to match current auth state.
- * Must be called after _dbCutoffDate is set.
+ * Must be called after _dbCutoffDate and _dbScrapeDate are set.
  */
 function syncAuthUI(): void {
   const banner     = document.getElementById('login-banner')!;
@@ -473,7 +479,8 @@ function syncAuthUI(): void {
     if (dismissed) {
       banner.style.display = 'none';
     } else {
-      const dateLabel = _dbCutoffDate ? fmtDate(_dbCutoffDate, state.tzOffset, lang) : '';
+      const displayDate = _dbScrapeDate ?? _dbCutoffDate;
+      const dateLabel = displayDate ? fmtDateTime(displayDate, lang, state.tzOffset) : '';
       bannerText.textContent = dateLabel
         ? t().loginBannerWithDate(dateLabel)
         : t().loginBannerNoDate;
@@ -1044,13 +1051,19 @@ export async function init(): Promise<void> {
     );
     setUseMeta(metaRows.length > 0);
 
-    // Get the DB cutoff date for the login banner and the live-clip fetch.
+    // Get the DB cutoff date for the live-clip fetch and deduplication.
     // Always use MAX(created_at) directly — clips_meta.max_date is truncated to
     // YYYY-MM-DD for calendar use, which would cause clips already in the DB to
     // be re-fetched as "new" when passed as started_at to the Twitch API.
     // The clips_created_at index makes this a single B-tree leaf read.
     const cutoffRows = await q('SELECT MAX(created_at) AS max_date FROM clips');
     _dbCutoffDate = (cutoffRows[0]?.['max_date'] as string | undefined) ?? null;
+
+    // Get the scrape timestamp for the login banner. last_scraped_at is when
+    // the scraper last ran, which is always >= MAX(created_at) and more
+    // accurately reflects "archive current as of this moment".
+    const scrapeRows = await q('SELECT MAX(last_scraped_at) AS scraped FROM streamers');
+    _dbScrapeDate = (scrapeRows[0]?.['scraped'] as string | undefined) ?? null;
 
     document.getElementById('loading')!.style.display = 'none';
     document.getElementById('controls')!.style.display = 'flex';

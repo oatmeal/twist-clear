@@ -101,6 +101,34 @@ describe('filterLiveClips', () => {
     expect(filterLiveClips({ ...base, clips })).toHaveLength(1);
   });
 
+  // ── DB cutoff deduplication ───────────────────────────────────────────────
+  // fetchNewClips() passes started_at=dbCutoffDate (inclusive), so Twitch
+  // returns the clip at exactly dbCutoffDate even though it is already in the
+  // DB. filterLiveClips must strip it to prevent duplicate cards.
+
+  it('strips a clip whose created_at equals dbCutoffDate (the already-archived newest clip)', () => {
+    const atCutoff    = makeClip({ id: 'at',    created_at: '2024-06-01T00:00:00Z' });
+    const afterCutoff = makeClip({ id: 'after', created_at: '2024-06-01T00:00:01Z' });
+    const result = filterLiveClips({ ...base, clips: [atCutoff, afterCutoff] });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe('after');
+  });
+
+  it('strips all clips at or before dbCutoffDate', () => {
+    const before   = makeClip({ id: 'before', created_at: '2024-05-31T23:59:59Z' });
+    const atCutoff = makeClip({ id: 'at',      created_at: '2024-06-01T00:00:00Z' });
+    const after    = makeClip({ id: 'after',   created_at: '2024-06-15T12:00:00Z' });
+    const result = filterLiveClips({ ...base, clips: [before, atCutoff, after] });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe('after');
+  });
+
+  it('does not strip any clips when dbCutoffDate is null', () => {
+    const clip = makeClip({ created_at: '2024-06-01T00:00:00Z' });
+    const result = filterLiveClips({ ...base, dbCutoffDate: null, clips: [clip] });
+    expect(result).toHaveLength(1);
+  });
+
   // ── calDateFrom ───────────────────────────────────────────────────────────
 
   it('excludes clips older than calDateFrom', () => {
@@ -270,11 +298,12 @@ describe('filterLiveClips', () => {
 
   it('non-zero tzOffset shifts the UTC cutoff correctly (UTC-5)', () => {
     // UTC-5 (-300 min): local Jun 2 midnight = 2024-06-02T05:00:00Z in UTC
-    // dbCutoffDate = '2024-06-02T03:00:00Z' — a clip timestamped Jun 1 local time
+    // dbCutoffDate = '2024-06-02T03:00:00Z'
     // calDateTo = '2024-06-02' local → calDateToUtc = '2024-06-02T05:00:00.000Z'
-    // '2024-06-02T05:00:00.000Z' > '2024-06-02T03:00:00Z' → guard does NOT fire
-    // clip at '2024-06-01T20:00:00Z' (local Jun 1 3pm UTC-5) < '2024-06-02T05:00:00.000Z' → included
-    const clip = makeClip({ created_at: '2024-06-01T20:00:00Z' });
+    // '2024-06-02T05:00:00.000Z' > '2024-06-02T03:00:00Z' → calDateTo guard does NOT fire
+    // clip at '2024-06-02T04:00:00Z' (Jun 1 11pm UTC-5): > dbCutoffDate (passes dedup)
+    //   and < calDateToUtc (passes upper bound) → included
+    const clip = makeClip({ created_at: '2024-06-02T04:00:00Z' });
     const result = filterLiveClips({
       ...base,
       clips:        [clip],

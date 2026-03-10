@@ -31,6 +31,13 @@ export function filterLiveClips(opts: LiveFilterOpts): LiveClip[] {
     return [];
   }
 
+  // Strip clips already present in the DB. The Twitch started_at parameter is
+  // inclusive, so fetchNewClips() returns the clip at exactly dbCutoffDate
+  // (MAX(created_at)) even though it is already archived. Strict > excludes it.
+  if (opts.dbCutoffDate) {
+    clips = clips.filter(c => c.created_at > opts.dbCutoffDate!);
+  }
+
   // Apply lower date bound (calDateFrom is a local YYYY-MM-DD date).
   if (opts.calDateFrom !== null) {
     const from = localDateToUtcBound(opts.calDateFrom, opts.tzOffset);
