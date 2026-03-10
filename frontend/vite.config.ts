@@ -142,8 +142,15 @@ function dbRangePlugin(): Plugin {
   }
 }
 
+// Derive the base path from VITE_SITE_URL so Vite emits correct asset paths
+// when the site is hosted at a subpath (e.g. /<reponame>/ on GitHub Pages).
+// Falls back to '/' for local dev where VITE_SITE_URL is empty.
+const siteUrl = process.env['VITE_SITE_URL'] ?? '';
+const viteBase = siteUrl ? new URL(siteUrl).pathname : '/';
+
 export default defineConfig({
   root: '.',
+  base: viteBase,
   publicDir: 'public',
   server: {
     port: parseInt(process.env['PORT'] ?? '5173', 10),
