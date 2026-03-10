@@ -17,7 +17,7 @@ type BindParams = Record<string, string | number | null> | (string | number | nu
 
 let _worker: WorkerHttpvfs | null = null;
 
-export const DB_URL = '/clips.db';
+export const DB_URL = import.meta.env.BASE_URL + 'clips.db';
 
 export async function initDb(dbUrl: string = DB_URL): Promise<void> {
   _worker = await createDbWorker(

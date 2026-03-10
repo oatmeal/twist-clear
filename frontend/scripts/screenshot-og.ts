@@ -73,7 +73,7 @@ try {
     // detectLang(), so this ensures the first render is already in Japanese.
     await page.addInitScript(() => localStorage.setItem('tc_lang', 'ja'));
 
-    await page.goto(BASE_URL, { waitUntil: 'load' });
+    await page.goto(`${BASE_URL}${import.meta.env.BASE_URL}`, { waitUntil: 'load' });
 
     // Wait for the DB to initialise — app.ts hides #loading once the first
     // query completes, whether or not there are any clips in the result set.

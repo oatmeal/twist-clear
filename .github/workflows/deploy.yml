@@ -280,6 +280,11 @@ jobs:
         # Starts vite preview (port 4174), waits for the clip grid to render,
         # screenshots at 1200×630, writes frontend/dist/og-image.png.
         run: npm --prefix frontend run screenshot-og
+        env:
+          # vite.config.ts reads VITE_SITE_URL to compute viteBase, which
+          # vite-node then injects as import.meta.env.BASE_URL. Without this,
+          # the script would navigate to the root path instead of /<reponame>/.
+          VITE_SITE_URL: ${{ steps.site-url.outputs.url }}
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b  # v4.0.0
