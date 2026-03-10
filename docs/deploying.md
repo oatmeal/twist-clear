@@ -63,6 +63,11 @@ on:
     - cron: '0 6 * * *'   # every day at 06:00 UTC
   workflow_dispatch:        # allow manual runs from the Actions tab
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
 jobs:
   deploy:
     uses: oatmeal/twist-clear/.github/workflows/deploy.yml@master

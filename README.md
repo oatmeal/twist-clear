@@ -37,6 +37,11 @@ on:
     - cron: '0 6 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
 jobs:
   deploy:
     uses: oatmeal/twist-clear/.github/workflows/deploy.yml@master
