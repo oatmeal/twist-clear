@@ -50,6 +50,8 @@ jobs:
 
 6. **Trigger the first run** manually from the Actions tab. Once it completes, your archive is live at `https://YOUR_USERNAME.github.io/my-clips/`.
 
+Optional inputs let you customise the site title, social-preview metadata, and the full colour palette — see [Inputs reference](docs/deploying.md#inputs-reference) in the deployment guide.
+
 ---
 
 ## Running locally

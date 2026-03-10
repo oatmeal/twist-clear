@@ -137,12 +137,37 @@ with:
 
 ## Inputs reference
 
+### Scraper
+
 | Input | Required | Default | Description |
 |---|---|---|---|
 | `streamers` | Yes | — | Comma-separated Twitch channel logins |
-| `force` | No | `false` | Reset fetch state before scraping (re-scans full history; rarely needed since daily runs already rebuild from scratch) |
+| `force` | No | `false` | Reset all fetch state and re-scan the full clip history. Useful on a weekly or monthly schedule alongside a faster daily run without `--force` |
 | `scraper_ref` | No | `master` | Branch, tag, or SHA of `twist-clear` to use |
 | `code_repo` | No | `oatmeal/twist-clear` | Override if using a fork or copy under a different account |
+
+### Branding / metadata
+
+| Input | Required | Default | Description |
+|---|---|---|---|
+| `site_title` | No | `twist-clear clip archive` | Title prefix shown in the browser tab and page heading (streamer names are appended automatically at runtime) |
+| `og_description` | No | `A Twitch clip archive.` | Text for the `og:description` meta tag used in social link previews |
+| `site_url` | No | *(auto-computed)* | Canonical URL for the `og:url` meta tag (e.g. `https://user.github.io/my-clips/`). Auto-computed from the calling repo if omitted |
+
+### Colours
+
+All colour inputs accept any valid CSS colour value (`#rrggbb`, `hsl()`, `oklch()`, etc.). Omitting an input keeps the default dark-theme value. See [docs/theming.md](theming.md) for guidance and example palettes.
+
+| Input | Required | Default | Description |
+|---|---|---|---|
+| `accent_color` | No | `#9147ff` | Accent colour for interactive highlights, buttons, and the calendar heat-map |
+| `color_bg` | No | `#0e0e0e` | Page background colour |
+| `color_surface` | No | `#1f1f23` | Card and header background colour |
+| `color_surface2` | No | `#26262c` | Secondary surfaces: dropdowns, nav buttons |
+| `color_border` | No | `#3a3a40` | Border and divider colour |
+| `color_text` | No | `#efeff1` | Primary text colour |
+| `color_muted` | No | `#adadb8` | Secondary text and labels colour |
+| `cal_accent_color` | No | `#22a84a` | Calendar heat-map colour, kept separate from `accent_color` so the density ramp reads as data rather than interactive UI |
 
 ---
 
