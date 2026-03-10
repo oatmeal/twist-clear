@@ -36,6 +36,13 @@ on:
   schedule:
     - cron: '0 6 * * *'
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Scraping mode'
+        required: false
+        type: choice
+        options: [fetch, update, skip]
+        default: fetch
 
 permissions:
   contents: read
@@ -47,6 +54,7 @@ jobs:
     uses: oatmeal/twist-clear/.github/workflows/deploy.yml@master
     with:
       streamers: "streamer1,streamer2"
+      scrape_mode: ${{ github.event.inputs.mode || 'fetch' }}
     secrets:
       TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
       TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}

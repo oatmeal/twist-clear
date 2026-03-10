@@ -61,7 +61,14 @@ name: Deploy clip archive
 on:
   schedule:
     - cron: '0 6 * * *'   # every day at 06:00 UTC
-  workflow_dispatch:        # allow manual runs from the Actions tab
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Scraping mode'
+        required: false
+        type: choice
+        options: [fetch, update, skip]
+        default: fetch
 
 permissions:
   contents: read
@@ -73,6 +80,7 @@ jobs:
     uses: oatmeal/twist-clear/.github/workflows/deploy.yml@master
     with:
       streamers: "streamer1,streamer2"
+      scrape_mode: ${{ github.event.inputs.mode || 'fetch' }}
     secrets:
       TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
       TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
@@ -91,7 +99,7 @@ The scheduled workflow won't run until GitHub activates the schedule (which can 
 2. Select the **Deploy clip archive** workflow.
 3. Click **Run workflow**.
 
-The first run performs a full historical scrape, which can take up to ~30 minutes depending on how many clips the channels have. Subsequent daily runs are the same — each run rebuilds from a blank database — but the full scrape time is acceptable for a daily job.
+The first run performs a full historical scrape, which can take up to ~30 minutes depending on how many clips the channels have. The database is cached between runs, so subsequent runs using `scrape_mode: update` are much faster (incremental only). With the default `scrape_mode: fetch` (one full rescan per day), each run takes roughly the same amount of time but keeps view counts current.
 
 Once complete, your clip archive will be live at:
 ```
@@ -102,7 +110,7 @@ https://YOUR_GITHUB_USERNAME.github.io/my-clips/
 
 ## Keeping view counts current
 
-Each daily run starts from a blank database and runs `scrape.py fetch`, which re-fetches all clip metadata including current view counts. So view counts are always fully refreshed on every deployment. No extra configuration is needed.
+With the default `scrape_mode: fetch`, each run does a full historical rescan via `scrape.py fetch --force`, re-fetching all clip metadata including current view counts. View counts are fully refreshed on every deployment. No extra configuration is needed.
 
 If the scrape is ever interrupted mid-run, the next run picks up where it left off (the progress checkpoint is written to the database after each time window).
 
@@ -128,6 +136,53 @@ Change `@master` to a tag or commit SHA:
 uses: oatmeal/twist-clear/.github/workflows/deploy.yml@v1.2.3
 ```
 
+### Frequent intra-day updates with a daily full rescan
+
+For an archive that updates throughout the day while still refreshing view counts once daily, use two schedules and pass `scrape_mode` based on which cron fired:
+
+```yaml
+name: Deploy clip archive
+
+on:
+  schedule:
+    - cron: '0 * * * *'   # every hour — fast incremental update
+    - cron: '0 6 * * *'   # daily at 06:00 UTC — full rescan, refresh view counts
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Scraping mode'
+        required: false
+        type: choice
+        options: [fetch, update, skip]
+        default: fetch
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    uses: oatmeal/twist-clear/.github/workflows/deploy.yml@master
+    with:
+      streamers: "streamer1,streamer2"
+      scrape_mode: ${{ github.event.schedule == '0 6 * * *' && 'fetch' || github.event.inputs.mode || 'update' }}
+    secrets:
+      TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
+      TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
+      TWITCH_WEB_CLIENT_ID: ${{ secrets.TWITCH_WEB_CLIENT_ID }}
+```
+
+The expression resolves to:
+
+| Trigger | `scrape_mode` | Behaviour |
+|---|---|---|
+| Daily schedule (`0 6 * * *`) | `fetch` | Full rescan, view counts refreshed |
+| Hourly schedule (any other cron) | `update` | Incremental, ~seconds |
+| Manual dispatch | whichever option you selected | — |
+
+To redeploy after a styling change without waiting for the scraper, trigger a manual run and select **skip**.
+
 ### Using a fork or copy of the code under a different account
 
 If your copy of `twist-clear` is under a different account than `oatmeal`, pass the `code_repo` input:
@@ -147,7 +202,7 @@ with:
 | Input | Required | Default | Description |
 |---|---|---|---|
 | `streamers` | Yes | — | Comma-separated Twitch channel logins |
-| `force` | No | `false` | Reset all fetch state and re-scan the full clip history. Useful on a weekly or monthly schedule alongside a faster daily run without `--force` |
+| `scrape_mode` | No | `fetch` | `fetch` — full rescan via `scrape.py fetch --force`, refreshes all view counts; `update` — restore cached DB then run `scrape.py update` (incremental, only new clips; falls back to full fetch if no cache exists); `skip` — restore cached DB and skip scraping (fails if no cache) |
 | `scraper_ref` | No | `master` | Branch, tag, or SHA of `twist-clear` to use |
 | `code_repo` | No | `oatmeal/twist-clear` | Override if using a fork or copy under a different account |
 
@@ -186,6 +241,9 @@ Make sure GitHub Pages is enabled with **GitHub Actions** as the source in your 
 
 **The deployed site loads but shows no clips**
 The scrape completed but found no clips. Verify the streamer logins are correct (Twitch login names are lowercase). Check the workflow logs for any API errors.
+
+**The workflow fails at "Verify database available"**
+You used `scrape_mode: skip` but no cached database exists yet. Run the workflow once without `skip` (e.g. `fetch` or `update`) to populate the cache, then switch back to `skip`.
 
 **`prepare_web_db.py` fails with "SQLite too old"**
 The FTS5 trigram tokenizer requires SQLite ≥ 3.38. The reusable workflow pins to `ubuntu-24.04` (SQLite 3.45+) to avoid this. If you're running the preparation script locally, make sure your system SQLite is ≥ 3.38 (`sqlite3 --version`).

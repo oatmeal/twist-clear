@@ -89,6 +89,31 @@ Deferred as low priority since most archives track a single streamer.
 
 ---
 
+## DB versioning for zero-downtime deployments
+
+`clips.db` is served as a static file. sql.js-httpvfs caches SQLite pages in the
+Web Worker's memory for the lifetime of the session, but any pages not yet
+fetched are requested lazily. If a deployment swaps `clips.db` while a user is
+mid-session, a query could mix pages from the old and new DB versions, causing
+sql.js to report corruption. A page refresh always fixes it.
+
+The proper fix is to include a content hash in the DB URL
+(e.g. `clips.db?v=<hash>`) so in-flight sessions keep fetching the old file and
+new sessions automatically get the new one. This requires:
+
+1. `prepare_web_db.py` (or the build step) to compute a hash of `clips.db` and
+   write it as a Vite env var (e.g. `VITE_DB_HASH`).
+2. `db.ts` to append `?v=${import.meta.env.VITE_DB_HASH}` to `DB_URL`.
+3. GitHub Pages to serve old files for at least one session's lifetime after a
+   new deployment. GitHub Pages evicts the old deployment immediately, so step 3
+   is not guaranteed — a CDN or proxy in front of GitHub Pages would be needed
+   for a fully watertight solution.
+
+The risk is low in practice (requires unlucky timing), and a refresh recovers
+the user instantly, so this is deferred.
+
+---
+
 ## Content Security Policy: frame-ancestors
 
 The CSP is set via a `<meta>` tag because GitHub Pages does not support custom
