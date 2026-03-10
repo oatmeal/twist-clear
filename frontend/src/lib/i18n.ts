@@ -17,6 +17,7 @@ export interface Translations {
   noClips: string;
   errorTitle: string;
   errorHint: string;
+  renderError: string;
   // Auth / login banner
   loginBtn: string;
   logoutBtn: string;
@@ -66,7 +67,8 @@ const en: Translations = {
   loading: 'Loading clips database…',
   noClips: 'No clips match your search.',
   errorTitle: 'Could not load the database.',
-  errorHint: 'Make sure you are serving this page over HTTP and that <code>clips.db</code> is accessible. Run: <code>npm run dev</code> from the frontend/ directory.',
+  errorHint: 'Try refreshing the page. If the problem persists, the archive may be temporarily unavailable.',
+  renderError: 'Something went wrong loading clips — try refreshing the page.',
   loginBtn: 'Login with Twitch',
   logoutBtn: 'Log out',
   refreshBtn: 'Fetch latest clips',
@@ -120,7 +122,8 @@ const ja: Translations = {
   loading: 'クリップデータベースを読み込み中…',
   noClips: '検索に一致するクリップがありません。',
   errorTitle: 'データベースを読み込めませんでした。',
-  errorHint: 'HTTPでページを提供し、<code>clips.db</code>にアクセスできることを確認してください。フロントエンドディレクトリから <code>npm run dev</code> を実行してください。',
+  errorHint: 'ページを更新してみてください。問題が解決しない場合、アーカイブが一時的に利用できない状態になっている可能性があります。',
+  renderError: 'クリップの読み込みに失敗しました。ページを更新してみてください。',
   loginBtn: 'Twitchでログイン',
   logoutBtn: 'ログアウト',
   refreshBtn: '新着クリップ更新',

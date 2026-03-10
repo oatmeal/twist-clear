@@ -690,7 +690,9 @@ export async function render(): Promise<void> {
     pushHash();
   } catch (e) {
     if (ctrl.signal.aborted) return; // expected: a newer render() preempted us
-    throw e;
+    console.error('render() failed:', e);
+    document.getElementById('clips-grid')!.innerHTML =
+      `<p class="error-msg">${escHtml(t().renderError)}</p>`;
   }
 }
 

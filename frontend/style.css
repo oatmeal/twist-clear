@@ -302,6 +302,17 @@ main { padding: 24px; }
 }
 #error code { font-family: monospace; background: rgba(0,0,0,.3); padding: 2px 5px; border-radius: 3px; }
 
+.error-msg {
+  background: #2d1515;
+  border: 1px solid #6b2020;
+  border-radius: 8px;
+  padding: 14px 18px;
+  color: #f99;
+  font-size: 13px;
+  line-height: 1.6;
+  grid-column: 1 / -1;
+}
+
 /* ── Clip grid ── */
 #clips-grid {
   display: grid;
