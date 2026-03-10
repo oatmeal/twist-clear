@@ -27,6 +27,15 @@ describe('fmtViews', () => {
   it('formats exactly 1K', () => expect(fmtViews(1_000)).toBe('1.0K'));
   it('formats small numbers as-is', () => expect(fmtViews(42)).toBe('42'));
   it('formats 999 as-is', () => expect(fmtViews(999)).toBe('999'));
+
+  describe('ja locale', () => {
+    it('formats 億 (100M+)', () => expect(fmtViews(150_000_000, 'ja')).toBe('1.5億'));
+    it('formats exactly 1億', () => expect(fmtViews(100_000_000, 'ja')).toBe('1.0億'));
+    it('formats 万 (10K+)', () => expect(fmtViews(25_000, 'ja')).toBe('2.5万'));
+    it('formats exactly 1万', () => expect(fmtViews(10_000, 'ja')).toBe('1.0万'));
+    it('formats small numbers as-is', () => expect(fmtViews(9_999, 'ja')).toBe('9,999'));
+    it('formats sub-10K as-is', () => expect(fmtViews(42, 'ja')).toBe('42'));
+  });
 });
 
 describe('fmtDate', () => {

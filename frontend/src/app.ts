@@ -221,7 +221,7 @@ function clipCardHtml(clip: {
           </a>
         </div>
         <div class="clip-meta">
-          <span class="views">${t().views(fmtViews(clip.view_count))}</span>
+          <span class="views">${t().views(fmtViews(clip.view_count, lang))}</span>
           ${clip.game_name ? `<span>${escHtml(clip.game_name)}</span>` : ''}
           <span>${t().creatorLine(escHtml(clip.creator_name), fmtDateTime(clip.created_at, lang, state.tzOffset))}</span>
         </div>
@@ -294,7 +294,7 @@ function expandCard(card: HTMLElement): void {
   const embedWrap = document.createElement('div');
   embedWrap.className = 'clip-embed-wrap';
   embedWrap.innerHTML =
-    `<button class="clip-close-btn" aria-label="Close embed" type="button">&#x2715;</button>` +
+    `<button class="clip-close-btn" aria-label="${escHtml(t().closeEmbed)}" type="button">&#x2715;</button>` +
     `<iframe src="${escHtml(src)}" class="clip-iframe" allowfullscreen scrolling="no"></iframe>`;
 
   thumb.replaceWith(embedWrap);
@@ -376,13 +376,15 @@ function renderLiveSection(): void {
     return;
   }
 
-  const dateLabel = _dbCutoffDate ? fmtDate(_dbCutoffDate, state.tzOffset) : '';
-  const plural    = filtered.length === 1 ? 'clip' : 'clips';
-  titleEl.textContent = `${filtered.length} new ${plural}${dateLabel ? ` since ${dateLabel}` : ''}`;
+  const dateLabel = _dbCutoffDate ? fmtDate(_dbCutoffDate, state.tzOffset, lang) : '';
+  titleEl.textContent = dateLabel
+    ? t().liveTitle(filtered.length, dateLabel)
+    : t().liveTitleNoDate(filtered.length);
 
   const collapsed = localStorage.getItem('tc_live_collapsed') === '1';
   toggleEl.textContent = collapsed ? '▶' : '▼';
-  toggleEl.title       = collapsed ? 'Show' : 'Collapse';
+  toggleEl.title       = collapsed ? t().liveSectionShow : t().liveSectionCollapse;
+  toggleEl.setAttribute('aria-label', collapsed ? t().liveSectionShow : t().liveSectionCollapse);
   grid.style.display   = collapsed ? 'none' : '';
 
   grid.innerHTML = filtered.map(c => clipCardHtml(c, ' live-clip')).join('');
@@ -421,10 +423,10 @@ function syncAuthUI(): void {
     if (dismissed) {
       banner.style.display = 'none';
     } else {
-      const dateLabel = _dbCutoffDate ? fmtDate(_dbCutoffDate, state.tzOffset) : '';
+      const dateLabel = _dbCutoffDate ? fmtDate(_dbCutoffDate, state.tzOffset, lang) : '';
       bannerText.textContent = dateLabel
-        ? `This archive has clips through ${dateLabel}. Log in with Twitch to see newer clips.`
-        : 'Log in with Twitch to see clips newer than this archive.';
+        ? t().loginBannerWithDate(dateLabel)
+        : t().loginBannerNoDate;
       banner.style.display = 'flex';
     }
   }
@@ -700,6 +702,23 @@ function applyTranslations(): void {
   const loadingText = document.getElementById('loading-text');
   if (loadingText) loadingText.textContent = tr.loading;
   (document.getElementById('empty') as HTMLElement).textContent = tr.noClips;
+
+  // Auth / login
+  const loginBtn = document.getElementById('btn-login');
+  if (loginBtn) loginBtn.textContent = tr.loginBtn;
+  const logoutBtn = document.getElementById('btn-logout');
+  if (logoutBtn) logoutBtn.textContent = tr.logoutBtn;
+  const dismissBtn = document.getElementById('btn-dismiss-banner');
+  if (dismissBtn) dismissBtn.setAttribute('aria-label', tr.dismissBanner);
+
+  // Settings panel — timezone label
+  const tzLabelEl = document.getElementById('tz-label-text');
+  if (tzLabelEl) tzLabelEl.textContent = tr.tzLabel;
+  const settingsBtn = document.getElementById('btn-settings');
+  if (settingsBtn) {
+    settingsBtn.title = tr.tzLabel;
+    settingsBtn.setAttribute('aria-label', tr.tzLabel);
+  }
 
   // Language toggle: highlight the active language in the EN/JA segmented pill.
   const optEn = document.getElementById('lang-opt-en');

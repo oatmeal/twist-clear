@@ -12,7 +12,6 @@ Fixes:
 - When is the Twitch API queried for new clips? Only on page load? Maybe we should have a refresh button as part of the live-clips indicator.
 
 i18n:
-- i18n, localize view counts. In Japanese not K, M, etc. but 万, 億
 - i18n, Japanese names for games (use IGDB?)
 
 Other stuff required before release:
@@ -32,35 +31,6 @@ Maybe there's a neater UI for this?
 ## Daily timeline with clips as dots
 
 When filtering to a specific day (or week, even?) show clips as dots on a timeline. Bigger dots mean more views?
-
----
-
-## i18n: translate new auth/live-clips UI to Japanese
-
-The following strings added with the login feature are English-only and need
-Japanese translations added to the `t()` locale map in `app.ts`:
-
-- Login banner text ("This archive has clips through … Log in with Twitch to
-  see newer clips.")
-- Live section title ("N new clips since …")
-- Live section toggle button labels ("Show" / "Collapse")
-- Auth indicator / username display area
-- Any error or loading states in the live clips section
-
----
-
-## i18n: translate new settings UI to Japanese
-
-The timezone settings panel (gear icon in the controls bar) added with the
-configurable-timezone feature is English-only:
-
-- "Timezone" label on the `<select>`
-- Gear button tooltip ("Settings")
-- Timezone option labels (UTC+HH:MM format is language-neutral, but the
-  datetime preview appended to each option uses the browser's locale)
-
-Deferred — the settings panel is functional for all users regardless of
-language; the datetime preview automatically adapts to the browser locale.
 
 ---
 

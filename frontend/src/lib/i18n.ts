@@ -17,6 +17,21 @@ export interface Translations {
   noClips: string;
   errorTitle: string;
   errorHint: string;
+  // Auth / login banner
+  loginBtn: string;
+  logoutBtn: string;
+  dismissBanner: string;
+  loginBannerWithDate: (date: string) => string;
+  loginBannerNoDate: string;
+  // Live clips section
+  liveTitle: (n: number, date: string) => string;
+  liveTitleNoDate: (n: number) => string;
+  liveSectionShow: string;
+  liveSectionCollapse: string;
+  // Settings panel
+  tzLabel: string;
+  // Embed
+  closeEmbed: string;
   // Dynamic clip card text
   views: (formatted: string) => string;
   creatorLine: (creator: string, date: string) => string;
@@ -48,6 +63,17 @@ const en: Translations = {
   noClips: 'No clips match your search.',
   errorTitle: 'Could not load the database.',
   errorHint: 'Make sure you are serving this page over HTTP and that <code>clips.db</code> is accessible. Run: <code>npm run dev</code> from the frontend/ directory.',
+  loginBtn: 'Login with Twitch',
+  logoutBtn: 'Log out',
+  dismissBanner: 'Dismiss',
+  loginBannerWithDate: (date) => `This archive has clips through ${date}. Log in with Twitch to see newer clips.`,
+  loginBannerNoDate: 'Log in with Twitch to see clips newer than this archive.',
+  liveTitle: (n, date) => `${n} new ${n === 1 ? 'clip' : 'clips'} since ${date}`,
+  liveTitleNoDate: (n) => `${n} new ${n === 1 ? 'clip' : 'clips'}`,
+  liveSectionShow: 'Show',
+  liveSectionCollapse: 'Collapse',
+  tzLabel: 'Timezone',
+  closeEmbed: 'Close embed',
   views: (f) => `${f} views`,
   creatorLine: (creator, date) => `by ${creator} · ${date}`,
   resultCount: (n) => `${n.toLocaleString()} clip${n !== 1 ? 's' : ''}`,
@@ -87,8 +113,19 @@ const ja: Translations = {
   noClips: '検索に一致するクリップがありません。',
   errorTitle: 'データベースを読み込めませんでした。',
   errorHint: 'HTTPでページを提供し、<code>clips.db</code>にアクセスできることを確認してください。フロントエンドディレクトリから <code>npm run dev</code> を実行してください。',
+  loginBtn: 'Twitchでログイン',
+  logoutBtn: 'ログアウト',
+  dismissBanner: '閉じる',
+  loginBannerWithDate: (date) => `${date}までのクリップをアーカイブしています。それ以降の新しいクリップを見るには、Twitchでログインしてください。`,
+  loginBannerNoDate: 'アーカイブより新しいクリップを見るにはTwitchでログインしてください。',
+  liveTitle: (n, date) => `${date}以降の新着クリップ（${n}本）`,
+  liveTitleNoDate: (n) => `新着クリップ（${n}本）`,
+  liveSectionShow: '表示',
+  liveSectionCollapse: '折りたたむ',
+  tzLabel: 'タイムゾーン',
+  closeEmbed: '閉じる',
   views: (f) => `${f}回視聴`,
-  creatorLine: (creator, date) => `${creator} · ${date}`,
+  creatorLine: (creator, date) => `作成者: ${creator}さん · ${date}`,
   resultCount: (n) => `${n.toLocaleString()}本のクリップ`,
   clipCount: (n) => `${n}本`,
   dayTooltip: (date, n) => {

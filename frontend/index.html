@@ -36,12 +36,12 @@
   <div id="header-controls">
     <div id="auth-indicator" style="display:none">
       <span id="auth-username"></span>
-      <button id="btn-logout" class="auth-btn">Log out</button>
+      <button id="btn-logout" class="auth-btn">ログアウト</button>
     </div>
     <div class="settings-wrapper" id="tz-wrapper">
-      <button id="btn-settings" class="auth-btn" title="Timezone" aria-label="Timezone"><span id="tz-label">UTC</span></button>
+      <button id="btn-settings" class="auth-btn" title="タイムゾーン" aria-label="タイムゾーン"><span id="tz-label">UTC</span></button>
       <div id="settings-panel" class="settings-panel" hidden>
-        <label>Timezone
+        <label><span id="tz-label-text">タイムゾーン</span>
           <select id="tz-select"></select>
         </label>
       </div>
@@ -52,8 +52,8 @@
 
 <div id="login-banner" style="display:none">
   <span id="banner-text"></span>
-  <button id="btn-login" class="login-btn">Login with Twitch</button>
-  <button id="btn-dismiss-banner" class="banner-dismiss" aria-label="Dismiss">&#x2715;</button>
+  <button id="btn-login" class="login-btn">Twitchでログイン</button>
+  <button id="btn-dismiss-banner" class="banner-dismiss" aria-label="閉じる">&#x2715;</button>
 </div>
 
 <div id="controls">
