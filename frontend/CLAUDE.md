@@ -167,7 +167,7 @@ startup aggregates with cheap single-page lookups:
   `max_timestamp`, `total_clips`. The raw `min/max_timestamp` columns store full
   UTC ISO timestamps so `initCalendar` can compute local calendar boundaries for
   any timezone via `utcTimestampToLocalDate`.
-- `game_clip_counts` — one row per game: `id`, `name`, `cnt` (no date filter)
+- `game_clip_counts` — one row per game: `id`, `name`, `name_ja`, `cnt` (no date filter)
 - `clips_created_at` — index on `clips(created_at)` for date-range COUNT(*)
 - `clips_created_at_game` — covering index `(created_at, game_id)` for
   date-filtered game GROUP BY (index-only, no table access)
@@ -259,6 +259,20 @@ Supports **English** (`en`) and **Japanese** (`ja`). Key exports:
 `t(key)`, `lang`, `setLang(lang)`, `detectLang()`. `app.ts` calls
 `applyTranslations()` on init and language change to sync strings into the DOM.
 To add a language, extend the translation map in `i18n.ts` and add a UI control.
+
+**Japanese game names**: The scraper stores a `name_ja` column in the `games`
+table (populated via `lib/igdb.py` — IGDB for real games, Twitch's own web
+directory pages as a fallback for non-game categories like "Just Chatting").
+`prepare_web_db.py` carries `name_ja` into `game_clip_counts`. At render time:
+
+- `updateGameFilter()` labels each option with `name_ja` when `lang === 'ja'`
+  and a Japanese name exists, falling back to the English `name`.
+- `clipCardHtml()` receives `game_name_ja` (from a `COALESCE(g.name_ja, '')`
+  join) and uses it in place of `game_name` when `lang === 'ja'`.
+- Live clips (from `twitch.ts`) do not carry `game_name_ja` — they fall back
+  to the English Twitch name gracefully because the field is typed `?: string`.
+- `render()` is called on language toggle, so game names switch language
+  immediately without a page reload.
 
 ## TypeScript configuration notes
 

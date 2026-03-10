@@ -1,9 +1,11 @@
 from lib.db import (
+    get_all_games,
     get_known_game_ids,
     mark_full_history_fetched,
     save_fetch_progress,
     update_watermark,
     upsert_clips,
+    upsert_games,
     upsert_streamer,
 )
 
@@ -141,6 +143,45 @@ class TestUpdateWatermark:
         update_watermark(conn, "123", "2024-01-01T00:00:00Z", "2024-12-15T00:00:00Z")
         row = conn.execute("SELECT newest_clip_at FROM streamers WHERE id = '123'").fetchone()
         assert row["newest_clip_at"] == "2024-06-01T00:00:00Z"
+
+
+class TestUpsertGames:
+    def test_inserts_game_with_ja_name(self, conn):
+        upsert_games(conn, [{"id": "g1", "name": "ELDEN RING", "box_art_url": "", "name_ja": "エルデンリング"}])
+        row = conn.execute("SELECT name_ja FROM games WHERE id = 'g1'").fetchone()
+        assert row["name_ja"] == "エルデンリング"
+
+    def test_inserts_game_without_ja_name(self, conn):
+        upsert_games(conn, [{"id": "g1", "name": "ELDEN RING", "box_art_url": ""}])
+        row = conn.execute("SELECT name_ja FROM games WHERE id = 'g1'").fetchone()
+        assert row["name_ja"] is None
+
+    def test_coalesce_preserves_existing_ja_name_on_null_update(self, conn):
+        """A subsequent upsert with name_ja=None must not overwrite an existing Japanese name."""
+        upsert_games(conn, [{"id": "g1", "name": "ELDEN RING", "box_art_url": "", "name_ja": "エルデンリング"}])
+        upsert_games(conn, [{"id": "g1", "name": "ELDEN RING", "box_art_url": "", "name_ja": None}])
+        row = conn.execute("SELECT name_ja FROM games WHERE id = 'g1'").fetchone()
+        assert row["name_ja"] == "エルデンリング"  # must be preserved
+
+    def test_overwrites_ja_name_when_new_value_provided(self, conn):
+        """A non-None name_ja should replace any previously stored value."""
+        upsert_games(conn, [{"id": "g1", "name": "Game", "box_art_url": "", "name_ja": "旧名"}])
+        upsert_games(conn, [{"id": "g1", "name": "Game", "box_art_url": "", "name_ja": "新名"}])
+        row = conn.execute("SELECT name_ja FROM games WHERE id = 'g1'").fetchone()
+        assert row["name_ja"] == "新名"
+
+
+class TestGetAllGames:
+    def test_returns_empty_dict_when_no_games(self, conn):
+        assert get_all_games(conn) == {}
+
+    def test_returns_id_to_name_mapping(self, conn):
+        conn.executemany(
+            "INSERT INTO games (id, name) VALUES (?, ?)",
+            [("g1", "Game One"), ("g2", "Game Two")],
+        )
+        conn.commit()
+        assert get_all_games(conn) == {"g1": "Game One", "g2": "Game Two"}
 
 
 class TestGetKnownGameIds:

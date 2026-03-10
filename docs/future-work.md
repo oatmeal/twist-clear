@@ -11,8 +11,6 @@ Fixes:
 - Browse clears time filter; but it's not that obvious yet
 - When is the Twitch API queried for new clips? Only on page load? Maybe we should have a refresh button as part of the live-clips indicator.
 
-i18n:
-- i18n, Japanese names for games (use IGDB?)
 
 Other stuff required before release:
 - About page with more description linking to GitHub, etc. (generate with deploy.yml?)

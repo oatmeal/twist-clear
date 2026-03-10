@@ -123,7 +123,7 @@ def prepare(src_path: str, dst_path: str) -> None:
     dst_conn.execute("DROP TABLE IF EXISTS game_clip_counts")
     dst_conn.execute("""
         CREATE TABLE game_clip_counts AS
-        SELECT g.id, g.name, COUNT(c.id) AS cnt
+        SELECT g.id, g.name, g.name_ja, COUNT(c.id) AS cnt
         FROM games g
         JOIN clips c ON c.game_id = g.id
         GROUP BY g.id

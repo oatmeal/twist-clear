@@ -32,6 +32,8 @@ config.toml.example     # Template — copy to config.toml and fill in credentia
 lib/
   api.py                # Twitch Helix API client
   db.py                 # SQLite schema + upsert helpers
+  igdb.py               # IGDB API client — maps Twitch game IDs → Japanese names;
+                        #   falls back to Twitch web pages for non-game categories
 tests/                  # pytest tests for the scraper
 docs/
   deploying.md          # Full GitHub Pages deployment walkthrough
@@ -123,8 +125,9 @@ will serve the site on port 5173 with the full database and auth UI enabled.
 ### Python scraper
 
 ```sh
-uv run python scrape.py fetch    # full historical scrape
-uv run python scrape.py update   # incremental update
+uv run python scrape.py fetch         # full historical scrape
+uv run python scrape.py update        # incremental update
+uv run python scrape.py enrich-names  # backfill Japanese game names via IGDB + Twitch web
 
 uv run pytest                    # tests
 uv run ruff check .              # lint

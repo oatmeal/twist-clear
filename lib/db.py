@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS streamers (
 CREATE TABLE IF NOT EXISTS games (
     id          TEXT PRIMARY KEY,
     name        TEXT NOT NULL,
-    box_art_url TEXT
+    box_art_url TEXT,
+    name_ja     TEXT
 );
 
 CREATE TABLE IF NOT EXISTS clips (
@@ -42,6 +43,13 @@ CREATE INDEX IF NOT EXISTS clips_game                ON clips(game_id);
 CREATE INDEX IF NOT EXISTS clips_game_created        ON clips(game_id, created_at DESC);
 """
 
+# Migration: columns added after the initial schema release.
+# Each entry is (column_name, ALTER TABLE statement).  Executed in order;
+# the OperationalError raised when a column already exists is swallowed.
+_MIGRATIONS = [
+    ("name_ja", "ALTER TABLE games ADD COLUMN name_ja TEXT"),
+]
+
 
 def init_db(path: str) -> sqlite3.Connection:
     Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -50,7 +58,19 @@ def init_db(path: str) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(SCHEMA)
+    _run_migrations(conn)
     return conn
+
+
+def _run_migrations(conn: sqlite3.Connection) -> None:
+    """Apply any schema migrations that are not yet present."""
+    for _col, stmt in _MIGRATIONS:
+        try:
+            conn.execute(stmt)
+            conn.commit()
+        except sqlite3.OperationalError:
+            # Column already exists — safe to ignore.
+            pass
 
 
 def upsert_streamer(conn: sqlite3.Connection, streamer: dict) -> None:
@@ -69,17 +89,53 @@ def upsert_streamer(conn: sqlite3.Connection, streamer: dict) -> None:
 
 
 def upsert_games(conn: sqlite3.Connection, games: list[dict]) -> None:
+    """Insert or update games rows.
+
+    Each dict must contain ``id``, ``name``, and ``box_art_url``.
+    The optional ``name_ja`` key, when present, is stored; when absent or
+    ``None`` the existing value in the DB is preserved via COALESCE so that a
+    subsequent Twitch-only upsert never clears a previously enriched Japanese
+    name.
+    """
     conn.executemany(
         """
-        INSERT INTO games (id, name, box_art_url)
-        VALUES (:id, :name, :box_art_url)
+        INSERT INTO games (id, name, box_art_url, name_ja)
+        VALUES (:id, :name, :box_art_url, :name_ja)
         ON CONFLICT(id) DO UPDATE SET
             name        = excluded.name,
-            box_art_url = excluded.box_art_url
+            box_art_url = excluded.box_art_url,
+            name_ja     = COALESCE(excluded.name_ja, games.name_ja)
         """,
-        games,
+        [
+            {
+                "id": g["id"],
+                "name": g["name"],
+                "box_art_url": g.get("box_art_url", ""),
+                "name_ja": g.get("name_ja"),
+            }
+            for g in games
+        ],
     )
     conn.commit()
+
+
+def update_game_ja_names(conn: sqlite3.Connection, names: dict[str, str]) -> None:
+    """Bulk-update the ``name_ja`` column for the given Twitch game IDs.
+
+    ``names`` is a mapping of ``{twitch_game_id: japanese_name}``.
+    Only existing rows are updated; unknown IDs are silently skipped.
+    """
+    conn.executemany(
+        "UPDATE games SET name_ja = ? WHERE id = ?",
+        [(ja_name, twitch_id) for twitch_id, ja_name in names.items()],
+    )
+    conn.commit()
+
+
+def get_all_games(conn: sqlite3.Connection) -> dict[str, str]:
+    """Return all games currently stored in the DB as {twitch_id: english_name}."""
+    rows = conn.execute("SELECT id, name FROM games").fetchall()
+    return {row["id"]: row["name"] for row in rows}
 
 
 def upsert_clips(conn: sqlite3.Connection, clips: list[dict]) -> int:

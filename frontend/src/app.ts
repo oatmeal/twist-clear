@@ -157,7 +157,7 @@ async function updateGameFilter(): Promise<void> {
 
   if (state.useMeta && state.calDateFrom === null) {
     // Fast path: precomputed table — single page read, no aggregate scan.
-    rows = await q('SELECT id, name, cnt FROM game_clip_counts ORDER BY cnt DESC');
+    rows = await q('SELECT id, name, name_ja, cnt FROM game_clip_counts ORDER BY cnt DESC');
   } else {
     // Slow path: live aggregate (needed when a date filter is active, or
     // when running against the raw dev-symlink DB without clips_meta).
@@ -168,7 +168,7 @@ async function updateGameFilter(): Promise<void> {
          'WHERE c.created_at >= :dateFrom AND c.created_at < :dateTo')
       : '';
     rows = await q(
-      `SELECT g.id, g.name, COUNT(c.id) AS cnt
+      `SELECT g.id, g.name, g.name_ja, COUNT(c.id) AS cnt
        FROM games g
        JOIN clips c ON c.game_id = g.id
        ${dateClause}
@@ -185,7 +185,8 @@ async function updateGameFilter(): Promise<void> {
   for (const row of rows) {
     const opt = document.createElement('option');
     opt.value = String(row['id']);
-    opt.textContent = `${String(row['name'])} (${Number(row['cnt']).toLocaleString()})`;
+    const displayName = (lang === 'ja' && row['name_ja']) ? String(row['name_ja']) : String(row['name']);
+    opt.textContent = `${displayName} (${Number(row['cnt']).toLocaleString()})`;
     sel.appendChild(opt);
   }
 
@@ -203,8 +204,12 @@ async function updateGameFilter(): Promise<void> {
 // which is blocked by the Content-Security-Policy.
 function clipCardHtml(clip: {
   url: string; thumbnail_url: string; title: string; duration: number;
-  view_count: number; game_name: string; creator_name: string; created_at: string;
+  view_count: number; game_name: string; game_name_ja?: string;
+  creator_name: string; created_at: string;
 }, extraClass = ''): string {
+  // Show the Japanese name when the UI language is Japanese and one is available;
+  // otherwise fall back to the English name from the games table.
+  const displayGameName = (lang === 'ja' && clip.game_name_ja) ? clip.game_name_ja : clip.game_name;
   return `
     <div class="clip-card${extraClass}" data-clip-url="${escHtml(clip.url)}">
       <div class="clip-thumb">
@@ -222,7 +227,7 @@ function clipCardHtml(clip: {
         </div>
         <div class="clip-meta">
           <span class="views">${t().views(fmtViews(clip.view_count, lang))}</span>
-          ${clip.game_name ? `<span>${escHtml(clip.game_name)}</span>` : ''}
+          ${displayGameName ? `<span>${escHtml(displayGameName)}</span>` : ''}
           <span>${t().creatorLine(escHtml(clip.creator_name), fmtDateTime(clip.created_at, lang, state.tzOffset))}</span>
         </div>
       </div>
@@ -563,7 +568,8 @@ export async function render(): Promise<void> {
       ? await q(
           `SELECT c.id, c.title, c.creator_name, c.view_count,
                   c.created_at, c.duration, c.thumbnail_url, c.url,
-                  COALESCE(g.name, '') AS game_name
+                  COALESCE(g.name, '') AS game_name,
+                  COALESCE(g.name_ja, '') AS game_name_ja
            FROM clips c
            LEFT JOIN games g ON c.game_id = g.id
            ${where}
@@ -609,6 +615,7 @@ export async function render(): Promise<void> {
                 duration:      Number(item.row['duration']      ?? 0),
                 view_count:    Number(item.row['view_count']    ?? 0),
                 game_name:     String(item.row['game_name']     ?? ''),
+                game_name_ja:  String(item.row['game_name_ja']  ?? ''),
                 creator_name:  String(item.row['creator_name']  ?? ''),
                 created_at:    String(item.row['created_at']    ?? ''),
               }),
@@ -622,6 +629,7 @@ export async function render(): Promise<void> {
           duration:      Number(c['duration']      ?? 0),
           view_count:    Number(c['view_count']    ?? 0),
           game_name:     String(c['game_name']     ?? ''),
+          game_name_ja:  String(c['game_name_ja']  ?? ''),
           creator_name:  String(c['creator_name']  ?? ''),
           created_at:    String(c['created_at']    ?? ''),
         }));
