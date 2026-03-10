@@ -70,6 +70,25 @@ requests in both `configureServer` (dev) and `configurePreviewServer` (preview)
 and implements range request handling directly via Node's `fs.createReadStream`.
 Do not remove it or sql.js-httpvfs will fall back to full-file downloads.
 
+**GitHub Pages gzip workaround (`serverMode: 'chunked'`)**: GitHub Pages /
+Fastly gzip-compresses `clips.db` for full GET and HEAD requests and reports
+the *compressed* Content-Length (~8 MB for a ~22 MB DB). `serverMode: 'full'`
+uses the HEAD Content-Length as the total file size, so the worker treats pages
+beyond ~8 MB as out-of-range, breaking all B-tree lookups in the upper portion
+of the file.
+
+`db.ts` works around this by probing the true file size with a `Range: bytes=0-0`
+request before calling `createDbWorker`. Per RFC 7233, partial-content (206)
+responses must report the actual uncompressed size in `Content-Range`, so this
+gives the real size even when the full/HEAD responses are gzip-compressed. The
+worker is then initialised with `serverMode: 'chunked'` and
+`databaseLengthBytes = <true size>`, which skips the HEAD request entirely.
+
+The single-chunk URL scheme uses `urlPrefix: dbUrl + '?chunked='` /
+`suffixLength: 1` — chunk 0 maps to `clips.db?chunked=0`. GitHub Pages ignores
+query strings for static-file lookups; `dbRangePlugin` also strips the query
+string before matching, so this works in dev and preview too.
+
 ### AbortController in render()
 
 `render()` in `app.ts` keeps a module-level `_renderController`. Each call
