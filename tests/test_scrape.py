@@ -57,8 +57,12 @@ class TestNormalizeClip:
         assert normalize_clip(raw)["game_id"] is None
 
     def test_missing_optional_fields_become_none(self):
-        raw = {"id": "c1", "broadcaster_id": "123", "title": "T",
-               "created_at": "2024-01-01T00:00:00Z"}
+        raw = {
+            "id": "c1",
+            "broadcaster_id": "123",
+            "title": "T",
+            "created_at": "2024-01-01T00:00:00Z",
+        }
         n = normalize_clip(raw)
         assert n["creator_id"] is None
         assert n["duration"] is None
@@ -95,9 +99,7 @@ class TestFetchHistory:
         fetch_history(mock_api, mock_igdb, conn, "123", from_dt, to_dt)
 
         mock_api.get_clips_window.assert_called_once()
-        row = conn.execute(
-            "SELECT fetch_progress_at FROM streamers WHERE id = '123'"
-        ).fetchone()
+        row = conn.execute("SELECT fetch_progress_at FROM streamers WHERE id = '123'").fetchone()
         assert row["fetch_progress_at"] is not None
 
     def test_clips_are_stored_in_db(self, conn, mock_api, mock_igdb):
@@ -130,7 +132,7 @@ class TestFetchHistory:
 
         # Full-day window overflows; first half fits; second half fits.
         mock_api.get_clips_window.side_effect = [
-            ([], True),   # 1-day window: too many clips
+            ([], True),  # 1-day window: too many clips
             ([], False),  # 12-hour window: fits
             ([], False),  # remaining 12 hours: fits
         ]
@@ -152,9 +154,7 @@ class TestFetchHistory:
         fetch_history(mock_api, mock_igdb, conn, "123", from_dt, to_dt)
 
         assert mock_api.get_clips_window.call_count == 2
-        row = conn.execute(
-            "SELECT fetch_progress_at FROM streamers WHERE id = '123'"
-        ).fetchone()
+        row = conn.execute("SELECT fetch_progress_at FROM streamers WHERE id = '123'").fetchone()
         assert row["fetch_progress_at"] == to_dt.isoformat(timespec="seconds")
 
     def test_min_window_guard_does_not_loop(self, conn, mock_api, mock_igdb):
@@ -175,7 +175,7 @@ class TestFetchHistory:
         # subsequent 12h window fits, then the window grows back to 1d for
         # the next call.
         mock_api.get_clips_window.side_effect = [
-            ([], True),   # [Jan 1 00:00, Jan 2 00:00]: overflow → halve to 12h
+            ([], True),  # [Jan 1 00:00, Jan 2 00:00]: overflow → halve to 12h
             ([], False),  # [Jan 1 00:00, Jan 1 12:00]: fits → grow to 1d
             ([], False),  # [Jan 1 12:00, Jan 2 12:00]: 1-day window, fits
             ([], False),  # [Jan 2 12:00, Jan 3 00:00]: remaining 12h, fits

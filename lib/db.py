@@ -227,7 +227,5 @@ def reset_fetch_state(conn: sqlite3.Connection) -> None:
     Existing clip data is preserved; clips will be upserted on the next fetch
     run, updating their view counts.
     """
-    conn.execute(
-        "UPDATE streamers SET full_history_fetched = 0, fetch_progress_at = NULL"
-    )
+    conn.execute("UPDATE streamers SET full_history_fetched = 0, fetch_progress_at = NULL")
     conn.commit()

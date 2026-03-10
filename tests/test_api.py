@@ -98,9 +98,7 @@ class TestGetClipsWindow:
         clips = [{"id": f"clip{i}"} for i in range(100)]
         mock_get.return_value = make_response(data=clips, cursor="abc123")
 
-        _, has_more = api.get_clips_window(
-            "123", "2024-01-01T00:00:00Z", "2024-01-02T00:00:00Z"
-        )
+        _, has_more = api.get_clips_window("123", "2024-01-01T00:00:00Z", "2024-01-02T00:00:00Z")
 
         assert has_more is True
 

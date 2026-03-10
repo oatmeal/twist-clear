@@ -1,6 +1,5 @@
 from unittest.mock import MagicMock
 
-import pytest
 import requests
 
 from lib.igdb import _fetch_twitch_ja_name, _name_to_slug
@@ -81,9 +80,7 @@ class TestFetchTwitchJaName:
         session = self._session(
             '<meta property="og:title" content="ゼルダの伝説 ブレス オブ ザ ワイルド - Twitch"/>'
         )
-        result = _fetch_twitch_ja_name(
-            session, "The Legend of Zelda: Breath of the Wild"
-        )
+        result = _fetch_twitch_ja_name(session, "The Legend of Zelda: Breath of the Wild")
         assert result == "ゼルダの伝説 ブレス オブ ザ ワイルド"
 
     def test_uses_lang_ja_query_param_in_request_url(self):

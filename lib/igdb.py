@@ -79,9 +79,9 @@ def _name_to_slug(name: str) -> str:
     normalized = unicodedata.normalize("NFD", name)
     ascii_only = normalized.encode("ascii", "ignore").decode()
     slug = ascii_only.lower()
-    slug = re.sub(r"[^a-z0-9\s-]", "", slug)   # strip special chars
-    slug = re.sub(r"\s+", "-", slug.strip())    # spaces → hyphens
-    slug = re.sub(r"-+", "-", slug)             # collapse runs of hyphens
+    slug = re.sub(r"[^a-z0-9\s-]", "", slug)  # strip special chars
+    slug = re.sub(r"\s+", "-", slug.strip())  # spaces → hyphens
+    slug = re.sub(r"-+", "-", slug)  # collapse runs of hyphens
     return slug
 
 

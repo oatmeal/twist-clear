@@ -41,9 +41,9 @@ from lib.igdb import IGDBClient
 _TWITCH_EPOCH = datetime(2011, 6, 1, tzinfo=UTC)
 
 # Adaptive window bounds for fetch_history.
-_MIN_WINDOW     = timedelta(seconds=1)
+_MIN_WINDOW = timedelta(seconds=1)
 _INITIAL_WINDOW = timedelta(days=1)
-_MAX_WINDOW     = timedelta(days=30)
+_MAX_WINDOW = timedelta(days=30)
 
 
 # ---------------------------------------------------------------------------
@@ -222,12 +222,15 @@ def cmd_fetch(api: TwitchAPI, igdb: IGDBClient, conn, config: dict, force: bool 
             print(f"  Warning: streamer '{login}' not found on Twitch.", file=sys.stderr)
 
     for user in users:
-        upsert_streamer(conn, {
-            "id": user["id"],
-            "login": user["login"],
-            "display_name": user["display_name"],
-            "account_created_at": user.get("created_at"),
-        })
+        upsert_streamer(
+            conn,
+            {
+                "id": user["id"],
+                "login": user["login"],
+                "display_name": user["display_name"],
+                "account_created_at": user.get("created_at"),
+            },
+        )
 
         row = get_streamer(conn, user["id"])
 
@@ -240,12 +243,16 @@ def cmd_fetch(api: TwitchAPI, igdb: IGDBClient, conn, config: dict, force: bool 
             print(f"\n{user['display_name']} — resuming from {row['fetch_progress_at'][:10]}")
         elif row["account_created_at"]:
             from_dt = datetime.fromisoformat(row["account_created_at"])
-            print(f"\n{user['display_name']} — starting from account creation "
-                  f"({row['account_created_at'][:10]})")
+            print(
+                f"\n{user['display_name']} — starting from account creation "
+                f"({row['account_created_at'][:10]})"
+            )
         else:
             from_dt = _TWITCH_EPOCH
-            print(f"\n{user['display_name']} — no account date found, starting from "
-                  f"{_TWITCH_EPOCH.date()}")
+            print(
+                f"\n{user['display_name']} — no account date found, starting from "
+                f"{_TWITCH_EPOCH.date()}"
+            )
 
         to_dt = datetime.now(UTC)
         total, max_created_at = fetch_history(api, igdb, conn, user["id"], from_dt, to_dt)
@@ -265,8 +272,7 @@ def cmd_update(api: TwitchAPI, igdb: IGDBClient, conn) -> None:
     for streamer in streamers:
         if not streamer["full_history_fetched"]:
             print(
-                f"Skipping {streamer['login']} — full history not yet fetched "
-                "(run 'fetch' first).",
+                f"Skipping {streamer['login']} — full history not yet fetched (run 'fetch' first).",
                 file=sys.stderr,
             )
             continue
@@ -293,9 +299,7 @@ def cmd_update(api: TwitchAPI, igdb: IGDBClient, conn) -> None:
         print(f"  {total} clips.           ")
 
         new_watermark = (
-            max_created_at
-            if max_created_at and max_created_at > (watermark or "")
-            else watermark
+            max_created_at if max_created_at and max_created_at > (watermark or "") else watermark
         )
         update_watermark(conn, streamer["id"], new_watermark or "", now_iso())
 
@@ -340,10 +344,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Scrape Twitch clip metadata into a local SQLite database."
     )
-    parser.add_argument("--config", default="config.toml", metavar="PATH",
-                        help="Path to config file (default: config.toml)")
-    parser.add_argument("--db", default=None, metavar="PATH",
-                        help="Override the database path from config")
+    parser.add_argument(
+        "--config",
+        default="config.toml",
+        metavar="PATH",
+        help="Path to config file (default: config.toml)",
+    )
+    parser.add_argument(
+        "--db", default=None, metavar="PATH", help="Override the database path from config"
+    )
 
     sub = parser.add_subparsers(dest="cmd", required=True)
     fetch_sub = sub.add_parser("fetch", help="Full historical scrape for all configured streamers")

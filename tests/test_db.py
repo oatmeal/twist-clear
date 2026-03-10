@@ -30,38 +30,45 @@ def make_clip(clip_id="clip1", broadcaster_id="123", created_at="2024-01-01T00:0
 
 class TestUpsertStreamer:
     def test_inserts_new_streamer(self, conn):
-        upsert_streamer(conn, {
-            "id": "456",
-            "login": "newstreamer",
-            "display_name": "NewStreamer",
-            "account_created_at": "2022-01-01T00:00:00Z",
-        })
+        upsert_streamer(
+            conn,
+            {
+                "id": "456",
+                "login": "newstreamer",
+                "display_name": "NewStreamer",
+                "account_created_at": "2022-01-01T00:00:00Z",
+            },
+        )
         row = conn.execute("SELECT * FROM streamers WHERE id = '456'").fetchone()
         assert row["login"] == "newstreamer"
         assert row["account_created_at"] == "2022-01-01T00:00:00Z"
 
     def test_updates_login_and_display_name(self, conn):
-        upsert_streamer(conn, {
-            "id": "123",
-            "login": "renamedstreamer",
-            "display_name": "RenamedStreamer",
-            "account_created_at": "2020-01-01T00:00:00Z",
-        })
+        upsert_streamer(
+            conn,
+            {
+                "id": "123",
+                "login": "renamedstreamer",
+                "display_name": "RenamedStreamer",
+                "account_created_at": "2020-01-01T00:00:00Z",
+            },
+        )
         row = conn.execute("SELECT login, display_name FROM streamers WHERE id = '123'").fetchone()
         assert row["login"] == "renamedstreamer"
         assert row["display_name"] == "RenamedStreamer"
 
     def test_preserves_existing_account_created_at_on_null_update(self, conn):
         """COALESCE in the ON CONFLICT clause means a NULL update never overwrites."""
-        upsert_streamer(conn, {
-            "id": "123",
-            "login": "teststreamer",
-            "display_name": "TestStreamer",
-            "account_created_at": None,
-        })
-        row = conn.execute(
-            "SELECT account_created_at FROM streamers WHERE id = '123'"
-        ).fetchone()
+        upsert_streamer(
+            conn,
+            {
+                "id": "123",
+                "login": "teststreamer",
+                "display_name": "TestStreamer",
+                "account_created_at": None,
+            },
+        )
+        row = conn.execute("SELECT account_created_at FROM streamers WHERE id = '123'").fetchone()
         assert row["account_created_at"] == "2020-01-01T00:00:00Z"
 
 
@@ -95,17 +102,13 @@ class TestUpsertClips:
 class TestFetchProgress:
     def test_save_fetch_progress(self, conn):
         save_fetch_progress(conn, "123", "2024-06-15T00:00:00+00:00")
-        row = conn.execute(
-            "SELECT fetch_progress_at FROM streamers WHERE id = '123'"
-        ).fetchone()
+        row = conn.execute("SELECT fetch_progress_at FROM streamers WHERE id = '123'").fetchone()
         assert row["fetch_progress_at"] == "2024-06-15T00:00:00+00:00"
 
     def test_save_fetch_progress_overwrites(self, conn):
         save_fetch_progress(conn, "123", "2024-01-01T00:00:00+00:00")
         save_fetch_progress(conn, "123", "2024-06-01T00:00:00+00:00")
-        row = conn.execute(
-            "SELECT fetch_progress_at FROM streamers WHERE id = '123'"
-        ).fetchone()
+        row = conn.execute("SELECT fetch_progress_at FROM streamers WHERE id = '123'").fetchone()
         assert row["fetch_progress_at"] == "2024-06-01T00:00:00+00:00"
 
 
@@ -147,7 +150,10 @@ class TestUpdateWatermark:
 
 class TestUpsertGames:
     def test_inserts_game_with_ja_name(self, conn):
-        upsert_games(conn, [{"id": "g1", "name": "ELDEN RING", "box_art_url": "", "name_ja": "エルデンリング"}])
+        upsert_games(
+            conn,
+            [{"id": "g1", "name": "ELDEN RING", "box_art_url": "", "name_ja": "エルデンリング"}],
+        )
         row = conn.execute("SELECT name_ja FROM games WHERE id = 'g1'").fetchone()
         assert row["name_ja"] == "エルデンリング"
 
@@ -158,7 +164,10 @@ class TestUpsertGames:
 
     def test_coalesce_preserves_existing_ja_name_on_null_update(self, conn):
         """A subsequent upsert with name_ja=None must not overwrite an existing Japanese name."""
-        upsert_games(conn, [{"id": "g1", "name": "ELDEN RING", "box_art_url": "", "name_ja": "エルデンリング"}])
+        upsert_games(
+            conn,
+            [{"id": "g1", "name": "ELDEN RING", "box_art_url": "", "name_ja": "エルデンリング"}],
+        )
         upsert_games(conn, [{"id": "g1", "name": "ELDEN RING", "box_art_url": "", "name_ja": None}])
         row = conn.execute("SELECT name_ja FROM games WHERE id = 'g1'").fetchone()
         assert row["name_ja"] == "エルデンリング"  # must be preserved

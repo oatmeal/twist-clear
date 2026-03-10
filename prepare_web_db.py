@@ -138,17 +138,14 @@ def prepare(src_path: str, dst_path: str) -> None:
     print("Replacing clips_view_count index …")
     dst_conn.execute("DROP INDEX IF EXISTS clips_view_count")
     dst_conn.execute(
-        "CREATE INDEX IF NOT EXISTS clips_view_count"
-        " ON clips(view_count DESC, created_at DESC)"
+        "CREATE INDEX IF NOT EXISTS clips_view_count ON clips(view_count DESC, created_at DESC)"
     )
     print("  done.")
 
     # Standalone created_at index — makes date-filtered COUNT(*) queries and
     # general range scans efficient without a full table scan.
     print("Creating clips_created_at index …")
-    dst_conn.execute(
-        "CREATE INDEX IF NOT EXISTS clips_created_at ON clips(created_at)"
-    )
+    dst_conn.execute("CREATE INDEX IF NOT EXISTS clips_created_at ON clips(created_at)")
     print("  done.")
 
     # Covering index (created_at, game_id) — eliminates table-row lookups for
@@ -162,8 +159,7 @@ def prepare(src_path: str, dst_path: str) -> None:
     # calendar date-filter interactions.
     print("Creating clips_created_at_game covering index …")
     dst_conn.execute(
-        "CREATE INDEX IF NOT EXISTS clips_created_at_game"
-        " ON clips(created_at, game_id)"
+        "CREATE INDEX IF NOT EXISTS clips_created_at_game ON clips(created_at, game_id)"
     )
     print("  done.")
 
