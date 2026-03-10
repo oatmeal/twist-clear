@@ -994,6 +994,7 @@ export async function init(): Promise<void> {
     localStorage.setItem('tc_lang', newLang);
     setLang(newLang);
     applyTranslations();
+    syncAuthUI();
     rebuildMonthSelect();
     state.setCurrentPage(1);
     void render();
