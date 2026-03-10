@@ -282,7 +282,7 @@ function collapseCard(card: HTMLElement): void {
   _expandedCard = null;
 }
 
-function expandCard(card: HTMLElement): void {
+function expandCard(card: HTMLElement, skipScroll = false): void {
   if (_expandedCard && _expandedCard !== card) collapseCard(_expandedCard);
 
   const clipUrl = card.dataset['clipUrl'] ?? '';
@@ -333,7 +333,7 @@ function expandCard(card: HTMLElement): void {
 
   card.classList.add('expanded');
   _expandedCard = card;
-  card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  if (!skipScroll) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   // Add click-outside listener on the next tick so the current click
   // doesn't immediately trigger it and collapse the card.
   setTimeout(() => document.addEventListener('click', _onDocClickOutside), 0);
@@ -344,7 +344,13 @@ function navigateClip(direction: 'prev' | 'next'): void {
   const allCards = Array.from(_expandedCard.parentElement?.querySelectorAll<HTMLElement>('.clip-card') ?? []);
   const idx = allCards.indexOf(_expandedCard);
   const target = allCards[direction === 'prev' ? idx - 1 : idx + 1];
-  if (target) expandCard(target);
+  if (!target) return;
+  // Capture the embed's current screen position before the DOM changes,
+  // then instantly correct scroll so it stays at the same vertical position.
+  const topBefore = _expandedCard.getBoundingClientRect().top;
+  expandCard(target, true);
+  const topAfter = target.getBoundingClientRect().top;
+  window.scrollBy({ top: topAfter - topBefore, behavior: 'instant' });
 }
 
 // ── Live clips ────────────────────────────────────────────────────────────
