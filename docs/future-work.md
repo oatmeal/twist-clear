@@ -40,16 +40,6 @@ for a personal viewer; to fix, escape them before interpolation and add an
 
 ---
 
-## FTS5 MATCH: raw user string
-
-`buildWhere` passes the user's search string directly to `clips_fts MATCH`,
-so FTS5 operators (`OR`, `AND`, `*`, `"phrase"`) are interpreted literally.
-This is occasionally useful but can also produce confusing results or errors
-for malformed queries. Fix: sanitize or quote the input before passing to
-MATCH. Documented in tests.
-
----
-
 ## Timezone: DST transition edge case
 
 Calendar grouping and date filtering use a fixed UTC offset per query

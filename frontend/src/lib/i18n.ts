@@ -31,6 +31,14 @@ export interface Translations {
   liveTitleNoDate: (n: number) => string;
   liveSectionShow: string;
   liveSectionCollapse: string;
+  // Search help modal
+  searchHelpBtn: string;
+  searchHelpTitle: string;
+  searchHelpAnd: string;
+  searchHelpOr: string;
+  searchHelpNot: string;
+  searchHelpPhrase: string;
+  searchHelpNote: string;
   // Settings panel
   tzLabel: string;
   // Embed
@@ -80,6 +88,13 @@ const en: Translations = {
   liveTitleNoDate: (n) => `${n} new ${n === 1 ? 'clip' : 'clips'}`,
   liveSectionShow: 'Show',
   liveSectionCollapse: 'Collapse',
+  searchHelpBtn: 'Search help',
+  searchHelpTitle: 'Search syntax',
+  searchHelpAnd: 'Both words (AND)',
+  searchHelpOr: 'Either word (OR)',
+  searchHelpNot: 'Exclude word',
+  searchHelpPhrase: 'Exact phrase',
+  searchHelpNote: 'Spaces are required around OR and |.',
   tzLabel: 'Timezone',
   closeEmbed: 'Close embed',
   prevClip: 'Previous clip',
@@ -135,6 +150,13 @@ const ja: Translations = {
   liveTitleNoDate: (n) => `新着クリップ（${n}本）`,
   liveSectionShow: '表示',
   liveSectionCollapse: '折りたたむ',
+  searchHelpBtn: '検索ヘルプ',
+  searchHelpTitle: '検索の使い方',
+  searchHelpAnd: '両方の語を含む（AND）',
+  searchHelpOr: 'どちらかの語を含む（OR）',
+  searchHelpNot: '語を除外',
+  searchHelpPhrase: 'フレーズ検索',
+  searchHelpNote: 'OR・|・｜ の前後にはスペースが必要です。',
   tzLabel: 'タイムゾーン',
   closeEmbed: '閉じる',
   prevClip: '前のクリップ',

@@ -32,8 +32,9 @@ src/
     hash.ts       # Pure serializeHash() / deserializeHash() — URL hash state
     i18n.ts       # English & Japanese translations; t(), detectLang(), setLang()
     liveFilter.ts # Pure filterLiveClips() — filters live clips against UI state
-    pkce.ts       # OAuth crypto helpers (randomBase64url, sha256Base64url)
-    query.ts      # Pure buildWhere() — builds SQL WHERE clause from filter state
+    pkce.ts         # OAuth crypto helpers (randomBase64url, sha256Base64url)
+    query.ts        # Pure buildWhere() — builds SQL WHERE clause from filter state
+    searchParser.ts # Pure parseSearchQuery() — translates boolean search syntax to FTS5
 ```
 
 `main.ts` is the Vite entry point; it just calls `init()` from `app.ts`.
@@ -199,9 +200,29 @@ them fully unit-testable without a DOM or DB.
 `prepare_web_db.py` adds a `clips_fts` virtual table with `tokenize='trigram'`
 (requires SQLite ≥ 3.38). At startup `app.ts` queries `sqlite_master` to check
 whether the table exists and sets `state.useFts`. When `useFts` is true,
-`buildWhere` routes 3+-character title searches through
-`clips_fts MATCH :search` instead of `LIKE`. With fewer than 3 characters it
-always falls back to LIKE (trigram minimum).
+`buildWhere` calls `parseSearchQuery()` (`lib/searchParser.ts`) to translate the
+user's input into a safe FTS5 MATCH expression before passing it as `:search`.
+
+`parseSearchQuery` returns null (triggering a fallback) when: the total query
+is fewer than 3 characters; there are no positive terms (e.g. pure negation
+`-boss`); or any individual term is shorter than 3 characters (below the FTS5
+trigram minimum — common for single-kanji queries like `猫 OR 犬`).
+
+When FTS5 is unavailable or `parseSearchQuery` returns null, `buildWhere` tries
+`parseLikeSearchQuery()` (also in `lib/searchParser.ts`), which generates a
+compound SQL LIKE expression that respects the same boolean structure (AND, OR,
+NOT). This makes boolean searches work for short Japanese terms. Only if
+`parseLikeSearchQuery` also returns null (pure negation with no positive terms)
+does the code fall back to a plain `c.title LIKE '%query%'`.
+
+Supported boolean syntax: space-separated terms are implicit AND; `OR` or `|`
+for OR; `-word` or `-"phrase"` to exclude. Full-width space (`\u3000`) is
+normalized to ASCII space globally. Full-width minus (`\uff0d`) is recognized
+as a negation-prefix alias only at the start of a token — inside a bare word it
+is preserved as-is, so searches for titles containing `－` work correctly.
+Each bare term is wrapped in FTS5 double-quotes to neutralize any special
+characters in the term text. A `?` button next to the search input opens a
+modal summarising the syntax (translated to EN/JA).
 
 ### Precomputed metadata (`useMeta`)
 

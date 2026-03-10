@@ -42,7 +42,7 @@ describe('buildWhere', () => {
     expect(where).toContain('clips_fts');
     expect(where).toContain('MATCH');
     expect(where).not.toContain('LIKE');
-    expect(params[':search']).toBe('pog');
+    expect(params[':search']).toBe('"pog"');
   });
 
   it('uses FTS5 for exactly 3 chars', () => {
@@ -130,6 +130,32 @@ describe('buildWhere filter interactions', () => {
     expect(params[':game']).toBe('0');
   });
 
+  it('short-term OR query uses boolean LIKE when useFts=true', () => {
+    const { where, params } = buildWhere({ ...base, searchQuery: '猫 OR 犬', useFts: true });
+    expect(where).toContain('LIKE');
+    expect(where).not.toContain('clips_fts');
+    expect(where).toContain('OR');
+    expect(params[':s0']).toBe('%猫%');
+    expect(params[':s1']).toBe('%犬%');
+  });
+
+  it('short-term AND query uses boolean LIKE when useFts=true', () => {
+    const { where, params } = buildWhere({ ...base, searchQuery: '猫 犬', useFts: true });
+    expect(where).toContain('LIKE');
+    expect(where).not.toContain('clips_fts');
+    expect(where).toContain('AND');
+    expect(params[':s0']).toBe('%猫%');
+    expect(params[':s1']).toBe('%犬%');
+  });
+
+  it('mixed short/long term OR falls back to boolean LIKE', () => {
+    const { where, params } = buildWhere({ ...base, searchQuery: 'mario OR 犬', useFts: true });
+    expect(where).toContain('LIKE');
+    expect(where).not.toContain('clips_fts');
+    expect(params[':s0']).toBe('%mario%');
+    expect(params[':s1']).toBe('%犬%');
+  });
+
   it('FTS5 + game filter + date range: all three filters combined', () => {
     const { where, params } = buildWhere({
       searchQuery: 'pog',
@@ -146,7 +172,7 @@ describe('buildWhere filter interactions', () => {
     // FTS AND game AND (dateFrom AND dateTo within date clause) = ≥3 ANDs
     const andCount = (where.match(/\bAND\b/g) ?? []).length;
     expect(andCount).toBeGreaterThanOrEqual(3);
-    expect(params[':search']).toBe('pog');
+    expect(params[':search']).toBe('"pog"');
     expect(params[':game']).toBe('123');
     expect(params[':dateFrom']).toBe('2024-01-01T00:00:00.000Z');
     expect(params[':dateTo']).toBe('2024-02-01T00:00:00.000Z');

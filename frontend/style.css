@@ -139,9 +139,16 @@ header .streamer-tag {
   z-index: 10;
 }
 
-#search {
+.search-wrapper {
   flex: 1 1 200px;
   max-width: 360px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+#search {
+  flex: 1;
+  min-width: 0;
   background: var(--surface2);
   border: 1px solid var(--border);
   color: var(--text);
@@ -152,6 +159,81 @@ header .streamer-tag {
 }
 #search::placeholder { color: var(--muted); }
 #search:focus { border-color: var(--accent); }
+
+.search-help-btn {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.search-help-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── Search help modal ──────────────────────────────────────────────────── */
+
+#search-help-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 18px 20px;
+  max-width: 400px;
+  width: 90vw;
+}
+#search-help-modal::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+.search-help-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.search-help-header h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.modal-close-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 4px;
+  line-height: 1;
+}
+.modal-close-btn:hover { color: var(--text); }
+.search-help-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+}
+.search-help-table tr + tr td { padding-top: 8px; }
+.search-help-table td:first-child {
+  padding-right: 16px;
+  white-space: nowrap;
+  vertical-align: top;
+}
+.search-help-table code {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 12px;
+}
+.search-help-table td:last-child { color: var(--muted); }
+.search-help-note {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
 
 select {
   background: var(--surface2);

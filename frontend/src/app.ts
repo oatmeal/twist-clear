@@ -789,6 +789,22 @@ function applyTranslations(): void {
   const optJa = document.getElementById('lang-opt-ja');
   if (optEn) optEn.className = lang === 'en' ? 'lang-opt active' : 'lang-opt';
   if (optJa) optJa.className = lang === 'ja' ? 'lang-opt active' : 'lang-opt';
+
+  // Search help modal
+  const helpBtn = document.getElementById('btn-search-help');
+  if (helpBtn) { helpBtn.setAttribute('aria-label', tr.searchHelpBtn); helpBtn.title = tr.searchHelpBtn; }
+  const helpTitle = document.getElementById('search-help-modal-title');
+  if (helpTitle) helpTitle.textContent = tr.searchHelpTitle;
+  const helpAnd = document.getElementById('search-help-and');
+  if (helpAnd) helpAnd.textContent = tr.searchHelpAnd;
+  const helpOr = document.getElementById('search-help-or');
+  if (helpOr) helpOr.textContent = tr.searchHelpOr;
+  const helpNot = document.getElementById('search-help-not');
+  if (helpNot) helpNot.textContent = tr.searchHelpNot;
+  const helpPhrase = document.getElementById('search-help-phrase');
+  if (helpPhrase) helpPhrase.textContent = tr.searchHelpPhrase;
+  const helpNote = document.getElementById('search-help-note');
+  if (helpNote) helpNote.textContent = tr.searchHelpNote;
 }
 
 // ── Timezone label ────────────────────────────────────────────────────────
@@ -983,6 +999,19 @@ function bindEvents(): void {
     updateTzLabel();
     onTzChange();
     pushHash();
+  });
+
+  // ── Search help modal ────────────────────────────────────────────────────
+
+  const searchHelpModal = document.getElementById('search-help-modal') as HTMLDialogElement | null;
+  document.getElementById('btn-search-help')?.addEventListener('click', () => {
+    searchHelpModal?.showModal();
+  });
+  document.getElementById('btn-close-search-help')?.addEventListener('click', () => {
+    searchHelpModal?.close();
+  });
+  searchHelpModal?.addEventListener('click', e => {
+    if (e.target === searchHelpModal) searchHelpModal.close();
   });
 }
 

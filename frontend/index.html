@@ -59,7 +59,10 @@
 </div>
 
 <div id="controls">
-  <input type="search" id="search" placeholder="クリップタイトルを検索…" autocomplete="off">
+  <div class="search-wrapper">
+    <input type="search" id="search" placeholder="クリップタイトルを検索…" autocomplete="off">
+    <button id="btn-search-help" class="search-help-btn" aria-label="検索ヘルプ" aria-haspopup="dialog">?</button>
+  </div>
   <select id="sort">
     <option value="view_count_desc">再生回数が多い順</option>
     <option value="view_count_asc">再生回数が少ない順</option>
@@ -130,6 +133,34 @@
 
 
 <footer id="site-footer"></footer>
+
+<dialog id="search-help-modal" aria-labelledby="search-help-modal-title">
+  <div class="search-help-header">
+    <h2 id="search-help-modal-title">Search syntax</h2>
+    <button id="btn-close-search-help" class="modal-close-btn" aria-label="Close">&#x2715;</button>
+  </div>
+  <table class="search-help-table">
+    <tbody>
+      <tr>
+        <td><code>word1 word2</code></td>
+        <td id="search-help-and">Both words (AND)</td>
+      </tr>
+      <tr>
+        <td><code>word1 OR word2</code><br><code>word1 | word2</code><br><code>word1 ｜ word2</code></td>
+        <td id="search-help-or">Either word (OR)</td>
+      </tr>
+      <tr>
+        <td><code>-word</code></td>
+        <td id="search-help-not">Exclude word</td>
+      </tr>
+      <tr>
+        <td><code>"exact phrase"</code></td>
+        <td id="search-help-phrase">Exact phrase</td>
+      </tr>
+    </tbody>
+  </table>
+  <p id="search-help-note" class="search-help-note">Spaces are required around OR and |.</p>
+</dialog>
 
 </body>
 </html>
