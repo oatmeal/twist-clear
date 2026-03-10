@@ -98,16 +98,58 @@ let _broadcasterId: string | null = null;
 let _dbCutoffDate:  string | null = null;
 
 async function setStreamerTag(): Promise<string | null> {
-  const rows = await q('SELECT id, display_name, login FROM streamers LIMIT 1');
-  if (rows.length) {
-    const row     = rows[0]!;
+  const rows = await q('SELECT id, display_name, login FROM streamers');
+  if (!rows.length) return null;
+
+  const siteTitle = (import.meta.env as Record<string, string>)['VITE_SITE_TITLE']
+    || 'twist-clear clip archive';
+
+  const plainNames:  string[] = [];
+  const linkedNames: string[] = [];
+  for (const row of rows) {
+    const login   = String(row['login']);
     const display = row['display_name'];
-    const login   = row['login'];
-    document.getElementById('streamer-tag')!.textContent =
-      display ? `${String(display)} (${String(login)})` : String(login);
-    return String(row['id']);
+    const name    = display ? String(display) : login;
+    plainNames.push(name);
+    linkedNames.push(
+      `<a href="https://www.twitch.tv/${escHtml(login)}" target="_blank" rel="noopener">`
+      + `${escHtml(name)}</a>`,
+    );
   }
-  return null;
+
+  document.getElementById('streamer-tag')!.innerHTML = ': ' + linkedNames.join(', ');
+  document.title = `${siteTitle}: ${plainNames.join(', ')}`;
+
+  return String(rows[0]!['id']);
+}
+
+function renderFooter(): void {
+  const env        = import.meta.env as Record<string, string>;
+  const codeRepo   = env['VITE_CODE_REPO']    || '';
+  const codeSha    = env['VITE_CODE_SHA']     || '';
+  const archiveRepo = env['VITE_ARCHIVE_REPO'] || '';
+  const archiveSha  = env['VITE_ARCHIVE_SHA']  || '';
+
+  if (!codeRepo) return;
+
+  const codeShort    = codeSha    ? codeSha.slice(0, 7)    : '';
+  const archiveShort = archiveSha ? archiveSha.slice(0, 7) : '';
+  const codeBase    = `https://github.com/${escHtml(codeRepo)}`;
+  const archiveBase = archiveRepo ? `https://github.com/${escHtml(archiveRepo)}` : '';
+
+  let html = `Built with <a href="${codeBase}" target="_blank" rel="noopener">twist-clear</a>`;
+  if (codeShort) {
+    html += ` (<a href="${codeBase}/commit/${escHtml(codeSha)}" target="_blank" rel="noopener">${escHtml(codeShort)}</a>)`;
+  }
+  if (archiveBase) {
+    html += ` · Archive: <a href="${archiveBase}" target="_blank" rel="noopener">${escHtml(archiveRepo)}</a>`;
+    if (archiveShort) {
+      html += ` (<a href="${archiveBase}/commit/${escHtml(archiveSha)}" target="_blank" rel="noopener">${escHtml(archiveShort)}</a>)`;
+    }
+  }
+
+  const footer = document.getElementById('site-footer');
+  if (footer) footer.innerHTML = html;
 }
 
 async function updateGameFilter(): Promise<void> {
@@ -867,6 +909,7 @@ export async function init(): Promise<void> {
     document.getElementById('controls')!.style.display = 'flex';
 
     _broadcasterId = await setStreamerTag();
+    renderFooter();
     bindEvents();
     syncAuthUI();
     await initCalendar(render); // must await: queries clip date range for nav bounds

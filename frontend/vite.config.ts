@@ -87,20 +87,46 @@ function dbRangePlugin(): Plugin {
   };
 }
 
-// Inject VITE_TWITCH_CLIENT_ID from config.toml for local dev so users don't
-// need a separate .env.local file. In CI, the env var is set explicitly by
-// the workflow and takes precedence (process.env check runs first).
-//
-// The frontend requires a *Public* Twitch app (implicit grant, no client_secret), which
-// must be separate from the scraper's Confidential app. Its client_id is stored
-// under the key web_client_id in config.toml to avoid confusion with the
-// scraper's client_id.
-if (!process.env['VITE_TWITCH_CLIENT_ID']) {
-  try {
-    const toml  = readFileSync('../config.toml', 'utf-8');
-    const match = /web_client_id\s*=\s*"([^"]+)"/.exec(toml);
-    if (match?.[1]) process.env['VITE_TWITCH_CLIENT_ID'] = match[1];
-  } catch { /* config.toml absent — VITE_TWITCH_CLIENT_ID must be set externally */ }
+// Inject several VITE_ vars from config.toml for local dev so users don't
+// need a separate .env.local file. In CI, env vars are set explicitly by
+// the workflow and take precedence (process.env checks run first).
+{
+  const needsToml =
+    !process.env['VITE_TWITCH_CLIENT_ID'] ||
+    !process.env['VITE_SITE_TITLE'] ||
+    !process.env['VITE_OG_DESCRIPTION'] ||
+    !process.env['VITE_SITE_URL'];
+
+  let toml = '';
+  if (needsToml) {
+    try { toml = readFileSync('../config.toml', 'utf-8'); } catch { /* absent */ }
+  }
+
+  // web_client_id — Public Twitch app for browser OAuth (implicit grant).
+  // Must be a separate app from the scraper's Confidential client_id.
+  if (!process.env['VITE_TWITCH_CLIENT_ID']) {
+    const m = /web_client_id\s*=\s*"([^"]+)"/.exec(toml);
+    if (m?.[1]) process.env['VITE_TWITCH_CLIENT_ID'] = m[1];
+  }
+
+  // site_title — archive name shown in the browser tab and page heading.
+  // Streamer names are appended at runtime by JS.
+  if (!process.env['VITE_SITE_TITLE']) {
+    const m = /site_title\s*=\s*"([^"]+)"/.exec(toml);
+    process.env['VITE_SITE_TITLE'] = m?.[1] ?? 'twist-clear clip archive';
+  }
+
+  // og_description — text for the og:description meta tag.
+  if (!process.env['VITE_OG_DESCRIPTION']) {
+    const m = /og_description\s*=\s*"([^"]+)"/.exec(toml);
+    process.env['VITE_OG_DESCRIPTION'] = m?.[1] ?? 'A Twitch clip archive.';
+  }
+
+  // site_url — canonical URL for og:url. Empty in local dev; CI auto-computes it.
+  if (!process.env['VITE_SITE_URL']) {
+    const m = /site_url\s*=\s*"([^"]+)"/.exec(toml);
+    process.env['VITE_SITE_URL'] = m?.[1] ?? '';
+  }
 }
 
 export default defineConfig({

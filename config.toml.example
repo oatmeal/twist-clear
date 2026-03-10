@@ -13,6 +13,19 @@ client_secret = "your_client_secret_here"
 # If omitted, the "Login with Twitch" button is hidden in the viewer.
 # web_client_id = "your_public_app_client_id_here"
 
+[frontend]
+# Title prefix shown in the browser tab and page heading.
+# Streamer names from the database are appended automatically at runtime,
+# e.g. "My Archive: streamer1, streamer2".
+# site_title = "twist-clear clip archive"
+
+# Text for the og:description meta tag (social link previews).
+# og_description = "A Twitch clip archive."
+
+# Canonical URL for the og:url meta tag. Auto-computed in CI from the GitHub
+# Pages URL; set here if deploying to a custom domain.
+# site_url = "https://you.github.io/my-clips/"
+
 [scraper]
 db_path = "data/clips.db"
 

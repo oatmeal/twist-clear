@@ -19,7 +19,11 @@
     img-src 'self' https://*.twitch.tv https://*.twitchsvc.net https://*.jtvnw.net data:;
     worker-src 'self' blob:;
   ">
-  <title>Twitch Clips Viewer</title>
+  <title>%VITE_SITE_TITLE%</title>
+  <meta property="og:title" content="%VITE_SITE_TITLE%">
+  <meta property="og:description" content="%VITE_OG_DESCRIPTION%">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="%VITE_SITE_URL%">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="calendar.css">
   <script type="module" src="/src/main.ts"></script>
@@ -27,7 +31,7 @@
 <body>
 
 <header>
-  <h1>Twitch Clips</h1>
+  <h1>%VITE_SITE_TITLE%</h1>
   <span class="streamer-tag" id="streamer-tag"></span>
   <div id="auth-indicator" style="display:none">
     <span id="auth-username"></span>
@@ -119,6 +123,9 @@
   <div id="clips-grid"></div>
   <div id="pagination"></div>
 </main>
+
+
+<footer id="site-footer"></footer>
 
 </body>
 </html>

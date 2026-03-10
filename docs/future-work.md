@@ -16,9 +16,6 @@ i18n:
 - i18n, Japanese names for games (use IGDB?)
 
 Other stuff required before release:
-- Link to streamer(s)' twitch pages
-- Change "Twitch clips" "Twitch clips viewer" (configurable with deploy.yml?)
-- opengraph stuff: description, thumbnail, etc. (generate with deploy.yml?)
 - About page with more description linking to GitHub, etc. (generate with deploy.yml?)
 
 Later:
@@ -122,6 +119,25 @@ merge live clips for each broadcaster, then display them in the live section
 (possibly grouped by streamer, or interleaved by date).
 
 Deferred as low priority since most archives track a single streamer.
+
+---
+
+## OG thumbnail
+
+`og:title`, `og:description`, `og:type`, and `og:url` are now included, but
+`og:image` is omitted. The most practical approach would be to pick the
+top-viewed clip's thumbnail URL at build time:
+
+1. Extend `prepare_web_db.py` to write a `site-meta.json` alongside the output
+   DB containing the thumbnail URL of the clip with the highest `view_count`.
+2. In `vite.config.ts`, read that file and set `VITE_OG_IMAGE_URL` before Vite
+   processes `index.html`.
+3. Add `<meta property="og:image" content="%VITE_OG_IMAGE_URL%">` to
+   `index.html`.
+
+Clip thumbnail URLs (on `static-cdn.jtvnw.net`) are already covered by the
+existing `img-src` CSP directive. The `og:image` tag is read by crawlers before
+any JS runs, so a build-time URL is appropriate.
 
 ---
 

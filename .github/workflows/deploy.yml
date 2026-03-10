@@ -36,6 +36,29 @@ on:
         required: false
         type: string
         default: ''
+      site_title:
+        description: >
+          Title prefix shown in the browser tab and page heading.
+          Streamer names are appended automatically at runtime
+          (e.g. "My Archive: streamer1, streamer2").
+          Defaults to "twist-clear clip archive".
+        required: false
+        type: string
+        default: 'twist-clear clip archive'
+      og_description:
+        description: >
+          Text for the og:description meta tag used in social link previews.
+        required: false
+        type: string
+        default: 'A Twitch clip archive.'
+      site_url:
+        description: >
+          Canonical URL for the og:url meta tag
+          (e.g. https://user.github.io/my-clips/).
+          Auto-computed from the calling repo if omitted.
+        required: false
+        type: string
+        default: ''
     secrets:
       TWITCH_CLIENT_ID:
         required: true
@@ -70,6 +93,22 @@ jobs:
         with:
           repository: ${{ inputs.code_repo || 'oatmeal/twist-clear' }}
           ref: ${{ inputs.scraper_ref }}
+
+      - name: Get code SHA
+        id: code-sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Compute site URL
+        id: site-url
+        run: |
+          if [ -n "$INPUT_SITE_URL" ]; then
+            echo "url=$INPUT_SITE_URL" >> "$GITHUB_OUTPUT"
+          else
+            REPO_NAME="${GITHUB_REPOSITORY#*/}"
+            echo "url=https://${{ github.repository_owner }}.github.io/${REPO_NAME}/" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          INPUT_SITE_URL: ${{ inputs.site_url }}
 
       - uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098  # v7.3.1
 
@@ -131,6 +170,15 @@ jobs:
           # Safe to bake into the JS bundle — client_id is a public identifier.
           # If the secret is not set, the "Login with Twitch" button is hidden.
           VITE_TWITCH_CLIENT_ID: ${{ secrets.TWITCH_WEB_CLIENT_ID }}
+          # Branding / metadata baked into the frontend bundle.
+          VITE_SITE_TITLE:     ${{ inputs.site_title }}
+          VITE_OG_DESCRIPTION: ${{ inputs.og_description }}
+          VITE_SITE_URL:       ${{ steps.site-url.outputs.url }}
+          # Footer: links back to the code repo and the archive repo with commit SHAs.
+          VITE_CODE_REPO:      ${{ inputs.code_repo || 'oatmeal/twist-clear' }}
+          VITE_CODE_SHA:       ${{ steps.code-sha.outputs.sha }}
+          VITE_ARCHIVE_REPO:   ${{ github.repository }}
+          VITE_ARCHIVE_SHA:    ${{ github.sha }}
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b  # v4.0.0
