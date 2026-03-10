@@ -87,21 +87,13 @@ function dbRangePlugin(): Plugin {
   };
 }
 
-// Inject several VITE_ vars from config.toml for local dev so users don't
-// need a separate .env.local file. In CI, env vars are set explicitly by
-// the workflow and take precedence (process.env checks run first).
+// Inject VITE_ vars from config.toml for local dev so users don't need a
+// separate .env.local file. In CI, env vars are set explicitly by the workflow
+// and process.env checks below will short-circuit before touching toml content.
+// Attempting to read a non-existent config.toml (e.g. in CI) is caught silently.
 {
-  const needsToml =
-    !process.env['VITE_TWITCH_CLIENT_ID'] ||
-    !process.env['VITE_SITE_TITLE'] ||
-    !process.env['VITE_OG_DESCRIPTION'] ||
-    !process.env['VITE_SITE_URL'] ||
-    !process.env['VITE_COLOR_ACCENT'];
-
   let toml = '';
-  if (needsToml) {
-    try { toml = readFileSync('../config.toml', 'utf-8'); } catch { /* absent */ }
-  }
+  try { toml = readFileSync('../config.toml', 'utf-8'); } catch { /* absent in CI */ }
 
   // web_client_id — Public Twitch app for browser OAuth (implicit grant).
   // Must be a separate app from the scraper's Confidential client_id.
@@ -129,12 +121,24 @@ function dbRangePlugin(): Plugin {
     process.env['VITE_SITE_URL'] = m?.[1] ?? '';
   }
 
-  // accent_color — optional CSS colour value (hex, hsl, oklch, …) that overrides
-  // the default --accent variable at runtime. No default: omit means use the
-  // CSS fallback (#9147ff Twitch purple defined in style.css :root).
-  if (!process.env['VITE_COLOR_ACCENT']) {
-    const m = /accent_color\s*=\s*"([^"]+)"/.exec(toml);
-    if (m?.[1]) process.env['VITE_COLOR_ACCENT'] = m[1];
+  // Optional CSS colour overrides — no defaults; style.css :root values apply
+  // when absent. Maps VITE env var name → config.toml key → CSS custom property.
+  // See docs/theming.md for guidance and example palettes.
+  const cssVarMap: Array<[string, string]> = [
+    ['VITE_COLOR_ACCENT',     'accent_color'],
+    ['VITE_COLOR_BG',         'color_bg'],
+    ['VITE_COLOR_SURFACE',    'color_surface'],
+    ['VITE_COLOR_SURFACE2',   'color_surface2'],
+    ['VITE_COLOR_BORDER',     'color_border'],
+    ['VITE_COLOR_TEXT',       'color_text'],
+    ['VITE_COLOR_MUTED',      'color_muted'],
+    ['VITE_COLOR_CAL_ACCENT', 'cal_accent_color'],
+  ];
+  for (const [envVar, tomlKey] of cssVarMap) {
+    if (!process.env[envVar]) {
+      const m = new RegExp(`${tomlKey}\\s*=\\s*"([^"]+)"`).exec(toml);
+      if (m?.[1]) process.env[envVar] = m[1];
+    }
   }
 }
 

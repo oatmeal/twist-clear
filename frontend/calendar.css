@@ -1,16 +1,23 @@
 :root {
-  /* Calendar heat-map: derived from --accent so the ramp tracks any custom colour.
-     Levels 0–4 span from barely-tinted background up to full accent.
+  /* --cal-accent controls the heat-map colour independently of --accent (the
+     interactive UI colour). Keeping them distinct lets users read heat-map cells
+     as data-density rather than as interactive elements — the same reason
+     GitHub's contribution graph is always green regardless of UI accent.
+     Default: #22a84a (mid-green). Override via cal_accent_color in config.toml
+     or VITE_COLOR_CAL_ACCENT at build time. See docs/theming.md. */
+  --cal-accent: #22a84a;
+
+  /* Heat-map ramp: levels 0–4 from barely-tinted background to full cal-accent.
      Requires color-mix() — Chrome 111+, Firefox 113+, Safari 16.2+. */
-  --cal-0: color-mix(in srgb, var(--accent)  3%, var(--bg));
-  --cal-1: color-mix(in srgb, var(--accent) 22%, var(--bg));
-  --cal-2: color-mix(in srgb, var(--accent) 44%, var(--bg));
-  --cal-3: color-mix(in srgb, var(--accent) 70%, var(--bg));
-  --cal-4: var(--accent);
+  --cal-0: color-mix(in srgb, var(--cal-accent)  3%, var(--bg));
+  --cal-1: color-mix(in srgb, var(--cal-accent) 22%, var(--bg));
+  --cal-2: color-mix(in srgb, var(--cal-accent) 44%, var(--bg));
+  --cal-3: color-mix(in srgb, var(--cal-accent) 70%, var(--bg));
+  --cal-4: var(--cal-accent);
   /* Dark text used on the brightest heat cells.
-     Derived from --accent so contrast text tracks colour changes automatically. */
-  --cal-text:       color-mix(in srgb, var(--accent), black 65%);
-  --cal-text-muted: color-mix(in srgb, var(--accent), black 50%);
+     Derived from --cal-accent so contrast text tracks colour changes automatically. */
+  --cal-text:       color-mix(in srgb, var(--cal-accent), black 65%);
+  --cal-text-muted: color-mix(in srgb, var(--cal-accent), black 50%);
 }
 
 /* ── View switcher ── */

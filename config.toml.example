@@ -26,11 +26,36 @@ client_secret = "your_client_secret_here"
 # Pages URL; set here if deploying to a custom domain.
 # site_url = "https://you.github.io/my-clips/"
 
-# Accent colour for the UI. Accepts any valid CSS colour value: hex, hsl(),
-# oklch(), etc. Overrides the default Twitch purple (#9147ff). All derived
-# colours (hover tint, calendar heat-map ramp) update automatically via
-# color-mix(). See docs/theming.md for tips and example palettes.
+# ── Colour overrides ──────────────────────────────────────────────────────
+# All values accept any valid CSS colour: hex, hsl(), oklch(), etc.
+# Omit a key to keep the built-in default. Partial overrides are fine.
+# See docs/theming.md for tips, contrast guidance, and example palettes.
+
+# Accent: interactive highlights, buttons, calendar heat-map.     Default: #9147ff
 # accent_color = "#9147ff"
+
+# Page background.                                                Default: #0e0e0e
+# color_bg = "#0e0e0e"
+
+# Card and header background.                                     Default: #1f1f23
+# color_surface = "#1f1f23"
+
+# Dropdowns, nav buttons, secondary surfaces.                     Default: #26262c
+# color_surface2 = "#26262c"
+
+# Borders and dividers.                                           Default: #3a3a40
+# color_border = "#3a3a40"
+
+# Primary text.                                                   Default: #efeff1
+# color_text = "#efeff1"
+
+# Secondary text and labels.                                      Default: #adadb8
+# color_muted = "#adadb8"
+
+# Calendar heat-map colour — intentionally separate from accent_color so the
+# density ramp reads as data rather than interactive UI. Default: #22a84a (green).
+# Set to match accent_color if you want them to track together.
+# cal_accent_color = "#22a84a"
 
 [scraper]
 db_path = "data/clips.db"

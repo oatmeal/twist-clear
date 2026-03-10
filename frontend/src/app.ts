@@ -727,12 +727,31 @@ function updateTzLabel(): void {
 
 // ── Accent colour override ─────────────────────────────────────────────────
 
-/** Apply VITE_COLOR_ACCENT to the document root if set at build time.
- *  All derived CSS variables (--accent-h, --cal-0..4, --cal-text*) use
- *  color-mix() referencing --accent, so they cascade automatically. */
+/** Apply any VITE_COLOR_* build-time overrides to the document root.
+ *  Inline styles on <html> take precedence over :root stylesheet values, so
+ *  each non-empty var wins over the CSS default.  Derived variables
+ *  (--accent-h, --cal-0..4, --cal-text*) are color-mix() expressions
+ *  referencing --accent and cascade automatically — no extra work needed. */
 function applyColorOverrides(): void {
-  const accent = (import.meta.env as Record<string, string>)['VITE_COLOR_ACCENT'] ?? '';
-  if (accent) document.documentElement.style.setProperty('--accent', accent);
+  const env = import.meta.env as Record<string, string>;
+  const overrides: Array<[string, string]> = [
+    ['--accent',     env['VITE_COLOR_ACCENT']     ?? ''],
+    ['--bg',         env['VITE_COLOR_BG']         ?? ''],
+    ['--surface',    env['VITE_COLOR_SURFACE']    ?? ''],
+    ['--surface2',   env['VITE_COLOR_SURFACE2']   ?? ''],
+    ['--border',     env['VITE_COLOR_BORDER']     ?? ''],
+    ['--text',       env['VITE_COLOR_TEXT']       ?? ''],
+    ['--muted',      env['VITE_COLOR_MUTED']      ?? ''],
+    // Calendar heat-map colour — separate from --accent so the density ramp
+    // is visually distinct from interactive UI elements. Defaults to #22a84a
+    // (mid-green) in calendar.css; override to match --accent if you want them
+    // to track together, or to any other colour.
+    ['--cal-accent', env['VITE_COLOR_CAL_ACCENT'] ?? ''],
+  ];
+  const root = document.documentElement;
+  for (const [prop, val] of overrides) {
+    if (val) root.style.setProperty(prop, val);
+  }
 }
 
 // ── Settings panel ───────────────────────────────────────────────────────

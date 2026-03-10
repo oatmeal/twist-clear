@@ -61,10 +61,55 @@ on:
         default: ''
       accent_color:
         description: >
-          Accent colour for the UI. Accepts any valid CSS colour value
-          (hex, hsl(), oklch(), etc.). Overrides the default Twitch purple
-          (#9147ff). All derived colours (hover tint, calendar heat-map)
-          update automatically. See docs/theming.md for guidance.
+          Accent colour: interactive highlights, buttons, calendar heat-map.
+          Accepts any valid CSS colour (hex, hsl(), oklch(), etc.).
+          Overrides the default Twitch purple (#9147ff). All derived colours
+          (hover tint, calendar ramp) update automatically via color-mix().
+          See docs/theming.md for guidance and example palettes.
+        required: false
+        type: string
+        default: ''
+      color_bg:
+        description: >
+          Page background colour. Default: #0e0e0e (near-black).
+        required: false
+        type: string
+        default: ''
+      color_surface:
+        description: >
+          Card and header background colour. Default: #1f1f23.
+        required: false
+        type: string
+        default: ''
+      color_surface2:
+        description: >
+          Secondary surfaces: dropdowns, nav buttons. Default: #26262c.
+        required: false
+        type: string
+        default: ''
+      color_border:
+        description: >
+          Border and divider colour. Default: #3a3a40.
+        required: false
+        type: string
+        default: ''
+      color_text:
+        description: >
+          Primary text colour. Default: #efeff1 (near-white).
+        required: false
+        type: string
+        default: ''
+      color_muted:
+        description: >
+          Secondary text and labels colour. Default: #adadb8.
+        required: false
+        type: string
+        default: ''
+      cal_accent_color:
+        description: >
+          Calendar heat-map colour. Kept separate from accent_color so the
+          density ramp reads as data rather than interactive UI. Default: #22a84a
+          (mid-green). Set to match accent_color if you want them to track together.
         required: false
         type: string
         default: ''
@@ -188,8 +233,16 @@ jobs:
           VITE_CODE_SHA:       ${{ steps.code-sha.outputs.sha }}
           VITE_ARCHIVE_REPO:   ${{ github.repository }}
           VITE_ARCHIVE_SHA:    ${{ github.sha }}
-          # Optional accent colour override (empty string = CSS default).
+          # Optional colour overrides (empty string = CSS default in style.css :root).
+          # See docs/theming.md for guidance and example palettes.
           VITE_COLOR_ACCENT:   ${{ inputs.accent_color }}
+          VITE_COLOR_BG:       ${{ inputs.color_bg }}
+          VITE_COLOR_SURFACE:  ${{ inputs.color_surface }}
+          VITE_COLOR_SURFACE2: ${{ inputs.color_surface2 }}
+          VITE_COLOR_BORDER:   ${{ inputs.color_border }}
+          VITE_COLOR_TEXT:     ${{ inputs.color_text }}
+          VITE_COLOR_MUTED:    ${{ inputs.color_muted }}
+          VITE_COLOR_CAL_ACCENT: ${{ inputs.cal_accent_color }}
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b  # v4.0.0

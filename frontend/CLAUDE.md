@@ -92,20 +92,39 @@ saved to both localStorage and the URL hash. The settings gear icon in the
 controls bar opens a panel with a `<select>` populated by `populateTzSelect()`
 in `app.ts`.
 
-### Accent colour theming (`VITE_COLOR_ACCENT`)
+### Colour theming (`VITE_COLOR_*`)
 
 `applyColorOverrides()` in `app.ts` is called at the very top of `init()`. It
-reads `import.meta.env.VITE_COLOR_ACCENT` and, if set, calls
-`document.documentElement.style.setProperty('--accent', value)`.
+iterates over a 7-entry map of VITE env var → CSS custom property and calls
+`document.documentElement.style.setProperty(prop, val)` for each non-empty
+value. Inline styles on `<html>` win over `:root` stylesheet values in the
+cascade, so this approach is safe and does not require modifying any CSS.
 
-All derived colours (`--accent-h`, the calendar heat-map `--cal-0..4`, and the
-contrast text vars `--cal-text`/`--cal-text-muted`) are declared with
-`color-mix()` referencing `--accent`, so they update automatically — no JS
-needed beyond the single `setProperty` call. Browser support: Chrome 111+,
-Firefox 113+, Safari 16.2+ (see `docs/theming.md`).
+Supported vars and their CSS properties:
 
-The default accent (`#9147ff` — Twitch purple) lives in `style.css :root` and
-is the CSS fallback when `VITE_COLOR_ACCENT` is empty.
+| Env var | CSS var | Default |
+|---------|---------|---------|
+| `VITE_COLOR_ACCENT` | `--accent` | `#9147ff` |
+| `VITE_COLOR_CAL_ACCENT` | `--cal-accent` | `#22a84a` |
+| `VITE_COLOR_BG` | `--bg` | `#0e0e0e` |
+| `VITE_COLOR_SURFACE` | `--surface` | `#1f1f23` |
+| `VITE_COLOR_SURFACE2` | `--surface2` | `#26262c` |
+| `VITE_COLOR_BORDER` | `--border` | `#3a3a40` |
+| `VITE_COLOR_TEXT` | `--text` | `#efeff1` |
+| `VITE_COLOR_MUTED` | `--muted` | `#adadb8` |
+
+`--cal-accent` is intentionally separate from `--accent` so the calendar
+heat-map reads as data-density rather than an interactive element. Defaults to
+green (`#22a84a`) in `calendar.css :root`. Users can set it to match
+`--accent` if they prefer a unified look.
+
+All values default to the `:root` stylesheet declarations when the env var is
+empty. Partial overrides are fine — omit a var to keep its CSS default.
+
+Derived colours (`--accent-h`, `--cal-0..4`, `--cal-text`/`--cal-text-muted`)
+use `color-mix()` that automatically cascade when `--accent`/`--cal-accent`
+are overridden. Browser support: Chrome 111+, Firefox 113+, Safari 16.2+
+(see `docs/theming.md`).
 
 ### Circular dependency: calendar ↔ app
 
