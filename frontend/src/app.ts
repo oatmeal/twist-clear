@@ -320,7 +320,9 @@ async function fetchLiveClips(): Promise<void> {
   const token = await auth.getValidToken();
   if (!token) { auth.logout(); syncAuthUI(); return; }
 
+  const refreshBtnEl = document.getElementById('btn-refresh-live') as HTMLButtonElement | null;
   state.setLiveFetching(true);
+  if (refreshBtnEl) { refreshBtnEl.disabled = true; refreshBtnEl.textContent = t().refreshingBtn; }
 
   // clips_meta stores max_date as YYYY-MM-DD (date-only) for calendar use.
   // Twitch's started_at parameter requires full RFC3339; ensureRfc3339 appends
@@ -336,6 +338,7 @@ async function fetchLiveClips(): Promise<void> {
   }
 
   state.setLiveFetching(false);
+  if (refreshBtnEl) { refreshBtnEl.disabled = false; refreshBtnEl.textContent = t().refreshBtn; }
   state.setLiveClips(clips);
   updateLiveClipBounds();
   void render();
@@ -716,6 +719,8 @@ function applyTranslations(): void {
   if (loginBtn) loginBtn.textContent = tr.loginBtn;
   const logoutBtn = document.getElementById('btn-logout');
   if (logoutBtn) logoutBtn.textContent = tr.logoutBtn;
+  const refreshBtnEl = document.getElementById('btn-refresh-live') as HTMLButtonElement | null;
+  if (refreshBtnEl) refreshBtnEl.textContent = state.liveFetching ? tr.refreshingBtn : tr.refreshBtn;
   const dismissBtn = document.getElementById('btn-dismiss-banner');
   if (dismissBtn) dismissBtn.setAttribute('aria-label', tr.dismissBanner);
 
@@ -861,6 +866,10 @@ function bindEvents(): void {
 
   document.getElementById('btn-login')?.addEventListener('click', () => {
     void auth.initiateLogin();
+  });
+
+  document.getElementById('btn-refresh-live')?.addEventListener('click', () => {
+    void fetchLiveClips();
   });
 
   document.getElementById('btn-logout')?.addEventListener('click', () => {

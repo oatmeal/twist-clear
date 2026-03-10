@@ -20,6 +20,8 @@ export interface Translations {
   // Auth / login banner
   loginBtn: string;
   logoutBtn: string;
+  refreshBtn: string;
+  refreshingBtn: string;
   dismissBanner: string;
   loginBannerWithDate: (date: string) => string;
   loginBannerNoDate: string;
@@ -65,6 +67,8 @@ const en: Translations = {
   errorHint: 'Make sure you are serving this page over HTTP and that <code>clips.db</code> is accessible. Run: <code>npm run dev</code> from the frontend/ directory.',
   loginBtn: 'Login with Twitch',
   logoutBtn: 'Log out',
+  refreshBtn: 'Fetch latest clips',
+  refreshingBtn: 'Fetching…',
   dismissBanner: 'Dismiss',
   loginBannerWithDate: (date) => `This archive has clips through ${date}. Log in with Twitch to see newer clips.`,
   loginBannerNoDate: 'Log in with Twitch to see clips newer than this archive.',
@@ -115,6 +119,8 @@ const ja: Translations = {
   errorHint: 'HTTPでページを提供し、<code>clips.db</code>にアクセスできることを確認してください。フロントエンドディレクトリから <code>npm run dev</code> を実行してください。',
   loginBtn: 'Twitchでログイン',
   logoutBtn: 'ログアウト',
+  refreshBtn: '新着クリップ更新',
+  refreshingBtn: '更新中…',
   dismissBanner: '閉じる',
   loginBannerWithDate: (date) => `${date}までのクリップをアーカイブしています。それ以降の新しいクリップを見るには、Twitchでログインしてください。`,
   loginBannerNoDate: 'アーカイブより新しいクリップを見るにはTwitchでログインしてください。',

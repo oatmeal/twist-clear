@@ -9,7 +9,6 @@ Deferred items with rationale. See the relevant source files for implementation 
 Fixes:
 - date inputs require both to be set? Maybe make a little more obvious with an explicit "set" button or more feedback?
 - Browse clears time filter; but it's not that obvious yet
-- When is the Twitch API queried for new clips? Only on page load? Maybe we should have a refresh button as part of the live-clips indicator.
 
 
 Other stuff required before release:
