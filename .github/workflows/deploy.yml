@@ -59,6 +59,15 @@ on:
         required: false
         type: string
         default: ''
+      accent_color:
+        description: >
+          Accent colour for the UI. Accepts any valid CSS colour value
+          (hex, hsl(), oklch(), etc.). Overrides the default Twitch purple
+          (#9147ff). All derived colours (hover tint, calendar heat-map)
+          update automatically. See docs/theming.md for guidance.
+        required: false
+        type: string
+        default: ''
     secrets:
       TWITCH_CLIENT_ID:
         required: true
@@ -179,6 +188,8 @@ jobs:
           VITE_CODE_SHA:       ${{ steps.code-sha.outputs.sha }}
           VITE_ARCHIVE_REPO:   ${{ github.repository }}
           VITE_ARCHIVE_SHA:    ${{ github.sha }}
+          # Optional accent colour override (empty string = CSS default).
+          VITE_COLOR_ACCENT:   ${{ inputs.accent_color }}
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b  # v4.0.0

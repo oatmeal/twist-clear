@@ -92,6 +92,21 @@ saved to both localStorage and the URL hash. The settings gear icon in the
 controls bar opens a panel with a `<select>` populated by `populateTzSelect()`
 in `app.ts`.
 
+### Accent colour theming (`VITE_COLOR_ACCENT`)
+
+`applyColorOverrides()` in `app.ts` is called at the very top of `init()`. It
+reads `import.meta.env.VITE_COLOR_ACCENT` and, if set, calls
+`document.documentElement.style.setProperty('--accent', value)`.
+
+All derived colours (`--accent-h`, the calendar heat-map `--cal-0..4`, and the
+contrast text vars `--cal-text`/`--cal-text-muted`) are declared with
+`color-mix()` referencing `--accent`, so they update automatically — no JS
+needed beyond the single `setProperty` call. Browser support: Chrome 111+,
+Firefox 113+, Safari 16.2+ (see `docs/theming.md`).
+
+The default accent (`#9147ff` — Twitch purple) lives in `style.css :root` and
+is the CSS fallback when `VITE_COLOR_ACCENT` is empty.
+
 ### Circular dependency: calendar ↔ app
 
 `calendar.ts` needs to trigger a re-render in `app.ts`, but `app.ts` imports

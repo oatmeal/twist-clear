@@ -8,8 +8,8 @@ Deferred items with rationale. See the relevant source files for implementation 
 
 Fixes:
 - date inputs require both to be set? Maybe make a little more obvious with an explicit "set" button or more feedback?
-- Logged in user element is positioned weirdly in the top middle of the page. When is the twitch API queried for new clips? Only on page load? Maybe we should have a refresh button as part of this?
 - Browse clears time filter; but it's not that obvious yet
+- When is the Twitch API queried for new clips? Only on page load? Maybe we should have a refresh button as part of the live-clips indicator.
 
 i18n:
 - i18n, localize view counts. In Japanese not K, M, etc. but 万, 億

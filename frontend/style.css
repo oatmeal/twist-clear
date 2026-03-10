@@ -8,7 +8,7 @@
   --text:        #efeff1;
   --muted:       #adadb8;
   --accent:      #9147ff;
-  --accent-h:    #a970ff;
+  --accent-h:    color-mix(in srgb, var(--accent), white 15%);
 }
 
 body {
@@ -28,18 +28,23 @@ header {
   gap: 12px;
 }
 header h1 {
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--accent);
-  letter-spacing: -0.3px;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--muted);
 }
 header .streamer-tag {
-  font-size: 13px;
-  color: var(--muted);
+  font-size: 15px;
+  color: var(--muted); /* for the ': ' separator */
+}
+/* ── Right-aligned header group: auth + tz + lang ── */
+#header-controls {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 /* ── Auth indicator (logged-in state in header) ── */
 #auth-indicator {
-  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -59,19 +64,28 @@ header .streamer-tag {
   transition: border-color 0.12s, color 0.12s;
 }
 .auth-btn:hover { border-color: var(--accent); color: var(--text); }
+#btn-settings {
+  font-variant-numeric: tabular-nums;
+  min-width: 54px;
+  text-align: center;
+}
 
 .lang-toggle {
-  margin-left: auto;
   background: var(--surface2);
   border: 1px solid var(--border);
-  color: var(--muted);
-  padding: 5px 12px;
+  padding: 5px 10px;
   border-radius: 6px;
   font-size: 12px;
   cursor: pointer;
-  transition: border-color 0.12s, color 0.12s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: border-color 0.12s;
 }
-.lang-toggle:hover { border-color: var(--accent); color: var(--text); }
+.lang-toggle:hover { border-color: var(--accent); }
+.lang-divider { color: var(--border); user-select: none; }
+.lang-opt { color: var(--muted); transition: color 0.12s; }
+.lang-opt.active { color: var(--accent); font-weight: 600; }
 
 /* ── Login banner ── */
 #login-banner {
@@ -457,10 +471,16 @@ main { padding: 24px; }
 
 /* ── Streamer tag links ── */
 header .streamer-tag a {
-  color: var(--muted);
-  text-decoration: none;
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
 }
-header .streamer-tag a:hover { color: var(--text); }
+header .streamer-tag a:hover {
+  color: var(--accent-h);
+  text-decoration-color: var(--accent-h);
+}
 
 /* ── Footer ── */
 #site-footer {

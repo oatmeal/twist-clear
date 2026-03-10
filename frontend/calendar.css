@@ -1,9 +1,16 @@
 :root {
-  --cal-0: #1a1a1e;
-  --cal-1: #1e3a2f;
-  --cal-2: #1a5c3a;
-  --cal-3: #1e7a3e;
-  --cal-4: #22a84a;
+  /* Calendar heat-map: derived from --accent so the ramp tracks any custom colour.
+     Levels 0–4 span from barely-tinted background up to full accent.
+     Requires color-mix() — Chrome 111+, Firefox 113+, Safari 16.2+. */
+  --cal-0: color-mix(in srgb, var(--accent)  3%, var(--bg));
+  --cal-1: color-mix(in srgb, var(--accent) 22%, var(--bg));
+  --cal-2: color-mix(in srgb, var(--accent) 44%, var(--bg));
+  --cal-3: color-mix(in srgb, var(--accent) 70%, var(--bg));
+  --cal-4: var(--accent);
+  /* Dark text used on the brightest heat cells.
+     Derived from --accent so contrast text tracks colour changes automatically. */
+  --cal-text:       color-mix(in srgb, var(--accent), black 65%);
+  --cal-text-muted: color-mix(in srgb, var(--accent), black 50%);
 }
 
 /* ── View switcher ── */
@@ -307,22 +314,23 @@
 }
 
 /* ── Text contrast on bright heat cells ── */
-/* cal-3 (#1e7a3e) and cal-4 (#22a84a) are bright enough that the default
-   light text has poor contrast — switch to dark text instead.
-   White on cal-4: ~2.7:1 (fails). Dark (#0a2010) on cal-4: ~5.8:1 (passes). */
+/* cal-3 and cal-4 are bright enough that the default light text has poor
+   contrast — switch to dark text instead. --cal-text and --cal-text-muted
+   are derived from --accent (see :root above) so contrast tracks colour
+   changes automatically. */
 .month-day-cell[data-heat="3"] .day-number,
-.month-day-cell[data-heat="4"] .day-number { color: #0a2010; }
+.month-day-cell[data-heat="4"] .day-number { color: var(--cal-text); }
 .month-day-cell[data-heat="3"] .day-count,
-.month-day-cell[data-heat="4"] .day-count  { color: #1a3d20; }
+.month-day-cell[data-heat="4"] .day-count  { color: var(--cal-text-muted); }
 /* strip-month: override default muted color AND hover/active states */
 .strip-month[data-heat="3"],
-.strip-month[data-heat="4"] { color: #0a2010; }
+.strip-month[data-heat="4"] { color: var(--cal-text); }
 .strip-month[data-heat="3"]:hover,
 .strip-month[data-heat="4"]:hover,
 .strip-month[data-heat="3"].active,
 .strip-month[data-heat="4"].active,
 .strip-month[data-heat="3"].in-range,
-.strip-month[data-heat="4"].in-range { color: #0a2010; }
+.strip-month[data-heat="4"].in-range { color: var(--cal-text); }
 
 /* ── Responsive ── */
 @media (max-width: 900px) {

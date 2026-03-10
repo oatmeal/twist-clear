@@ -36,6 +36,7 @@ tests/                  # pytest tests for the scraper
 docs/
   deploying.md          # Full GitHub Pages deployment walkthrough
   future-work.md        # Deferred features and known quirks with rationale
+  theming.md            # Accent colour + full palette customisation guide
 frontend/               # TypeScript + Vite SPA (see frontend/CLAUDE.md)
 ```
 

@@ -12,7 +12,6 @@ export interface Translations {
   viewCalendar: string;
   dateFrom: string;
   dateTo: string;
-  langToggle: string;
   // Loading / empty / error
   loading: string;
   noClips: string;
@@ -45,7 +44,6 @@ const en: Translations = {
   viewCalendar: 'Calendar',
   dateFrom: 'From date',
   dateTo: 'To date (inclusive)',
-  langToggle: '日本語',
   loading: 'Loading clips database…',
   noClips: 'No clips match your search.',
   errorTitle: 'Could not load the database.',
@@ -85,7 +83,6 @@ const ja: Translations = {
   viewCalendar: 'カレンダー',
   dateFrom: '開始日',
   dateTo: '終了日（当日含む）',
-  langToggle: 'English',
   loading: 'クリップデータベースを読み込み中…',
   noClips: '検索に一致するクリップがありません。',
   errorTitle: 'データベースを読み込めませんでした。',

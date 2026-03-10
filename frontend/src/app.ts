@@ -701,7 +701,38 @@ function applyTranslations(): void {
   if (loadingText) loadingText.textContent = tr.loading;
   (document.getElementById('empty') as HTMLElement).textContent = tr.noClips;
 
-  (document.getElementById('lang-toggle') as HTMLButtonElement).textContent = tr.langToggle;
+  // Language toggle: highlight the active language in the EN/JA segmented pill.
+  const optEn = document.getElementById('lang-opt-en');
+  const optJa = document.getElementById('lang-opt-ja');
+  if (optEn) optEn.className = lang === 'en' ? 'lang-opt active' : 'lang-opt';
+  if (optJa) optJa.className = lang === 'ja' ? 'lang-opt active' : 'lang-opt';
+}
+
+// ── Timezone label ────────────────────────────────────────────────────────
+
+function fmtTzOffset(off: number): string {
+  if (off === 0) return 'UTC';
+  const absH = Math.floor(Math.abs(off) / 60);
+  const absM = Math.abs(off) % 60;
+  const sign = off > 0 ? '+' : '−';
+  return absM === 0
+    ? `UTC${sign}${absH}`
+    : `UTC${sign}${absH}:${String(absM).padStart(2, '0')}`;
+}
+
+function updateTzLabel(): void {
+  const el = document.getElementById('tz-label');
+  if (el) el.textContent = fmtTzOffset(state.tzOffset);
+}
+
+// ── Accent colour override ─────────────────────────────────────────────────
+
+/** Apply VITE_COLOR_ACCENT to the document root if set at build time.
+ *  All derived CSS variables (--accent-h, --cal-0..4, --cal-text*) use
+ *  color-mix() referencing --accent, so they cascade automatically. */
+function applyColorOverrides(): void {
+  const accent = (import.meta.env as Record<string, string>)['VITE_COLOR_ACCENT'] ?? '';
+  if (accent) document.documentElement.style.setProperty('--accent', accent);
 }
 
 // ── Settings panel ───────────────────────────────────────────────────────
@@ -835,6 +866,7 @@ function bindEvents(): void {
     const v = parseInt((e.target as HTMLSelectElement).value, 10);
     state.setTzOffset(v);
     localStorage.setItem('tc_tz_offset', String(v));
+    updateTzLabel();
     onTzChange();
     pushHash();
   });
@@ -843,6 +875,7 @@ function bindEvents(): void {
 // ── Bootstrap ─────────────────────────────────────────────────────────────
 
 export async function init(): Promise<void> {
+  applyColorOverrides();
   setLang(detectLang());
   applyTranslations();
 
@@ -874,6 +907,9 @@ export async function init(): Promise<void> {
       // else keep the browserTzOffset() default set in state.ts
     }
   }
+
+  // Reflect the resolved tzOffset in the header button immediately.
+  updateTzLabel();
 
   // Restore username from localStorage so the auth indicator shows immediately.
   const storedUsername = auth.getUsername();

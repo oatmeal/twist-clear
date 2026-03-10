@@ -33,11 +33,21 @@
 <header>
   <h1>%VITE_SITE_TITLE%</h1>
   <span class="streamer-tag" id="streamer-tag"></span>
-  <div id="auth-indicator" style="display:none">
-    <span id="auth-username"></span>
-    <button id="btn-logout" class="auth-btn">Log out</button>
+  <div id="header-controls">
+    <div id="auth-indicator" style="display:none">
+      <span id="auth-username"></span>
+      <button id="btn-logout" class="auth-btn">Log out</button>
+    </div>
+    <div class="settings-wrapper" id="tz-wrapper">
+      <button id="btn-settings" class="auth-btn" title="Timezone" aria-label="Timezone"><span id="tz-label">UTC</span></button>
+      <div id="settings-panel" class="settings-panel" hidden>
+        <label>Timezone
+          <select id="tz-select"></select>
+        </label>
+      </div>
+    </div>
+    <button id="lang-toggle" class="lang-toggle" aria-label="Switch language"><span id="lang-opt-en" class="lang-opt">EN</span><span class="lang-divider" aria-hidden="true">/</span><span id="lang-opt-ja" class="lang-opt">JA</span></button>
   </div>
-  <button id="lang-toggle" class="lang-toggle"></button>
 </header>
 
 <div id="login-banner" style="display:none">
@@ -65,14 +75,6 @@
   <div class="view-switcher">
     <button id="btn-view-grid" class="view-btn active">Grid</button>
     <button id="btn-view-cal"  class="view-btn">Calendar</button>
-  </div>
-  <div class="settings-wrapper">
-    <button id="btn-settings" class="auth-btn" title="Settings" aria-label="Settings">⚙</button>
-    <div id="settings-panel" class="settings-panel" hidden>
-      <label>Timezone
-        <select id="tz-select"></select>
-      </label>
-    </div>
   </div>
   <span id="result-count"></span>
 </div>

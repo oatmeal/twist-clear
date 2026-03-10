@@ -95,7 +95,8 @@ function dbRangePlugin(): Plugin {
     !process.env['VITE_TWITCH_CLIENT_ID'] ||
     !process.env['VITE_SITE_TITLE'] ||
     !process.env['VITE_OG_DESCRIPTION'] ||
-    !process.env['VITE_SITE_URL'];
+    !process.env['VITE_SITE_URL'] ||
+    !process.env['VITE_COLOR_ACCENT'];
 
   let toml = '';
   if (needsToml) {
@@ -126,6 +127,14 @@ function dbRangePlugin(): Plugin {
   if (!process.env['VITE_SITE_URL']) {
     const m = /site_url\s*=\s*"([^"]+)"/.exec(toml);
     process.env['VITE_SITE_URL'] = m?.[1] ?? '';
+  }
+
+  // accent_color — optional CSS colour value (hex, hsl, oklch, …) that overrides
+  // the default --accent variable at runtime. No default: omit means use the
+  // CSS fallback (#9147ff Twitch purple defined in style.css :root).
+  if (!process.env['VITE_COLOR_ACCENT']) {
+    const m = /accent_color\s*=\s*"([^"]+)"/.exec(toml);
+    if (m?.[1]) process.env['VITE_COLOR_ACCENT'] = m[1];
   }
 }
 

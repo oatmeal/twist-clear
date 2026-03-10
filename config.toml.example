@@ -26,6 +26,12 @@ client_secret = "your_client_secret_here"
 # Pages URL; set here if deploying to a custom domain.
 # site_url = "https://you.github.io/my-clips/"
 
+# Accent colour for the UI. Accepts any valid CSS colour value: hex, hsl(),
+# oklch(), etc. Overrides the default Twitch purple (#9147ff). All derived
+# colours (hover tint, calendar heat-map ramp) update automatically via
+# color-mix(). See docs/theming.md for tips and example palettes.
+# accent_color = "#9147ff"
+
 [scraper]
 db_path = "data/clips.db"
 
