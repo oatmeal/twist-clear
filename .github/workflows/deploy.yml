@@ -229,7 +229,7 @@ jobs:
         if: ${{ inputs.scrape_mode != 'skip' }}
         run: |
           mkdir -p data
-          if [ "$SCRAPE_MODE" = "fetch" ] || [ "$CACHE_MATCHED_KEY" != "true" ]; then
+          if [ "$SCRAPE_MODE" = "fetch" ] || [ -n "$CACHE_MATCHED_KEY" ]; then
             uv run python scrape.py fetch --force
           else
             uv run python scrape.py update
