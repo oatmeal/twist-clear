@@ -812,6 +812,8 @@ function applyTranslations(): void {
   if (helpPhrase) helpPhrase.textContent = tr.searchHelpPhrase;
   const helpNote = document.getElementById('search-help-note');
   if (helpNote) helpNote.textContent = tr.searchHelpNote;
+  const closeModalBtn = document.getElementById('btn-close-search-help');
+  if (closeModalBtn) closeModalBtn.setAttribute('aria-label', tr.closeModal);
 }
 
 // ── Timezone label ────────────────────────────────────────────────────────

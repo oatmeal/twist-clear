@@ -356,6 +356,19 @@ Supports **English** (`en`) and **Japanese** (`ja`). Key exports:
 `applyTranslations()` on init and language change to sync strings into the DOM.
 To add a language, extend the translation map in `i18n.ts` and add a UI control.
 
+**Rule: no English in `index.html`.** The page defaults to Japanese (`lang="ja"`
+on `<html>`). Every user-visible string in `index.html` — including `title`,
+`placeholder`, `aria-label`, and text content — must use the Japanese translation
+as its static initial value. Strings that `applyTranslations()` already
+overwrites must still default to Japanese in the HTML so there is no flash of
+English before the script runs. When adding any new user-visible element:
+
+1. Add the translation key to the `Translations` interface in `i18n.ts`.
+2. Add both `en` and `ja` values in the two dictionaries.
+3. Wire the element in `applyTranslations()` so the string updates on language
+   toggle.
+4. Set the Japanese string as the initial value in `index.html`.
+
 **Japanese game names**: The scraper stores a `name_ja` column in the `games`
 table (populated via `lib/igdb.py` — IGDB for real games, Twitch's own web
 directory pages as a fallback for non-game categories like "Just Chatting").

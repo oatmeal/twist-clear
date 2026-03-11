@@ -43,6 +43,7 @@ export interface Translations {
   tzLabel: string;
   // Embed
   closeEmbed: string;
+  closeModal: string;
   prevClip: string;
   nextClip: string;
   // Dynamic clip card text
@@ -97,6 +98,7 @@ const en: Translations = {
   searchHelpNote: 'Spaces are required around OR and |.',
   tzLabel: 'Timezone',
   closeEmbed: 'Close embed',
+  closeModal: 'Close',
   prevClip: 'Previous clip',
   nextClip: 'Next clip',
   views: (f) => `${f} views`,
@@ -159,6 +161,7 @@ const ja: Translations = {
   searchHelpNote: 'OR・|・｜ の前後にはスペースが必要です。',
   tzLabel: 'タイムゾーン',
   closeEmbed: '閉じる',
+  closeModal: '閉じる',
   prevClip: '前のクリップ',
   nextClip: '次のクリップ',
   views: (f) => `${f}回視聴`,
