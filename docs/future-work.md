@@ -5,15 +5,7 @@ Deferred items with rationale. See the relevant source files for implementation 
 ---
 
 ## Small issues
-
-Fixes:
-- date inputs require both to be set? Maybe make a little more obvious with an explicit "set" button or more feedback?
-
-
-Other stuff required before release:
-- About page with more description linking to GitHub, etc. (generate with deploy.yml?)
-
-Later:
+- The time zone label shows UTC-XX which is not obviously related to timezones. Maybe just make this show "timezone" or the current time with a clock icon? The help should also mention choosing a timezone to make sure that the timestamps.
 - template repo: fork + change settings to deploy an archive for a streamer
 
 ---
@@ -35,12 +27,6 @@ Deferred because click = select is simple and covers most use cases.
 
 ---
 
-## Combine language / timezone in settings?
-
-Maybe there's a neater UI for this?
-
----
-
 ## Daily timeline with clips as dots
 
 When filtering to a specific day (or week, even?) show clips as dots on a timeline. Bigger dots mean more views?
@@ -53,6 +39,12 @@ When filtering to a specific day (or week, even?) show clips as dots on a timeli
 escaping `%` or `_`, so those characters act as SQL wildcards. Mostly harmless
 for a personal viewer; to fix, escape them before interpolation and add an
 `ESCAPE` clause. Documented in tests.
+
+---
+
+## Title search
+
+Support more complicated queries (parentheses around AND and OR clauses, etc.)?
 
 ---
 

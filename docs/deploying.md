@@ -1,6 +1,6 @@
 # Deploying a clip archive to GitHub Pages
 
-This guide walks through deploying a live clip archive as a GitHub Pages site. The archive runs on a schedule: once a day it scrapes the latest clips and redeploys the viewer.
+This guide walks through deploying a live clip archive as a GitHub Pages site. With the settings below, the archive runs on a schedule: once a day it scrapes the latest clips and redeploys the viewer.
 
 ## Architecture overview
 
@@ -53,7 +53,7 @@ That's all. GitHub will create a `github-pages` deployment environment automatic
 
 ## Step 4 — Create the workflow file
 
-Create `.github/workflows/deploy.yml` in your archive repo with the following content, replacing `YOUR_GITHUB_USERNAME` and the streamer logins:
+Create `.github/workflows/deploy.yml` in your archive repo with the following content, replacing the streamer logins:
 
 ```yaml
 name: Deploy clip archive

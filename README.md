@@ -6,7 +6,7 @@ A two-part tool for building and browsing a personal archive of Twitch clip meta
 
 **Viewer** (`frontend/`) — a browser-based SPA that queries the database directly in the browser via HTTP Range requests ([sql.js-httpvfs](https://github.com/phiresky/sql.js-httpvfs)), so only the pages needed for each query are fetched — the full database is never downloaded at once.
 
-The easiest way to get a live, automatically-updating archive is to [deploy it to GitHub Pages](#deploying-to-github-pages) — no server required. If you prefer to run everything locally, see [Running locally](#running-locally).
+The easiest way to get a live, automatically-updating archive is to [deploy it to GitHub Pages](#deploying-to-github-pages) — no other server required. If you prefer to run everything locally, see [Running locally](#running-locally).
 
 ---
 
@@ -15,7 +15,7 @@ The easiest way to get a live, automatically-updating archive is to [deploy it t
 The recommended setup uses two GitHub repositories:
 
 - **This repo** (`twist-clear`) — contains all the code and a reusable GitHub Actions workflow.
-- **Your archive repo** (e.g. `my-clips`, can be private) — contains only your credentials (as secrets) and a short workflow file that calls the reusable one. The archive repo's GitHub Pages site hosts your clip viewer.
+- **Your archive repo** (e.g. `my-clips`) — contains only your credentials (as secrets) and a short workflow file that calls the reusable one. The archive repo's GitHub Pages site hosts your clip viewer.
 
 A daily Actions run scrapes all clips from scratch and redeploys the site. Each run takes roughly 30 minutes for a typical archive, which is well within Actions' free tier limits.
 
@@ -24,7 +24,7 @@ A daily Actions run scrapes all clips from scratch and redeploys the site. Each 
 **Quick summary:**
 
 1. **Twitch app** — create one at https://dev.twitch.tv/console/apps (see [step-by-step instructions](#1-create-a-twitch-application) below; you'll need Client ID and Client Secret).
-2. **Create the archive repo** — any name, public or private.
+2. **Create the archive repo** — any name.
 3. **Add secrets** — `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET` (required); `TWITCH_WEB_CLIENT_ID` (optional, enables Login with Twitch) under *Settings → Secrets and variables → Actions*.
 4. **Enable Pages** — *Settings → Pages*, source set to **GitHub Actions**.
 5. **Add this workflow file** as `.github/workflows/deploy.yml` in the archive repo, replacing `YOUR_USERNAME` and the streamer logins:
@@ -215,9 +215,9 @@ Requires `frontend/public/clips.db` — run `prepare-db` first. Serve `frontend/
 
 **Viewer features:**
 
-- Thumbnail grid with clip title, view count, creator, game, and date
+- Thumbnail grid and list view with clip title, view count, creator, game, and date
 - Search by title, filter by game, sort by views or date
-- Date range filter and calendar view (year heatmap → month grid, selectable by day or week)
+- Date range filter and calendar view (year heatmap → month grid, also selectable by day or week)
 - URL hash preserves all filter state — links are bookmarkable and shareable
 - Click a thumbnail to embed the clip inline; click outside or press Escape to close
 - **Login with Twitch** — fetches clips newer than the archive date live from the Twitch API and displays them above the archive grid (no backend required; uses Twitch's implicit grant OAuth)
@@ -283,7 +283,7 @@ uv run ruff format .       # format
 
 ```sh
 cd frontend
-npm test           # Vitest unit tests (123 tests — query builder, hash, date utils, formatting, live filter, OAuth helpers)
+npm test           # Vitest unit tests (hundreds of tests, including query builder, hash, date utils, formatting, live filter, OAuth helpers)
 npx tsc --noEmit   # type-check
 ```
 
