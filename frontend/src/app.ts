@@ -174,18 +174,23 @@ function renderFooter(): void {
 async function updateGameFilter(): Promise<void> {
   let rows: Awaited<ReturnType<typeof q>>;
 
-  if (state.useMeta && state.calDateFrom === null) {
+  if (state.useMeta && state.calDateFrom === null && state.calDateTo === null) {
     // Fast path: precomputed table — single page read, no aggregate scan.
     rows = await q('SELECT id, name, name_ja, cnt FROM game_clip_counts ORDER BY cnt DESC');
   } else {
     // Slow path: live aggregate (needed when a date filter is active, or
     // when running against the raw dev-symlink DB without clips_meta).
     const params: Record<string, string> = {};
-    const dateClause = state.calDateFrom !== null
-      ? (params[':dateFrom'] = localDateToUtcBound(state.calDateFrom, state.tzOffset),
-         params[':dateTo']   = localDateToUtcBound(state.calDateTo!, state.tzOffset),
-         'WHERE c.created_at >= :dateFrom AND c.created_at < :dateTo')
-      : '';
+    const dateParts: string[] = [];
+    if (state.calDateFrom !== null) {
+      dateParts.push('c.created_at >= :dateFrom');
+      params[':dateFrom'] = localDateToUtcBound(state.calDateFrom, state.tzOffset);
+    }
+    if (state.calDateTo !== null) {
+      dateParts.push('c.created_at < :dateTo');
+      params[':dateTo'] = localDateToUtcBound(state.calDateTo, state.tzOffset);
+    }
+    const dateClause = dateParts.length ? `WHERE ${dateParts.join(' AND ')}` : '';
     rows = await q(
       `SELECT g.id, g.name, g.name_ja, COUNT(c.id) AS cnt
        FROM games g
@@ -706,7 +711,8 @@ export async function render(): Promise<void> {
     const gameOnlyFilter = state.useMeta
       && state.gameFilter !== ''
       && !state.searchQuery
-      && state.calDateFrom === null;
+      && state.calDateFrom === null
+      && state.calDateTo === null;
     if (state.useMeta && where === '') {
       const metaRows = await q('SELECT total_clips FROM clips_meta');
       dbCount = (metaRows[0]?.['total_clips'] as number | undefined) ?? 0;
