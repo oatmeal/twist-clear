@@ -12,6 +12,7 @@ export let searchQuery: string = '';
 export let sortBy: SortKey = 'date_desc';
 export let gameFilter: string = '';
 export let currentView: 'grid' | 'calendar' = 'grid';
+export let clipLayout: 'grid' | 'list' = 'grid';
 
 // ── Calendar navigation state ─────────────────────────────────────────────
 
@@ -49,6 +50,7 @@ export function setSearchQuery(v: string): void { searchQuery = v; }
 export function setSortBy(v: SortKey): void { sortBy = v; }
 export function setGameFilter(v: string): void { gameFilter = v; }
 export function setCurrentView(v: 'grid' | 'calendar'): void { currentView = v; }
+export function setClipLayout(v: 'grid' | 'list'): void { clipLayout = v; }
 export function setCalYear(v: number): void { calYear = v; }
 export function setCalMonth(v: number | null): void { calMonth = v; }
 export function setCalDay(v: string | null): void { calDay = v; }

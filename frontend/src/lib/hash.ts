@@ -1,5 +1,6 @@
 export interface HashState {
   currentView: 'grid' | 'calendar';
+  clipLayout: 'grid' | 'list';
   searchQuery: string;
   sortBy: string;
   gameFilter: string;
@@ -19,6 +20,7 @@ export function serializeHash(s: HashState): string {
   const p = new URLSearchParams();
 
   if (s.currentView === 'calendar') p.set('view', 'calendar');
+  if (s.clipLayout === 'list') p.set('layout', 'list');
   if (s.searchQuery) p.set('q', s.searchQuery);
   if (s.sortBy !== 'date_desc') p.set('sort', s.sortBy);
   if (s.gameFilter) p.set('game', s.gameFilter);
@@ -49,6 +51,9 @@ export function deserializeHash(hashStr: string): Partial<HashState> {
   const view = p.get('view');
   if (view === 'calendar') result.currentView = 'calendar';
   else if (view === null && !p.has('view')) result.currentView = 'grid';
+
+  const layout = p.get('layout');
+  result.clipLayout = layout === 'list' ? 'list' : 'grid';
 
   const q = p.get('q');
   if (q !== null) result.searchQuery = q;

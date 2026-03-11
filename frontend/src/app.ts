@@ -1,6 +1,6 @@
 import * as state from './state';
 import { initDb, q, DB_URL } from './db';
-import { escHtml, fmtDuration, fmtViews, fmtDateTime, fmtDate } from './lib/format';
+import { escHtml, fmtDuration, fmtViews, fmtDateTime, fmtDate, fmtTime } from './lib/format';
 import { buildWhere, ORDER } from './lib/query';
 import type { SortKey } from './lib/query';
 import { serializeHash, deserializeHash } from './lib/hash';
@@ -15,7 +15,7 @@ import {
   onTzChange,
   updateLiveClipBounds,
 } from './calendar';
-import { setUseMeta } from './state';
+import { setUseMeta, setClipLayout } from './state';
 import * as auth from './auth';
 import * as twitch from './twitch';
 import type { LiveClip } from './twitch';
@@ -31,6 +31,7 @@ import type { ViewCountSortKey } from './lib/liveRank';
 function pushHash(): void {
   const s = serializeHash({
     currentView: state.currentView,
+    clipLayout: state.clipLayout,
     searchQuery: state.searchQuery,
     sortBy: state.sortBy,
     gameFilter: state.gameFilter,
@@ -48,6 +49,9 @@ function pushHash(): void {
 
 function applyStateHash(hashStr: string): void {
   const partial = deserializeHash(hashStr);
+
+  state.setClipLayout(partial.clipLayout ?? 'grid');
+  updateLayoutButtons();
 
   state.setSearchQuery(partial.searchQuery ?? '');
   state.setSortBy((partial.sortBy ?? 'date_desc') as SortKey);
@@ -87,6 +91,13 @@ function applyStateHash(hashStr: string): void {
   }
 
   void render();
+}
+
+// ── Layout toggle helpers ──────────────────────────────────────────────────
+
+function updateLayoutButtons(): void {
+  document.getElementById('btn-view-grid')?.classList.toggle('active', state.clipLayout === 'grid');
+  document.getElementById('btn-view-list')?.classList.toggle('active', state.clipLayout === 'list');
 }
 
 // ── DB query helpers ──────────────────────────────────────────────────────
@@ -206,6 +217,14 @@ async function updateGameFilter(): Promise<void> {
 // ── Clip card HTML helper ─────────────────────────────────────────────────
 
 // Shared template for DB clips (render) and live clips (renderLiveSection).
+// Shared clip data shape used by both grid cards and list rows.
+type ClipItem = {
+  url: string; thumbnail_url: string; title: string; duration: number;
+  view_count: number; game_name: string; game_name_ja: string;
+  game_id: string; creator_name: string; created_at: string;
+  isLive: boolean;
+};
+
 // The onerror attribute is intentionally omitted — broken images are handled
 // by attachImgErrorHandlers() after setting innerHTML, avoiding inline JS
 // which is blocked by the Content-Security-Policy.
@@ -244,6 +263,43 @@ function clipCardHtml(clip: {
     </div>`;
 }
 
+function clipListRowHtml(clip: ClipItem): string {
+  const displayGameName = (lang === 'ja' && clip.game_name_ja) ? clip.game_name_ja : clip.game_name;
+  const gameEl = displayGameName
+    ? `<button class="clip-game-link" type="button" data-game-id="${escHtml(clip.game_id)}">${escHtml(displayGameName)}</button>`
+    : '';
+  const dateStr = fmtDateTime(clip.created_at, lang, state.tzOffset);
+  // Split into date-only and time-only so the meta cell can wrap between them
+  // (never mid-date or mid-time) via white-space: nowrap on each span.
+  const datePart = fmtDate(clip.created_at, state.tzOffset, lang);
+  const timePart = fmtTime(clip.created_at, lang, state.tzOffset);
+  const liveClass = clip.isLive ? ' live-clip' : '';
+  return `
+    <tr class="clip-row${liveClass}" data-clip-url="${escHtml(clip.url)}">
+      <td class="clip-col-title">
+        <div class="clip-list-title-cell">
+          <div class="clip-thumb clip-list-thumb">
+            <img src="${escHtml(clip.thumbnail_url)}" alt="${escHtml(clip.title)}" loading="lazy">
+            <span class="clip-duration">${fmtDuration(clip.duration)}</span>
+          </div>
+          <a href="${escHtml(clip.url)}" target="_blank" rel="noopener noreferrer">${escHtml(clip.title)}</a>
+        </div>
+      </td>
+      <td class="clip-col-game">${gameEl}</td>
+      <td class="clip-col-creator">${escHtml(clip.creator_name)}</td>
+      <td class="clip-col-date">${dateStr}</td>
+      <td class="clip-col-meta">
+        <div class="clip-meta-game">${gameEl}</div>
+        <div class="clip-meta-creator">${escHtml(clip.creator_name)}</div>
+        <div class="clip-meta-date">
+          <span class="clip-meta-date-part">${escHtml(datePart)}</span>
+          <span class="clip-meta-date-part">${escHtml(timePart)}</span>
+        </div>
+      </td>
+      <td class="clip-col-views">${fmtViews(clip.view_count, lang)}</td>
+    </tr>`;
+}
+
 // Attach img error handlers after innerHTML is set (avoids inline onerror
 // attributes which are blocked by the Content-Security-Policy).
 function attachImgErrorHandlers(container: HTMLElement): void {
@@ -271,10 +327,18 @@ function extractClipSlug(url: string): string | null {
 
 const _thumbCache = new WeakMap<HTMLElement, HTMLElement>();
 let _expandedCard: HTMLElement | null = null;
+// List-view expand state: the expanded <tr> row and the embed <tr> inserted after it.
+let _expandedRow: HTMLElement | null = null;
+let _insertedEmbedRow: HTMLElement | null = null;
 
 function _onDocClickOutside(e: MouseEvent): void {
-  if (_expandedCard && !_expandedCard.contains(e.target as Node)) {
+  const target = e.target as Node;
+  if (_expandedCard && !_expandedCard.contains(target)) {
     collapseCard(_expandedCard);
+  } else if (_expandedRow) {
+    const inRow   = _expandedRow.contains(target);
+    const inEmbed = _insertedEmbedRow !== null && _insertedEmbedRow.contains(target);
+    if (!inRow && !inEmbed) collapseRow(_expandedRow);
   }
 }
 
@@ -349,6 +413,59 @@ function expandCard(card: HTMLElement, skipScroll = false): void {
   setTimeout(() => document.addEventListener('click', _onDocClickOutside), 0);
 }
 
+// ── List-view row expand/collapse ─────────────────────────────────────────
+
+function collapseRow(row: HTMLElement): void {
+  _insertedEmbedRow?.remove();
+  _insertedEmbedRow = null;
+  row.classList.remove('expanded');
+  document.removeEventListener('click', _onDocClickOutside);
+  _expandedRow = null;
+}
+
+function expandRow(row: HTMLElement, skipScroll = false): void {
+  if (_expandedRow && _expandedRow !== row) collapseRow(_expandedRow);
+
+  const clipUrl = row.dataset['clipUrl'] ?? '';
+  const slug = extractClipSlug(clipUrl);
+  if (!slug) {
+    window.open(clipUrl, '_blank', 'noopener,noreferrer');
+    return;
+  }
+
+  const parent = encodeURIComponent(window.location.hostname || 'localhost');
+  const src = `https://clips.twitch.tv/embed?clip=${encodeURIComponent(slug)}&parent=${parent}&autoplay=false`;
+
+  const tbody = row.closest('tbody');
+  const allRows = tbody ? Array.from(tbody.querySelectorAll<HTMLElement>('.clip-row')) : [];
+  const idx = allRows.indexOf(row);
+
+  // Count only visible cells — hidden cells (display:none from responsive CSS) must be excluded.
+  const colCount = Array.from(row.querySelectorAll('td'))
+    .filter(td => getComputedStyle(td).display !== 'none').length;
+  const embedRow = document.createElement('tr');
+  embedRow.className = 'clip-embed-row';
+  const td = document.createElement('td');
+  td.colSpan = colCount;
+  td.innerHTML =
+    `<div class="clip-embed-wrap">` +
+    `<button class="clip-close-btn" aria-label="${escHtml(t().closeEmbed)}" type="button">&#x2715;</button>` +
+    `<iframe src="${escHtml(src)}" class="clip-iframe" allowfullscreen scrolling="no"></iframe>` +
+    `</div>` +
+    `<div class="clip-list-nav-row">` +
+    `<button class="clip-nav-btn clip-prev-btn" type="button" aria-label="${escHtml(t().prevClip)}"${idx <= 0 ? ' disabled' : ''}>&#8593;</button>` +
+    `<button class="clip-nav-btn clip-next-btn" type="button" aria-label="${escHtml(t().nextClip)}"${idx >= allRows.length - 1 ? ' disabled' : ''}>&#8595;</button>` +
+    `</div>`;
+  embedRow.appendChild(td);
+
+  row.insertAdjacentElement('afterend', embedRow);
+  _insertedEmbedRow = embedRow;
+  row.classList.add('expanded');
+  _expandedRow = row;
+  if (!skipScroll) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  setTimeout(() => document.addEventListener('click', _onDocClickOutside), 0);
+}
+
 function navigateClip(direction: 'prev' | 'next'): void {
   if (!_expandedCard) return;
   const allCards = Array.from(_expandedCard.parentElement?.querySelectorAll<HTMLElement>('.clip-card') ?? []);
@@ -359,6 +476,19 @@ function navigateClip(direction: 'prev' | 'next'): void {
   // then instantly correct scroll so it stays at the same vertical position.
   const topBefore = _expandedCard.getBoundingClientRect().top;
   expandCard(target, true);
+  const topAfter = target.getBoundingClientRect().top;
+  window.scrollBy({ top: topAfter - topBefore, behavior: 'instant' });
+}
+
+function navigateRow(direction: 'prev' | 'next'): void {
+  if (!_expandedRow) return;
+  const tbody = _expandedRow.closest('tbody');
+  const allRows = tbody ? Array.from(tbody.querySelectorAll<HTMLElement>('.clip-row')) : [];
+  const idx = allRows.indexOf(_expandedRow);
+  const target = allRows[direction === 'prev' ? idx - 1 : idx + 1];
+  if (!target) return;
+  const topBefore = _expandedRow.getBoundingClientRect().top;
+  expandRow(target, true);
   const topAfter = target.getBoundingClientRect().top;
   window.scrollBy({ top: topAfter - topBefore, behavior: 'instant' });
 }
@@ -648,6 +778,11 @@ export async function render(): Promise<void> {
       _expandedCard = null;
       document.removeEventListener('click', _onDocClickOutside);
     }
+    if (_expandedRow?.closest('#clips-grid')) {
+      _insertedEmbedRow = null; // will be destroyed by innerHTML replacement
+      _expandedRow = null;
+      document.removeEventListener('click', _onDocClickOutside);
+    }
 
     const liveSlice = sortedLive.slice(liveStart, liveStart + liveOnPage);
     const hasClips  = liveSlice.length > 0 || dbClips.length > 0 ||
@@ -655,49 +790,76 @@ export async function render(): Promise<void> {
 
     if (!hasClips) {
       grid.innerHTML = '';
+      grid.classList.remove('is-list');
       empty.style.display = 'block';
     } else {
       empty.style.display = 'none';
 
+      // Build a flat ClipItem array regardless of layout, then render as grid
+      // cards or a list table.
+      const clipItems: ClipItem[] = [];
+
+      const toItem = (c: Record<string, unknown>, isLive: boolean): ClipItem => ({
+        url:           String(c['url']           ?? ''),
+        thumbnail_url: String(c['thumbnail_url'] ?? ''),
+        title:         String(c['title']         ?? ''),
+        duration:      Number(c['duration']      ?? 0),
+        view_count:    Number(c['view_count']    ?? 0),
+        game_id:       String(c['game_id']       ?? ''),
+        game_name:     String(c['game_name']     ?? ''),
+        game_name_ja:  String(c['game_name_ja']  ?? ''),
+        creator_name:  String(c['creator_name']  ?? ''),
+        created_at:    String(c['created_at']    ?? ''),
+        isLive,
+      });
+
       if (mergingViewCount && vcPage !== null) {
-        // Interleave live clips at their exact ranked positions within the page.
-        const items = interleavePage(dbClips, vcPage.liveOnPage, pageStart, state.PAGE_SIZE);
-        grid.innerHTML = items.map(item =>
-          item.kind === 'live'
-            ? clipCardHtml(item.clip, ' live-clip')
-            : clipCardHtml({
-                url:           String(item.row['url']           ?? ''),
-                thumbnail_url: String(item.row['thumbnail_url'] ?? ''),
-                title:         String(item.row['title']         ?? ''),
-                duration:      Number(item.row['duration']      ?? 0),
-                view_count:    Number(item.row['view_count']    ?? 0),
-                game_id:       String(item.row['game_id']       ?? ''),
-                game_name:     String(item.row['game_name']     ?? ''),
-                game_name_ja:  String(item.row['game_name_ja']  ?? ''),
-                creator_name:  String(item.row['creator_name']  ?? ''),
-                created_at:    String(item.row['created_at']    ?? ''),
-              }),
-        ).join('');
+        for (const item of interleavePage(dbClips, vcPage.liveOnPage, pageStart, state.PAGE_SIZE)) {
+          if (item.kind === 'live') {
+            clipItems.push({
+              url: item.clip.url, thumbnail_url: item.clip.thumbnail_url,
+              title: item.clip.title, duration: item.clip.duration,
+              view_count: item.clip.view_count, game_id: item.clip.game_id ?? '',
+              game_name: item.clip.game_name, game_name_ja: '',
+              creator_name: item.clip.creator_name, created_at: item.clip.created_at,
+              isLive: true,
+            });
+          } else {
+            clipItems.push(toItem(item.row, false));
+          }
+        }
       } else {
-        const liveCards = liveSlice.map(c => clipCardHtml(c, ' live-clip'));
-        const dbCards   = dbClips.map(c => clipCardHtml({
-          url:           String(c['url']           ?? ''),
-          thumbnail_url: String(c['thumbnail_url'] ?? ''),
-          title:         String(c['title']         ?? ''),
-          duration:      Number(c['duration']      ?? 0),
-          view_count:    Number(c['view_count']    ?? 0),
-          game_id:       String(c['game_id']       ?? ''),
-          game_name:     String(c['game_name']     ?? ''),
-          game_name_ja:  String(c['game_name_ja']  ?? ''),
-          creator_name:  String(c['creator_name']  ?? ''),
-          created_at:    String(c['created_at']    ?? ''),
+        const liveItems = liveSlice.map(c => ({
+          url: c.url, thumbnail_url: c.thumbnail_url, title: c.title,
+          duration: c.duration, view_count: c.view_count, game_id: c.game_id ?? '',
+          game_name: c.game_name, game_name_ja: '',
+          creator_name: c.creator_name, created_at: c.created_at, isLive: true,
         }));
+        const dbItems = dbClips.map(c => toItem(c, false));
         // date_desc: live (newest) first; date_asc: DB (oldest) first, live appended.
-        grid.innerHTML = mergingAsc
-          ? [...dbCards, ...liveCards].join('')
-          : [...liveCards, ...dbCards].join('');
+        clipItems.push(...(mergingAsc ? [...dbItems, ...liveItems] : [...liveItems, ...dbItems]));
       }
-      attachImgErrorHandlers(grid);
+
+      if (state.clipLayout === 'list') {
+        const tr = t();
+        const thead =
+          `<thead><tr>` +
+          `<th class="clip-col-title">${escHtml(tr.listColTitle)}</th>` +
+          `<th class="clip-col-game">${escHtml(tr.listColGame)}</th>` +
+          `<th class="clip-col-creator">${escHtml(tr.listColCreator)}</th>` +
+          `<th class="clip-col-date">${escHtml(tr.listColDate)}</th>` +
+          `<th class="clip-col-meta">${escHtml(tr.listColGame)} / ${escHtml(tr.listColCreator)} / ${escHtml(tr.listColDate)}</th>` +
+          `<th class="clip-col-views">${escHtml(tr.listColViews)}</th>` +
+          `</tr></thead>`;
+        const tbody = clipItems.map(clip => clipListRowHtml(clip)).join('');
+        grid.innerHTML = `<table class="clips-table">${thead}<tbody>${tbody}</tbody></table>`;
+        grid.classList.add('is-list');
+        attachImgErrorHandlers(grid);
+      } else {
+        grid.innerHTML = clipItems.map(clip => clipCardHtml(clip, clip.isLive ? ' live-clip' : '')).join('');
+        grid.classList.remove('is-list');
+        attachImgErrorHandlers(grid);
+      }
     }
 
     renderPagination();
@@ -767,6 +929,11 @@ function applyTranslations(): void {
 
   (document.getElementById('btn-view-cal')       as HTMLButtonElement).textContent    = tr.viewCalendar;
   (document.getElementById('btn-clear-dates')    as HTMLButtonElement).setAttribute('aria-label', tr.clearDates);
+
+  const btnGrid = document.getElementById('btn-view-grid') as HTMLButtonElement | null;
+  if (btnGrid) { btnGrid.setAttribute('aria-label', tr.viewGrid); btnGrid.title = tr.viewGrid; }
+  const btnList = document.getElementById('btn-view-list') as HTMLButtonElement | null;
+  if (btnList) { btnList.setAttribute('aria-label', tr.viewList); btnList.title = tr.viewList; }
 
   const loadingText = document.getElementById('loading-text');
   if (loadingText) loadingText.textContent = tr.loading;
@@ -918,6 +1085,22 @@ function bindEvents(): void {
     void render();
   });
 
+  // ── Layout toggle ─────────────────────────────────────────────────────────
+
+  document.getElementById('btn-view-grid')?.addEventListener('click', () => {
+    setClipLayout('grid');
+    state.setCurrentPage(1);
+    updateLayoutButtons();
+    void render();
+  });
+
+  document.getElementById('btn-view-list')?.addEventListener('click', () => {
+    setClipLayout('list');
+    state.setCurrentPage(1);
+    updateLayoutButtons();
+    void render();
+  });
+
   // Clip embed: delegated click handler on <main> covers both #clips-grid
   // and #live-clips-grid (cards are re-created on every render so per-element
   // listeners would be lost).
@@ -925,15 +1108,16 @@ function bindEvents(): void {
     const target = e.target as HTMLElement;
     if (target.closest('.clip-close-btn')) {
       const card = target.closest<HTMLElement>('.clip-card');
-      if (card) collapseCard(card);
+      if (card) { collapseCard(card); return; }
+      if (_expandedRow) { collapseRow(_expandedRow); return; }
       return;
     }
     if (target.closest('.clip-prev-btn')) {
-      navigateClip('prev');
+      if (_expandedRow) navigateRow('prev'); else navigateClip('prev');
       return;
     }
     if (target.closest('.clip-next-btn')) {
-      navigateClip('next');
+      if (_expandedRow) navigateRow('next'); else navigateClip('next');
       return;
     }
     if (target.closest('.clip-game-link')) {
@@ -946,7 +1130,13 @@ function bindEvents(): void {
       }
       return;
     }
-    // Expand the card on click anywhere except links (title opens in new tab).
+    // List-view row: expand embed row below on click (except title link or game filter).
+    const row = target.closest<HTMLElement>('.clip-row');
+    if (row && !target.closest('a') && !target.closest('.clip-game-link')) {
+      if (row === _expandedRow) collapseRow(row); else expandRow(row);
+      return;
+    }
+    // Grid-view card: expand embed on click anywhere except title link.
     const card = target.closest<HTMLElement>('.clip-card');
     if (card && !target.closest('a')) {
       expandCard(card);
@@ -954,7 +1144,10 @@ function bindEvents(): void {
   });
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && _expandedCard) collapseCard(_expandedCard);
+    if (e.key === 'Escape') {
+      if (_expandedCard) collapseCard(_expandedCard);
+      else if (_expandedRow) collapseRow(_expandedRow);
+    }
   });
 
   // ── Auth buttons ──────────────────────────────────────────────────────────
@@ -1116,6 +1309,7 @@ export async function init(): Promise<void> {
 
     document.getElementById('loading')!.style.display = 'none';
     document.getElementById('controls')!.style.display = 'flex';
+    updateLayoutButtons();
 
     _broadcasterId = await setStreamerTag();
     renderFooter();
@@ -1142,6 +1336,8 @@ export async function init(): Promise<void> {
         state.setGameFilter('');
         state.setCurrentPage(1);
         state.setCurrentView('grid');
+        setClipLayout('grid');
+        updateLayoutButtons();
         clearCalDateFilter();
         (document.getElementById('search') as HTMLInputElement).value       = '';
         (document.getElementById('sort') as HTMLSelectElement).value        = 'date_desc';

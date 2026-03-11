@@ -120,6 +120,45 @@ ln -s ../../../config.toml config.toml
 After these steps, `npm run dev` (via the Claude Preview tool or directly)
 will serve the site on port 5173 with the full database and auth UI enabled.
 
+## Known shell environment quirks
+
+### nvm — npm/node not on PATH
+
+The Bash tool does not source `~/.zshrc` or `~/.bash_profile`, so nvm's PATH
+injection never runs. `npm`, `npx`, and `node` are **not** available as bare
+commands. Prepend the nvm bin directory to PATH at the start of each Bash call:
+
+```sh
+PATH="$(echo ~/.nvm/versions/node/*/bin | tr ' ' '\n' | sort -V | tail -1):$PATH"
+npm --prefix frontend test
+```
+
+Or for `npx`-style tool invocations, use the locally-installed binary directly:
+
+```sh
+# run from frontend/
+node node_modules/.bin/tsc --noEmit
+node node_modules/.bin/vitest run
+```
+
+### pyenv rehash lock errors
+
+Bash tool invocations may print a line like:
+
+```
+pyenv: cannot rehash: couldn't acquire lock /Users/…/.pyenv/shims/.pyenv-shim
+```
+
+This is a **cosmetic warning** from a stale pyenv lock file — it does not affect
+command output or exit codes. The permanent fix (run once in a terminal):
+
+```sh
+rm -f ~/.pyenv/shims/.pyenv-shim
+```
+
+When you see this warning in tool output, ignore it and look at the rest of the
+output for actual results or errors.
+
 ## Development commands
 
 ### Python scraper
@@ -136,13 +175,17 @@ uv run ruff format .             # format
 
 ### Frontend
 
+> **Bash tool note**: `npm`/`npx` are not on PATH (see nvm quirk above).
+> Prepend the nvm bin dir or use `node node_modules/.bin/<tool>` directly.
+> Examples below use bare `npm` for readability.
+
 ```sh
 cd frontend
 npm install
 npm run dev          # Vite dev server → http://localhost:5173
 npm test             # Vitest unit tests
 npm run test:watch   # Vitest in watch mode
-npx tsc --noEmit     # type-check
+node node_modules/.bin/tsc --noEmit   # type-check (npx not on PATH in Bash tool)
 
 # Build a browser-ready DB (DELETE journal mode, FTS5 index, precomputed
 # metadata tables, covering indexes, VACUUM):

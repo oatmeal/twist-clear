@@ -285,7 +285,9 @@ select:focus { border-color: var(--accent); }
 .clear-dates-btn:hover { border-color: var(--accent); color: var(--text); }
 
 /* ── View switcher ── */
-.view-switcher { display: flex; gap: 4px; }
+.view-switcher { display: flex; gap: 4px; align-items: center; }
+/* Grid and list toggle buttons use a larger font to display the Unicode icons clearly */
+#btn-view-grid, #btn-view-list { font-size: 15px; padding: 4px 9px; }
 .view-btn {
   background: var(--surface2);
   border: 1px solid var(--border);
@@ -298,6 +300,134 @@ select:focus { border-color: var(--accent); }
 }
 .view-btn:hover { border-color: var(--accent); color: var(--text); }
 .view-btn.active { border-color: var(--accent); color: var(--accent); }
+
+/* ── Clip list (table layout) ── */
+/* overflow-x: hidden creates a containing block so the table's width: 100%
+   always references the grid div rather than the iframe inside the embed row. */
+#clips-grid.is-list { display: block; overflow-x: hidden; }
+
+.clips-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  /* auto table-layout: compact columns shrink to their content (via
+     white-space: nowrap), title column is greedy and gets everything else.
+     This also prevents the "stuck width" bug that table-layout: fixed
+     exhibits when an iframe is inserted and the viewport is later resized. */
+}
+
+/* Title is greedy: width: 100% in auto layout means "take as much as you can". */
+.clip-col-title { width: 100%; }
+/* Separate detail columns (wide screens): wrap rather than truncate; title absorbs the slack. */
+.clip-col-game    { max-width: 180px; min-width: 130px; word-break: keep-all; }
+.clip-col-creator { max-width: 160px; color: var(--muted); }
+.clip-col-date    { color: var(--muted); white-space: nowrap; }
+/* Combined meta column (narrow screens): hidden by default, shown via media query.
+   white-space: normal overrides the global th rule so the header can wrap. */
+.clip-col-meta  { display: none; white-space: normal; }
+/* Views: auto-sizes to content via white-space: nowrap below. */
+
+.clips-table th {
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 2px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.clips-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.clip-row {
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.clip-row:hover { background: var(--surface2); }
+.clip-row.expanded { background: var(--surface2); }
+
+/* Live clip row: subtle accent tint */
+.clip-row.live-clip { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.clip-row.live-clip:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+
+.clip-col-views { color: var(--accent-h); font-weight: 600; white-space: nowrap; }
+
+/* Combined meta column contents: game button, then creator and date in smaller muted text. */
+.clip-meta-game     { margin-bottom: 5px; }
+.clip-meta-creator  { color: var(--muted); font-size: 12px; margin-bottom: 5px; }
+.clip-meta-date     { color: var(--muted); font-size: 12px; }
+/* Date is split into two nowrap spans (date part + time part) so the only
+   allowed line break is between the date and time, never within either. */
+.clip-meta-date     { display: flex; flex-wrap: wrap; column-gap: 0.3em; }
+.clip-meta-date-part { white-space: nowrap; }
+
+/* Title cell: thumbnail + title text side by side */
+.clip-list-title-cell {
+  display: flex;
+  align-items: flex-start; /* thumbnail pins to top when title wraps */
+  gap: 10px;
+}
+.clip-list-title-cell a {
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 600;
+  /* allow natural wrapping — no truncation */
+}
+.clip-list-title-cell a:hover { color: var(--accent); }
+.clip-list-thumb {
+  flex-shrink: 0;
+  width: 112px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+/* Embed row inserted below a clicked list row */
+/* min-width: 0 prevents the iframe's intrinsic minimum from forcing the table
+   wider than 100%; overflow: hidden clips any residual bleed. */
+.clip-embed-row td { padding: 0; background: var(--surface); overflow: hidden; min-width: 0; }
+.clip-embed-row .clip-embed-wrap {
+  max-width: 854px;
+  width: 100%;
+  margin: 0 auto;
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: #000;
+}
+
+/* Prev/next nav row below the embed in list view */
+.clip-list-nav-row {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--surface2);
+  border-top: 1px solid var(--border);
+}
+.clip-list-nav-row .clip-nav-btn {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  width: 36px;
+  height: 32px;
+}
+
+/* Responsive list: swap separate columns for the combined meta cell on narrow screens */
+@media (max-width: 700px) {
+  .clip-col-game,
+  .clip-col-creator,
+  .clip-col-date  { display: none; }
+  .clip-col-meta  { display: table-cell; }
+}
+/* On very narrow screens shrink thumbnail and tighten padding */
+@media (max-width: 480px) {
+  .clip-list-thumb { width: 76px; }
+  .clips-table td, .clips-table th { padding: 6px 8px; }
+}
 
 /* ── Settings panel ── */
 .settings-wrapper { position: relative; }

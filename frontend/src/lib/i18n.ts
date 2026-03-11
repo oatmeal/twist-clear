@@ -39,6 +39,15 @@ export interface Translations {
   searchHelpNot: string;
   searchHelpPhrase: string;
   searchHelpNote: string;
+  // View layout toggle
+  viewGrid: string;
+  viewList: string;
+  // List view column headers
+  listColTitle: string;
+  listColViews: string;
+  listColGame: string;
+  listColCreator: string;
+  listColDate: string;
   // Settings panel
   tzLabel: string;
   // Embed
@@ -96,6 +105,13 @@ const en: Translations = {
   searchHelpNot: 'Exclude word',
   searchHelpPhrase: 'Exact phrase',
   searchHelpNote: 'Spaces are required around OR and |.',
+  viewGrid: 'Grid view',
+  viewList: 'List view',
+  listColTitle: 'Title',
+  listColViews: 'Views',
+  listColGame: 'Game',
+  listColCreator: 'Creator',
+  listColDate: 'Date',
   tzLabel: 'Timezone',
   closeEmbed: 'Close embed',
   closeModal: 'Close',
@@ -159,6 +175,13 @@ const ja: Translations = {
   searchHelpNot: '語を除外',
   searchHelpPhrase: 'フレーズ検索',
   searchHelpNote: 'OR・|・｜ の前後にはスペースが必要です。',
+  viewGrid: 'グリッド表示',
+  viewList: 'リスト表示',
+  listColTitle: 'タイトル',
+  listColViews: '再生数',
+  listColGame: 'ゲーム',
+  listColCreator: '作成者',
+  listColDate: '日時',
   tzLabel: 'タイムゾーン',
   closeEmbed: '閉じる',
   closeModal: '閉じる',

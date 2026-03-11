@@ -4,6 +4,7 @@ import type { HashState } from '../lib/hash';
 
 const defaultState: HashState = {
   currentView: 'grid',
+  clipLayout: 'grid',
   searchQuery: '',
   sortBy: 'date_desc',
   gameFilter: '',
@@ -89,6 +90,15 @@ describe('serializeHash', () => {
     expect(hash).toContain('q=');
     const recovered = new URLSearchParams(hash).get('q');
     expect(recovered).toBe(query);
+  });
+
+  it('omits layout=grid (default)', () => {
+    expect(serializeHash(defaultState)).not.toContain('layout=');
+  });
+
+  it('includes layout=list for list layout', () => {
+    const hash = serializeHash({ ...defaultState, clipLayout: 'list' });
+    expect(hash).toContain('layout=list');
   });
 
   it('calDateTo stores the exclusive upper bound verbatim', () => {

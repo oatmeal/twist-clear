@@ -35,6 +35,17 @@ export function fmtDate(iso: string, tzOffset = 0, locale?: string): string {
   });
 }
 
+/** Time-only companion to fmtDate — used to render the two parts separately
+ *  so CSS can keep date and time each on one line while allowing a break between them. */
+export function fmtTime(iso: string, locale?: string, tzOffset = 0): string {
+  const shifted = new Date(new Date(iso).getTime() + tzOffset * 60000);
+  return shifted.toLocaleTimeString(locale, {
+    timeZone: 'UTC',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 export function fmtDateTime(iso: string, locale?: string, tzOffset = 0): string {
   const shifted = new Date(new Date(iso).getTime() + tzOffset * 60000);
   return shifted.toLocaleString(locale, {
