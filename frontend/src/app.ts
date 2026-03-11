@@ -188,11 +188,14 @@ async function updateGameFilter(): Promise<void> {
   const validIds = new Set(rows.map(r => String(r['id'])));
 
   sel.innerHTML = `<option value="">${escHtml(t().allGames)}</option>`;
+  // Hide counts when a search is active — they reflect total clips, not the
+  // search-filtered subset, so displaying them would be misleading.
+  const showCounts = !state.searchQuery;
   for (const row of rows) {
     const opt = document.createElement('option');
     opt.value = String(row['id']);
     const displayName = (lang === 'ja' && row['name_ja']) ? String(row['name_ja']) : String(row['name']);
-    opt.textContent = `${displayName} (${Number(row['cnt']).toLocaleString()})`;
+    opt.textContent = showCounts ? `${displayName} (${Number(row['cnt']).toLocaleString()})` : displayName;
     sel.appendChild(opt);
   }
 
