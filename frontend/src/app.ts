@@ -211,11 +211,14 @@ async function updateGameFilter(): Promise<void> {
 function clipCardHtml(clip: {
   url: string; thumbnail_url: string; title: string; duration: number;
   view_count: number; game_name: string; game_name_ja?: string;
-  creator_name: string; created_at: string;
+  game_id?: string; creator_name: string; created_at: string;
 }, extraClass = ''): string {
   // Show the Japanese name when the UI language is Japanese and one is available;
   // otherwise fall back to the English name from the games table.
   const displayGameName = (lang === 'ja' && clip.game_name_ja) ? clip.game_name_ja : clip.game_name;
+  const gameEl = displayGameName
+    ? `<button class="clip-game-link" type="button" data-game-id="${escHtml(clip.game_id ?? '')}">${escHtml(displayGameName)}</button>`
+    : '';
   return `
     <div class="clip-card${extraClass}" data-clip-url="${escHtml(clip.url)}">
       <div class="clip-thumb">
@@ -233,7 +236,7 @@ function clipCardHtml(clip: {
         </div>
         <div class="clip-meta">
           <span class="views">${t().views(fmtViews(clip.view_count, lang))}</span>
-          ${displayGameName ? `<span>${escHtml(displayGameName)}</span>` : ''}
+          ${gameEl}
           <span>${t().creatorLine(escHtml(clip.creator_name), fmtDateTime(clip.created_at, lang, state.tzOffset))}</span>
         </div>
       </div>
@@ -620,6 +623,7 @@ export async function render(): Promise<void> {
       ? await q(
           `SELECT c.id, c.title, c.creator_name, c.view_count,
                   c.created_at, c.duration, c.thumbnail_url, c.url,
+                  c.game_id,
                   COALESCE(g.name, '') AS game_name,
                   COALESCE(g.name_ja, '') AS game_name_ja
            FROM clips c
@@ -666,6 +670,7 @@ export async function render(): Promise<void> {
                 title:         String(item.row['title']         ?? ''),
                 duration:      Number(item.row['duration']      ?? 0),
                 view_count:    Number(item.row['view_count']    ?? 0),
+                game_id:       String(item.row['game_id']       ?? ''),
                 game_name:     String(item.row['game_name']     ?? ''),
                 game_name_ja:  String(item.row['game_name_ja']  ?? ''),
                 creator_name:  String(item.row['creator_name']  ?? ''),
@@ -680,6 +685,7 @@ export async function render(): Promise<void> {
           title:         String(c['title']         ?? ''),
           duration:      Number(c['duration']      ?? 0),
           view_count:    Number(c['view_count']    ?? 0),
+          game_id:       String(c['game_id']       ?? ''),
           game_name:     String(c['game_name']     ?? ''),
           game_name_ja:  String(c['game_name_ja']  ?? ''),
           creator_name:  String(c['creator_name']  ?? ''),
@@ -927,9 +933,20 @@ function bindEvents(): void {
       navigateClip('next');
       return;
     }
-    if (target.closest('.clip-thumb')) {
-      const card = target.closest<HTMLElement>('.clip-card');
-      if (card) expandCard(card);
+    if (target.closest('.clip-game-link')) {
+      const btn = target.closest<HTMLElement>('.clip-game-link');
+      const gameId = btn?.dataset['gameId'] ?? '';
+      if (gameId) {
+        state.setGameFilter(gameId);
+        state.setCurrentPage(1);
+        void render();
+      }
+      return;
+    }
+    // Expand the card on click anywhere except links (title opens in new tab).
+    const card = target.closest<HTMLElement>('.clip-card');
+    if (card && !target.closest('a')) {
+      expandCard(card);
     }
   });
 

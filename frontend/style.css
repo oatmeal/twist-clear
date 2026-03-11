@@ -408,6 +408,7 @@ main { padding: 24px; }
   border-radius: 8px;
   overflow: hidden;
   transition: border-color 0.15s ease, transform 0.15s ease;
+  cursor: pointer;
 }
 .clip-card:hover {
   border-color: var(--accent);
@@ -555,6 +556,17 @@ main { padding: 24px; }
 }
 .clip-meta span { font-size: 12px; color: var(--muted); }
 .clip-meta .views { color: var(--accent-h); font-weight: 600; }
+.clip-game-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+.clip-game-link:hover { color: var(--accent); }
 
 /* ── Empty state ── */
 #empty {
