@@ -171,7 +171,9 @@ function renderFooter(): void {
   if (footer) footer.innerHTML = html;
 }
 
-async function updateGameFilter(liveGameCounts: Map<string, number>): Promise<void> {
+type LiveGameEntry = { count: number; name: string };
+
+async function updateGameFilter(liveGameCounts: Map<string, LiveGameEntry>): Promise<void> {
   let rows: Awaited<ReturnType<typeof q>>;
 
   if (state.useMeta && state.calDateFrom === null && state.calDateTo === null) {
@@ -220,9 +222,21 @@ async function updateGameFilter(liveGameCounts: Map<string, number>): Promise<vo
     const id = String(row['id']);
     opt.value = id;
     const displayName = (lang === 'ja' && row['name_ja']) ? String(row['name_ja']) : String(row['name']);
-    const totalCnt = Number(row['cnt']) + (liveGameCounts.get(id) ?? 0);
+    const totalCnt = Number(row['cnt']) + (liveGameCounts.get(id)?.count ?? 0);
     opt.textContent = showCounts ? `${displayName} (${totalCnt.toLocaleString()})` : displayName;
     sel.appendChild(opt);
+  }
+
+  // Append options for live-only games (not yet present in the DB games table).
+  const liveOnlyEntries = [...liveGameCounts.entries()]
+    .filter(([id]) => !validIds.has(id))
+    .sort((a, b) => b[1].count - a[1].count);
+  for (const [id, entry] of liveOnlyEntries) {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = showCounts ? `${entry.name} (${entry.count.toLocaleString()})` : entry.name;
+    sel.appendChild(opt);
+    validIds.add(id);
   }
 
   if (state.gameFilter && !validIds.has(String(state.gameFilter))) {
@@ -692,9 +706,10 @@ export async function render(): Promise<void> {
     if (ctrl.signal.aborted) return;
 
     // Compute per-game live clip counts (date-filtered, no game/search filter)
-    // to add to the game dropdown counts alongside the DB totals.
-    const liveGameCounts = new Map<string, number>();
-    if (state.liveClips.length > 0 && !state.searchQuery) {
+    // to add to the game dropdown counts alongside the DB totals. Built even
+    // when a search is active so live-only game options remain visible.
+    const liveGameCounts = new Map<string, LiveGameEntry>();
+    if (state.liveClips.length > 0) {
       const dateLive = filterLiveClips({
         clips:        state.liveClips,
         dbCutoffDate: _dbCutoffDate,
@@ -706,7 +721,13 @@ export async function render(): Promise<void> {
       });
       for (const c of dateLive) {
         const id = c.game_id ?? '';
-        if (id) liveGameCounts.set(id, (liveGameCounts.get(id) ?? 0) + 1);
+        if (!id) continue;
+        const entry = liveGameCounts.get(id);
+        if (entry) {
+          entry.count++;
+        } else {
+          liveGameCounts.set(id, { count: 1, name: c.game_name });
+        }
       }
     }
 
