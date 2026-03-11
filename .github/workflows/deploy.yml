@@ -229,14 +229,14 @@ jobs:
         if: ${{ inputs.scrape_mode != 'skip' }}
         run: |
           mkdir -p data
-          if [ "$SCRAPE_MODE" = "fetch" ] || [ "$CACHE_HIT" != "true" ]; then
+          if [ "$SCRAPE_MODE" = "fetch" ] || [ "$CACHE_MATCHED_KEY" != "true" ]; then
             uv run python scrape.py fetch --force
           else
             uv run python scrape.py update
           fi
         env:
           SCRAPE_MODE: ${{ inputs.scrape_mode }}
-          CACHE_HIT: ${{ steps.restore-cache.outputs.cache-hit }}
+          CACHE_MATCHED_KEY: ${{ steps.restore-cache.outputs.cache-matched-key }}
 
       - name: Verify database available
         if: ${{ inputs.scrape_mode == 'skip' && !steps.restore-cache.outputs.cache-matched-key }}
