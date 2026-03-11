@@ -138,6 +138,19 @@ def get_all_games(conn: sqlite3.Connection) -> dict[str, str]:
     return {row["id"]: row["name"] for row in rows}
 
 
+def get_unenriched_games(conn: sqlite3.Connection) -> dict[str, str]:
+    """Return games with no Japanese name yet as {twitch_id: english_name}.
+
+    A game is considered unenriched if ``name_ja`` is NULL or an empty string.
+    Use this in preference to :func:`get_all_games` when re-fetching already-
+    enriched entries is not desired (e.g. the default ``enrich-names`` run).
+    """
+    rows = conn.execute(
+        "SELECT id, name FROM games WHERE name_ja IS NULL OR name_ja = ''"
+    ).fetchall()
+    return {row["id"]: row["name"] for row in rows}
+
+
 def upsert_clips(conn: sqlite3.Connection, clips: list[dict]) -> int:
     result = conn.executemany(
         """

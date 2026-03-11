@@ -166,12 +166,23 @@ uv run python scrape.py update
 
 Both commands upsert clips, so re-running is always safe and `view_count` values stay current.
 
+**Backfill Japanese game names** — resolves Japanese names for every game in the database via IGDB, falling back to Twitch's own web directory pages for non-game categories (e.g. "Just Chatting" → "雑談", "Special Events" → "スペシャルイベント"). Run this once after the initial fetch, and again after any `update` that adds new games:
+
+```sh
+uv run python scrape.py enrich-names          # only games with no name yet (fast)
+uv run python scrape.py enrich-names --force  # re-fetch all, including already-enriched
+```
+
+The GitHub Pages workflow runs `enrich-names` automatically after each scrape, so this is only needed for local use.
+
 **Options:**
 
 ```
 --config PATH   Path to config file (default: config.toml)
 --db PATH       Override the database path from config
 ```
+
+`fetch` also accepts `--force` to reset all fetch-state checkpoints and rescan the full clip history (view counts are refreshed). Without `--force`, `fetch` resumes from where it last left off.
 
 **How fetch works:** `fetch` uses adaptive time windows starting from the channel's account creation date. Each window makes one API call (up to 100 clips). If a full page comes back the window is halved; on success it doubles again up to a maximum of 30 days, so long quiet stretches are covered efficiently. Pagination cursors are never saved — each window is a fully stateless, self-contained request.
 
@@ -221,7 +232,7 @@ The database lives at `data/clips.db` (or wherever `db_path` points).
 |---|---|
 | `streamers` | One row per tracked channel, including scrape state |
 | `clips` | One row per clip — all metadata returned by the API |
-| `games` | Game ID → name cache, populated lazily as clips are fetched |
+| `games` | Game ID → name cache, populated lazily as clips are fetched; `name_ja` holds the Japanese localisation (populated by `enrich-names`) |
 
 Key columns on `streamers`:
 

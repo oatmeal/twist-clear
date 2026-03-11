@@ -244,6 +244,10 @@ jobs:
           echo "::error::scrape_mode=skip but no cached database was found. Run once without skip to populate the cache."
           exit 1
 
+      - name: Enrich Japanese game names
+        if: ${{ inputs.scrape_mode != 'skip' }}
+        run: uv run python scrape.py enrich-names
+
       - name: Save database cache
         if: ${{ inputs.scrape_mode != 'skip' }}
         uses: actions/cache/save@cdf6c1fa76f9f475f3d7449005a359c84ca0f306  # v5.0.3

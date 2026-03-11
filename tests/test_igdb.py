@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import requests
 
-from lib.igdb import _fetch_twitch_ja_name, _name_to_slug
+from lib.igdb import _JAPANESE_RE, _fetch_twitch_ja_name, _name_to_slug
 
 
 class TestNameToSlug:
@@ -141,6 +141,12 @@ class TestFetchTwitchJaName:
         assert _fetch_twitch_ja_name(session, "Unknown Game") is None
         assert session.get.call_count == 1
 
+    def test_returns_none_on_empty_slug(self):
+        # Empty name → empty slug → return None without making any request.
+        session = MagicMock()
+        assert _fetch_twitch_ja_name(session, "") is None
+        session.get.assert_not_called()
+
     def test_utf8_decoding_forced_regardless_of_content_type(self):
         """requests defaults to ISO-8859-1 for text/html when no charset is present
         in the Content-Type header, turning UTF-8 Japanese into mojibake.
@@ -162,3 +168,43 @@ class TestFetchTwitchJaName:
         session.get.return_value = resp
 
         assert _fetch_twitch_ja_name(session, "Just Chatting") == "雑談"
+
+
+class TestJapaneseFilter:
+    """Tests for _JAPANESE_RE, which guards the IGDB result against two classes
+    of bad data that would otherwise block the Twitch web fallback:
+
+    1. ASCII placeholders — IGDB sometimes stores the English name in the Japan
+       region (e.g. "Special Events").
+    2. Latin-1 mojibake — IGDB occasionally carries corrupt entries where UTF-8
+       Japanese bytes were mis-stored as Latin-1 (e.g. "éè«" instead of "雑談").
+       These are non-ASCII, so .isascii() alone is insufficient.
+    """
+
+    def test_real_kanji_passes(self):
+        assert _JAPANESE_RE.search("雑談")
+
+    def test_real_katakana_passes(self):
+        assert _JAPANESE_RE.search("スペシャルイベント")
+
+    def test_real_hiragana_passes(self):
+        assert _JAPANESE_RE.search("あつまれ どうぶつの森")
+
+    def test_mixed_ascii_and_kanji_passes(self):
+        # Japanese titles often include ASCII digits or Latin characters.
+        assert _JAPANESE_RE.search("VA-11 Hall-A ヴァルハラ")
+
+    def test_ascii_placeholder_rejected(self):
+        # IGDB stores English name in Japan region for some categories.
+        assert not _JAPANESE_RE.search("Special Events")
+
+    def test_latin1_mojibake_rejected(self):
+        # "雑談" (E9 9B 93 E8 AB 87) mis-decoded as Latin-1 produces these
+        # non-ASCII Latin characters — they must not be treated as Japanese.
+        assert not _JAPANESE_RE.search("éè«")
+
+    def test_pure_ascii_rejected(self):
+        assert not _JAPANESE_RE.search("Just Chatting")
+
+    def test_empty_string_rejected(self):
+        assert not _JAPANESE_RE.search("")

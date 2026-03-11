@@ -21,6 +21,7 @@ except ImportError:
 from lib.api import TwitchAPI
 from lib.db import (
     get_all_games,
+    get_unenriched_games,
     get_known_game_ids,
     get_streamer,
     get_streamers,
@@ -307,16 +308,15 @@ def cmd_update(api: TwitchAPI, igdb: IGDBClient, conn) -> None:
             print("  No new clips.")
 
 
-def cmd_enrich_names(igdb: IGDBClient, conn) -> None:
-    """Backfill Japanese names for all games currently in the database.
+def cmd_enrich_names(igdb: IGDBClient, conn, *, force: bool = False) -> None:
+    """Backfill Japanese names for games currently in the database.
 
-    Useful after upgrading from a version that did not yet store ``name_ja``.
-    Games that already have a Japanese name stored are skipped unless
-    ``--force`` is passed (re-fetches everything).
-    Already-enriched rows whose IGDB localisation was updated are refreshed
-    on each run of this command.
+    By default only games with no Japanese name yet are processed, so
+    subsequent runs (e.g. in ``update`` mode) are fast — only newly-added
+    games need enriching.  Pass ``--force`` to re-fetch names for every game,
+    which is useful when IGDB or Twitch localisations have been updated.
     """
-    id_to_name = get_all_games(conn)
+    id_to_name = get_all_games(conn) if force else get_unenriched_games(conn)
     if not id_to_name:
         print("No games in database.")
         return
@@ -362,9 +362,14 @@ def main() -> None:
         help="Reset all fetch state first, re-scanning full history and refreshing view counts",
     )
     sub.add_parser("update", help="Incremental update — fetch only new clips")
-    sub.add_parser(
+    enrich_sub = sub.add_parser(
         "enrich-names",
-        help="Backfill Japanese game names for all games already in the database",
+        help="Backfill Japanese game names for games in the database",
+    )
+    enrich_sub.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-fetch Japanese names for all games, not just unenriched ones",
     )
 
     args = parser.parse_args()
@@ -387,7 +392,7 @@ def main() -> None:
     elif args.cmd == "update":
         cmd_update(api, igdb, conn)
     elif args.cmd == "enrich-names":
-        cmd_enrich_names(igdb, conn)
+        cmd_enrich_names(igdb, conn, force=getattr(args, "force", False))
 
 
 if __name__ == "__main__":

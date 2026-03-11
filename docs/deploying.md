@@ -206,7 +206,7 @@ with:
 | Input | Required | Default | Description |
 |---|---|---|---|
 | `streamers` | Yes | — | Comma-separated Twitch channel logins |
-| `scrape_mode` | No | `fetch` | `fetch` — full rescan via `scrape.py fetch --force`, refreshes all view counts; `update` — restore cached DB then run `scrape.py update` (incremental, only new clips; falls back to full fetch if no cache exists); `skip` — restore cached DB and skip scraping (fails if no cache) |
+| `scrape_mode` | No | `fetch` | `fetch` — full rescan via `scrape.py fetch --force`, refreshes all view counts; `update` — restore cached DB then run `scrape.py update` (incremental, only new clips; falls back to full fetch if no cache exists); `skip` — restore cached DB and skip scraping (fails if no cache). After scraping, `scrape.py enrich-names` is run automatically to populate Japanese game names for any newly-seen games (skips already-enriched entries, so it's fast in `update` mode). |
 | `scraper_ref` | No | `master` | Branch, tag, or SHA of `twist-clear` to use |
 | `code_repo` | No | `oatmeal/twist-clear` | Override if using a fork or copy under a different account |
 
@@ -252,3 +252,6 @@ You used `scrape_mode: skip` but no cached database exists yet. Run the workflow
 
 **`prepare_web_db.py` fails with "SQLite too old"**
 The FTS5 trigram tokenizer requires SQLite ≥ 3.38. The reusable workflow pins to `ubuntu-24.04` (SQLite 3.45+) to avoid this. If you're running the preparation script locally, make sure your system SQLite is ≥ 3.38 (`sqlite3 --version`).
+
+**Game names appear in English (or as garbled text) even after switching the viewer to Japanese**
+Japanese game names are populated by `scrape.py enrich-names`, which the workflow runs automatically after each scrape. If you see English names or mojibake (e.g. `éè«` instead of `雑談`) this usually means either (a) a cached database from an earlier run — before the enrichment step was added — survived into the deployment, or (b) `enrich-names` was never run locally. To repair an affected database without a full rescrape, run `uv run python scrape.py enrich-names --force` locally, then `npm run prepare-db` and redeploy. A full `fetch` mode CI run will also rebuild the database from scratch and apply enrichment cleanly.

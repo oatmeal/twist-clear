@@ -28,7 +28,7 @@ Two components of roughly equal importance in one repository:
 ## Repository layout
 
 ```
-scrape.py               # CLI entry point (fetch / update subcommands)
+scrape.py               # CLI entry point (fetch / update / enrich-names subcommands)
 prepare_web_db.py       # Build a browser-ready copy of clips.db
 config.toml.example     # Template — copy to config.toml and fill in credentials
 lib/
@@ -166,9 +166,11 @@ output for actual results or errors.
 ### Python scraper
 
 ```sh
-uv run python scrape.py fetch         # full historical scrape
-uv run python scrape.py update        # incremental update
-uv run python scrape.py enrich-names  # backfill Japanese game names via IGDB + Twitch web
+uv run python scrape.py fetch                   # full historical scrape (resume from checkpoint)
+uv run python scrape.py fetch --force           # reset checkpoints, rescan everything
+uv run python scrape.py update                  # incremental update
+uv run python scrape.py enrich-names            # backfill Japanese game names via IGDB + Twitch web (skip existing)
+uv run python scrape.py enrich-names --force    # re-fetch all, including already-enriched
 
 uv run pytest                    # tests
 uv run ruff check .              # lint

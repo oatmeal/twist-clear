@@ -25,6 +25,12 @@ import unicodedata
 
 import requests
 
+# Matches at least one Hiragana, Katakana, or CJK Unified Ideograph character.
+# Used to reject IGDB "Japanese" localisations that contain no Japanese script
+# (e.g. ASCII placeholders like "Special Events", or Latin-1 mojibake like
+# "éè«" that results from UTF-8 Japanese bytes being mis-stored as Latin-1).
+_JAPANESE_RE = re.compile(r"[\u3040-\u30ff\u4e00-\u9fff]")
+
 _BASE = "https://api.igdb.com/v4"
 _TOKEN_URL = "https://id.twitch.tv/oauth2/token"
 
@@ -261,12 +267,21 @@ class IGDBClient:
                     if "game" in row and "name" in row:
                         igdb_to_ja[int(row["game"])] = str(row["name"])
 
-            # Compose: twitch_id → ja_name
+            # Compose: twitch_id → ja_name, keeping only entries that contain
+            # at least one Japanese script character (Hiragana, Katakana, or
+            # CJK Unified Ideograph).  This rejects two classes of bad data:
+            #   • ASCII placeholders — IGDB sometimes stores the English name
+            #     in the Japan region (e.g. "Special Events").
+            #   • Latin-1 mojibake — IGDB occasionally has corrupt entries
+            #     where UTF-8 Japanese bytes were mis-stored as Latin-1
+            #     (e.g. "éè«" instead of "雑談").  These are non-ASCII but
+            #     still not Japanese, so .isascii() alone is insufficient.
+            # Rejecting these lets the Twitch web fallback run instead.
             igdb_to_twitch = {v: k for k, v in twitch_to_igdb.items()}
             result = {
                 igdb_to_twitch[igdb_id]: ja_name
                 for igdb_id, ja_name in igdb_to_ja.items()
-                if igdb_id in igdb_to_twitch
+                if igdb_id in igdb_to_twitch and _JAPANESE_RE.search(ja_name)
             }
 
         # ---- Step 2: Twitch web fallback --------------------------------
