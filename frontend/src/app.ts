@@ -1312,6 +1312,20 @@ function bindEvents(): void {
     });
   }
 
+  // ── Site description toggle (mobile) ────────────────────────────────────────
+  {
+    const desc    = document.getElementById('site-desc');
+    const btn     = document.getElementById('btn-site-desc') as HTMLButtonElement | null;
+    const titleEl = document.querySelector('.header-title') as HTMLElement | null;
+    if (desc && btn && titleEl && desc.textContent?.trim()) {
+      titleEl.classList.add('has-desc');
+      btn.addEventListener('click', () => {
+        const expanded = titleEl.classList.toggle('desc-expanded');
+        btn.setAttribute('aria-expanded', String(expanded));
+      });
+    }
+  }
+
   // ── Settings panel ─────────────────────────────────────────────────────────
 
   const settingsBtn   = document.getElementById('btn-settings');

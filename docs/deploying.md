@@ -197,6 +197,10 @@ with:
 
 ## Inputs reference
 
+> **This section is the canonical reference for all `deploy.yml` workflow
+> inputs.** Keep it in sync with `deploy.yml` whenever inputs are added,
+> removed, or changed — including their defaults and descriptions.
+
 ### Scraper
 
 | Input | Required | Default | Description |
@@ -211,6 +215,7 @@ with:
 | Input | Required | Default | Description |
 |---|---|---|---|
 | `site_title` | No | `twist-clear clip archive` | Title prefix shown in the browser tab and page heading (streamer names are appended automatically at runtime) |
+| `site_description` | No | *(empty)* | Optional subtitle shown below the site title in the page header. Visible on desktop; collapsible via a chevron button on narrow screens. Leave empty for no subtitle. |
 | `og_description` | No | `A Twitch clip archive.` | Text for the `og:description` meta tag used in social link previews |
 | `site_url` | No | *(auto-computed)* | Canonical URL for the `og:url` meta tag (e.g. `https://user.github.io/my-clips/`). Auto-computed from the calling repo if omitted |
 

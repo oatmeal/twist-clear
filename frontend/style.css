@@ -28,14 +28,23 @@ header {
   gap: 12px;
   min-width: 0;
 }
-/* Title + streamer name kept together as one flex item */
+/* Title group: stacks title row and optional description */
 .header-title {
   display: flex;
-  align-items: baseline;
-  gap: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
   min-width: 0;
   flex: 1 1 auto;
   overflow: hidden;
+}
+/* Title + streamer name on one baseline-aligned row */
+.header-title-row {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  overflow: hidden;
+  width: 100%;
 }
 header h1 {
   font-size: 14px;
@@ -52,6 +61,35 @@ header .streamer-tag {
   white-space: nowrap;
   flex-shrink: 0;
 }
+/* Optional site description: small muted text below the title */
+.site-desc {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.site-desc:empty { display: none; }
+/* Chevron button that reveals the description on narrow screens */
+.site-desc-btn {
+  display: none; /* shown via media query only when .has-desc is present */
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-left: 4px;
+  padding: 2px 4px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 0;
+  transition: color 0.12s;
+}
+.site-desc-btn:hover { color: var(--text); }
+.site-desc-btn svg { transition: transform 0.15s; }
+.header-title.desc-expanded .site-desc-btn svg { transform: rotate(180deg); }
 /* ── Right-aligned header group: auth + tz + lang ── */
 #header-controls {
   margin-left: auto;
@@ -873,8 +911,12 @@ header .streamer-tag a:hover {
   #clips-grid { gap: 10px; }
   /* Smaller pagination buttons so more fit on one row */
   #pagination button { padding: 6px 10px; }
-  /* Hide username to save header space */
+  /* Hide username and site description to save header space */
   #auth-username { display: none; }
+  .site-desc { display: none; }
+  /* Show description when expanded; show chevron button when description exists */
+  .header-title.desc-expanded .site-desc { display: block; }
+  .header-title.has-desc .site-desc-btn { display: inline-flex; }
 
   /* Activate the mid-row break: game-filter drops to its own row */
   .controls-break-md { flex-basis: 100%; }

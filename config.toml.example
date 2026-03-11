@@ -19,6 +19,10 @@ client_secret = "your_client_secret_here"
 # e.g. "My Archive: streamer1, streamer2".
 # site_title = "twist-clear clip archive"
 
+# Optional subtitle shown below the title in the page header (hidden on mobile).
+# Omit or leave empty to show nothing.
+# site_description = "A clip archive for streamer_one and streamer_two"
+
 # Text for the og:description meta tag (social link previews).
 # og_description = "A Twitch clip archive."
 

@@ -147,39 +147,39 @@ path that requires no post-build HTML surgery. When `VITE_SITE_URL` is empty
 (local dev without the env var set) the tag resolves to a relative path, which
 crawlers won't follow, but that's fine since og:image only matters in production.
 
+### Site description (`VITE_SITE_DESCRIPTION`)
+
+An optional subtitle shown in the page header below the site title. Injected
+at build time via the `site_description` workflow input — see
+[`docs/deploying.md` → Branding / metadata](../docs/deploying.md#inputs-reference)
+for the full inputs reference. Defaults to empty string; when empty the
+`.site-desc` element is suppressed via CSS `:empty { display: none }` and the
+toggle button is never shown.
+
+On screens ≤600 px the description is hidden by default. When a description is
+present, `init()` in `app.ts` adds `.has-desc` to `.header-title`, which makes
+the chevron button (`#btn-site-desc`) visible. Clicking it toggles
+`.desc-expanded` on `.header-title` and updates `aria-expanded`; CSS then shows
+`.site-desc` and rotates the chevron.
+
 ### Colour theming (`VITE_COLOR_*`)
 
 `applyColorOverrides()` in `app.ts` is called at the very top of `init()`. It
-iterates over a 7-entry map of VITE env var → CSS custom property and calls
-`document.documentElement.style.setProperty(prop, val)` for each non-empty
-value. Inline styles on `<html>` win over `:root` stylesheet values in the
-cascade, so this approach is safe and does not require modifying any CSS.
+iterates over a map of `VITE_COLOR_*` env vars → CSS custom properties and
+calls `document.documentElement.style.setProperty(prop, val)` for each
+non-empty value. Inline styles on `<html>` win over `:root` stylesheet values
+in the cascade, so this approach is safe and does not require modifying any CSS.
 
-Supported vars and their CSS properties:
-
-| Env var | CSS var | Default |
-|---------|---------|---------|
-| `VITE_COLOR_ACCENT` | `--accent` | `#9147ff` |
-| `VITE_COLOR_CAL_ACCENT` | `--cal-accent` | `#22a84a` |
-| `VITE_COLOR_BG` | `--bg` | `#0e0e0e` |
-| `VITE_COLOR_SURFACE` | `--surface` | `#1f1f23` |
-| `VITE_COLOR_SURFACE2` | `--surface2` | `#26262c` |
-| `VITE_COLOR_BORDER` | `--border` | `#3a3a40` |
-| `VITE_COLOR_TEXT` | `--text` | `#efeff1` |
-| `VITE_COLOR_MUTED` | `--muted` | `#adadb8` |
-
-`--cal-accent` is intentionally separate from `--accent` so the calendar
-heat-map reads as data-density rather than an interactive element. Defaults to
-green (`#22a84a`) in `calendar.css :root`. Users can set it to match
-`--accent` if they prefer a unified look.
-
-All values default to the `:root` stylesheet declarations when the env var is
-empty. Partial overrides are fine — omit a var to keep its CSS default.
+The full list of supported vars, their CSS properties, and defaults is
+maintained in [`docs/deploying.md` → Colours](../docs/deploying.md#colours)
+(canonical). The user-facing palette guide and example themes are in
+[`docs/theming.md`](../docs/theming.md).
 
 Derived colours (`--accent-h`, `--cal-0..4`, `--cal-text`/`--cal-text-muted`)
-use `color-mix()` that automatically cascade when `--accent`/`--cal-accent`
-are overridden. Browser support: Chrome 111+, Firefox 113+, Safari 16.2+
-(see `docs/theming.md`).
+use `color-mix()` that cascades automatically when `--accent`/`--cal-accent`
+are overridden. `--cal-accent` is intentionally separate from `--accent` so the
+calendar heat-map reads as data-density rather than an interactive element.
+Browser support: Chrome 111+, Firefox 113+, Safari 16.2+.
 
 ### Grid vs. list layout (`clipLayout`)
 

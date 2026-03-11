@@ -109,6 +109,13 @@ function dbRangePlugin(): Plugin {
     process.env['VITE_SITE_TITLE'] = m?.[1] ?? 'twist-clear clip archive';
   }
 
+  // site_description — optional subtitle shown in the page header (hidden on mobile).
+  // Defaults to empty string so nothing is rendered when unconfigured.
+  if (!process.env['VITE_SITE_DESCRIPTION']) {
+    const m = /site_description\s*=\s*"([^"]+)"/.exec(toml);
+    process.env['VITE_SITE_DESCRIPTION'] = m?.[1] ?? '';
+  }
+
   // og_description — text for the og:description meta tag.
   if (!process.env['VITE_OG_DESCRIPTION']) {
     const m = /og_description\s*=\s*"([^"]+)"/.exec(toml);

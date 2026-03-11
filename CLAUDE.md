@@ -12,7 +12,9 @@ don't wait to be asked:
 - **`README.md`** — update when user-facing behaviour, setup steps, or
   deployment instructions change.
 - **`docs/deploying.md`** — update when the deployment workflow or GitHub Pages
-  setup changes.
+  setup changes. The **Inputs reference** section is the canonical list of all
+  `deploy.yml` inputs (names, defaults, descriptions) — keep it in sync with
+  the workflow file whenever inputs are added, removed, or changed.
 
 ---
 
