@@ -251,7 +251,7 @@ function clipCardHtml(clip: {
       <div class="clip-info">
         <div class="clip-title">
           <a href="${escHtml(clip.url)}" target="_blank" rel="noopener noreferrer">
-            ${escHtml(clip.title)}
+            ${escHtml(clip.title)}<svg class="clip-ext-icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 1H1v10h10V8.5M7 1h4m0 0v4m0-4L5 7"/></svg>
           </a>
         </div>
         <div class="clip-meta">
@@ -282,7 +282,7 @@ function clipListRowHtml(clip: ClipItem): string {
             <img src="${escHtml(clip.thumbnail_url)}" alt="${escHtml(clip.title)}" loading="lazy">
             <span class="clip-duration">${fmtDuration(clip.duration)}</span>
           </div>
-          <a href="${escHtml(clip.url)}" target="_blank" rel="noopener noreferrer">${escHtml(clip.title)}</a>
+          <a href="${escHtml(clip.url)}" target="_blank" rel="noopener noreferrer">${escHtml(clip.title)}<svg class="clip-ext-icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 1H1v10h10V8.5M7 1h4m0 0v4m0-4L5 7"/></svg></a>
         </div>
       </td>
       <td class="clip-col-game">${gameEl}</td>

@@ -380,6 +380,20 @@ select:focus { border-color: var(--accent); }
   /* allow natural wrapping — no truncation */
 }
 .clip-list-title-cell a:hover { color: var(--accent); }
+.clip-ext-icon {
+  display: inline-block;
+  vertical-align: middle;
+  width: 11px;
+  height: 11px;
+  margin-left: 5px;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
 .clip-list-thumb {
   flex-shrink: 0;
   width: 112px;
