@@ -26,15 +26,31 @@ header {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+}
+/* Title + streamer name kept together as one flex item */
+.header-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
 }
 header h1 {
   font-size: 14px;
   font-weight: 400;
   color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
 }
 header .streamer-tag {
   font-size: 15px;
   color: var(--muted); /* for the ': ' separator */
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 /* ── Right-aligned header group: auth + tz + lang ── */
 #header-controls {
@@ -42,12 +58,13 @@ header .streamer-tag {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 /* ── Auth indicator (logged-in state in header) ── */
 #auth-indicator {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 #auth-username {
   font-size: 13px;
@@ -64,6 +81,16 @@ header .streamer-tag {
   transition: border-color 0.12s, color 0.12s;
 }
 .auth-btn:hover { border-color: var(--accent); color: var(--text); }
+/* Icon-only variant: square-ish, no extra padding around text */
+.auth-btn.icon-btn {
+  padding: 6px 8px;
+  line-height: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Spinning animation for the refresh button while fetching */
+.auth-btn.refreshing svg { animation: spin 0.8s linear infinite; }
 #btn-settings {
   font-variant-numeric: tabular-nums;
   min-width: 54px;
@@ -253,6 +280,45 @@ select:focus { border-color: var(--accent); }
   margin-left: auto;
 }
 
+/* ── Controls row-break sentinels ──────────────────────────────────────────
+   .controls-break    — always forces a new flex row (zero height, full width)
+   .controls-break-md — zero-size on wide screens; expands to 100 % width on
+                        narrow screens (≤600 px) so game-filter gets its own row
+   Both carry .collapsible-filter so they vanish when the bar is collapsed. */
+.controls-break    { flex: 0 0 100%; height: 0; }
+.controls-break-md { flex: 0 0 0;    height: 0; }
+
+/* ── Controls collapse toggle ───────────────────────────────────────────────
+   Hidden on wide screens; shown on narrow screens (≤600 px).
+   margin-left:auto pushes it to the right end of the search+sort row. */
+.controls-toggle-btn {
+  display: none;
+  margin-left: auto;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 6px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  line-height: 0;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.12s, color 0.12s;
+}
+.controls-toggle-btn:hover { border-color: var(--accent); color: var(--text); }
+/* Chevron rotates when the bar is collapsed (points up = "tap to expand"). */
+.controls-toggle-btn svg { transition: transform 0.15s ease; }
+#controls.controls-collapsed .controls-toggle-btn svg { transform: rotate(180deg); }
+
+/* ── Date filter group (calendar toggle + date inputs) ──────────────────────
+   One flex item so calendar button and date pickers always share a row; only
+   splits from the grid/list switcher when the viewport is very narrow. */
+.date-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* ── Date range filter ── */
 .date-range-filter {
   display: flex;
@@ -286,8 +352,9 @@ select:focus { border-color: var(--accent); }
 
 /* ── View switcher ── */
 .view-switcher { display: flex; gap: 4px; align-items: center; }
-/* Grid and list toggle buttons use a larger font to display the Unicode icons clearly */
-#btn-view-grid, #btn-view-list { font-size: 15px; padding: 4px 9px; }
+/* All three view buttons use the same compact sizing */
+#btn-view-grid, #btn-view-list { font-size: 15px; padding: 6px 9px; }
+#btn-view-cal { padding: 6px 9px; line-height: 0; display: inline-flex; align-items: center; justify-content: center; }
 .view-btn {
   background: var(--surface2);
   border: 1px solid var(--border);
@@ -791,13 +858,30 @@ header .streamer-tag a:hover {
 }
 #site-footer a:hover { color: var(--text); }
 
-/* ── Mobile ── */
+/* ── Narrow screens (≤600 px) ───────────────────────────────────────────────
+   Three-row controls layout:
+     row 1 — search + sort + collapse-toggle
+     row 2 — game-filter (fills full width)
+     row 3 — date-filter-group + view-switcher + result-count
+             (view-switcher + result-count wrap to row 4 on the very narrowest
+              screens because date-filter-group is too wide to share the row) */
 @media (max-width: 600px) {
-  header  { padding: 10px 12px; }
+  header    { padding: 10px 12px; }
   #controls { padding: 8px 12px; }
-  main    { padding: 12px; }
-  /* Tighten clip grid gap so cards don't feel cramped on narrow screens */
+  main      { padding: 12px; }
+  /* Tighten clip grid gap on narrow screens */
   #clips-grid { gap: 10px; }
-  /* Pagination: slightly smaller buttons to fit more on one row */
+  /* Smaller pagination buttons so more fit on one row */
   #pagination button { padding: 6px 10px; }
+  /* Hide username to save header space */
+  #auth-username { display: none; }
+
+  /* Activate the mid-row break: game-filter drops to its own row */
+  .controls-break-md { flex-basis: 100%; }
+  /* Game filter fills the full width of its row */
+  #game-filter { flex: 1 1 0; min-width: 0; }
+  /* Show the collapse toggle button */
+  .controls-toggle-btn { display: flex; }
+  /* Collapsed state: hide everything below the search+sort row */
+  #controls.controls-collapsed .collapsible-filter { display: none; }
 }

@@ -412,8 +412,11 @@ directory pages as a fallback for non-game categories like "Just Chatting").
   and a Japanese name exists, falling back to the English `name`.
 - `clipCardHtml()` receives `game_name_ja` (from a `COALESCE(g.name_ja, '')`
   join) and uses it in place of `game_name` when `lang === 'ja'`.
-- Live clips (from `twitch.ts`) do not carry `game_name_ja` — they fall back
-  to the English Twitch name gracefully because the field is typed `?: string`.
+- Live clips (from `twitch.ts`) do not carry `game_name_ja` from the API.
+  `app.ts` maintains a module-level `_gameNameJa: Map<string, string>` (populated
+  by `updateGameFilter()` on every render) and uses it to supply `game_name_ja`
+  when building live-clip items, so they show the correct language alongside DB
+  clips.
 - `render()` is called on language toggle, so game names switch language
   immediately without a page reload.
 

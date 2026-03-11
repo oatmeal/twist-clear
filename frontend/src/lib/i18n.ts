@@ -39,6 +39,9 @@ export interface Translations {
   searchHelpNot: string;
   searchHelpPhrase: string;
   searchHelpNote: string;
+  // Controls bar collapse toggle (narrow screens)
+  controlsCollapse: string;
+  controlsExpand: string;
   // View layout toggle
   viewGrid: string;
   viewList: string;
@@ -98,6 +101,8 @@ const en: Translations = {
   liveTitleNoDate: (n) => `${n} new ${n === 1 ? 'clip' : 'clips'}`,
   liveSectionShow: 'Show',
   liveSectionCollapse: 'Collapse',
+  controlsCollapse: 'Collapse filters',
+  controlsExpand: 'Expand filters',
   searchHelpBtn: 'Search help',
   searchHelpTitle: 'Search syntax',
   searchHelpAnd: 'Both words (AND)',
@@ -168,6 +173,8 @@ const ja: Translations = {
   liveTitleNoDate: (n) => `新着クリップ（${n}本）`,
   liveSectionShow: '表示',
   liveSectionCollapse: '折りたたむ',
+  controlsCollapse: 'フィルターを折りたたむ',
+  controlsExpand: 'フィルターを展開する',
   searchHelpBtn: '検索ヘルプ',
   searchHelpTitle: '検索の使い方',
   searchHelpAnd: '両方の語を含む（AND）',

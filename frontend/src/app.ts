@@ -104,6 +104,10 @@ function updateLayoutButtons(): void {
 
 // Broadcaster ID and DB metadata — set once during init, never change.
 let _broadcasterId: string | null = null;
+// game_id → name_ja lookup populated by updateGameFilter(); used to supply
+// Japanese game names to live clips, which only carry the English name from
+// the Twitch API.
+const _gameNameJa = new Map<string, string>();
 // MAX(created_at) from clips — used as started_at for the Twitch live-clip
 // API call and as the deduplication boundary in filterLiveClips.
 let _dbCutoffDate:  string | null = null;
@@ -191,6 +195,12 @@ async function updateGameFilter(): Promise<void> {
        ORDER BY cnt DESC`,
       params,
     );
+  }
+
+  // Refresh the game_id → name_ja lookup used by live clip rendering.
+  for (const row of rows) {
+    const nameJa = row['name_ja'];
+    if (nameJa) _gameNameJa.set(String(row['id']), String(nameJa));
   }
 
   const sel = document.getElementById('game-filter') as HTMLSelectElement;
@@ -504,7 +514,12 @@ async function fetchLiveClips(): Promise<void> {
 
   const refreshBtnEl = document.getElementById('btn-refresh-live') as HTMLButtonElement | null;
   state.setLiveFetching(true);
-  if (refreshBtnEl) { refreshBtnEl.disabled = true; refreshBtnEl.textContent = t().refreshingBtn; }
+  if (refreshBtnEl) {
+    refreshBtnEl.disabled = true;
+    refreshBtnEl.classList.add('refreshing');
+    refreshBtnEl.title = t().refreshingBtn;
+    refreshBtnEl.setAttribute('aria-label', t().refreshingBtn);
+  }
 
   // clips_meta stores max_date as YYYY-MM-DD (date-only) for calendar use.
   // Twitch's started_at parameter requires full RFC3339; ensureRfc3339 appends
@@ -520,7 +535,12 @@ async function fetchLiveClips(): Promise<void> {
   }
 
   state.setLiveFetching(false);
-  if (refreshBtnEl) { refreshBtnEl.disabled = false; refreshBtnEl.textContent = t().refreshBtn; }
+  if (refreshBtnEl) {
+    refreshBtnEl.disabled = false;
+    refreshBtnEl.classList.remove('refreshing');
+    refreshBtnEl.title = t().refreshBtn;
+    refreshBtnEl.setAttribute('aria-label', t().refreshBtn);
+  }
   state.setLiveClips(clips);
   updateLiveClipBounds();
   void render();
@@ -577,7 +597,9 @@ function renderLiveSection(): void {
   toggleEl.setAttribute('aria-label', collapsed ? t().liveSectionShow : t().liveSectionCollapse);
   grid.style.display   = collapsed ? 'none' : '';
 
-  grid.innerHTML = filtered.map(c => clipCardHtml(c, ' live-clip')).join('');
+  grid.innerHTML = filtered.map(c => clipCardHtml(
+    { ...c, game_name_ja: _gameNameJa.get(c.game_id) ?? '' }, ' live-clip',
+  )).join('');
   attachImgErrorHandlers(grid);
 
   section.style.display = 'block';
@@ -820,7 +842,7 @@ export async function render(): Promise<void> {
               url: item.clip.url, thumbnail_url: item.clip.thumbnail_url,
               title: item.clip.title, duration: item.clip.duration,
               view_count: item.clip.view_count, game_id: item.clip.game_id ?? '',
-              game_name: item.clip.game_name, game_name_ja: '',
+              game_name: item.clip.game_name, game_name_ja: _gameNameJa.get(item.clip.game_id ?? '') ?? '',
               creator_name: item.clip.creator_name, created_at: item.clip.created_at,
               isLive: true,
             });
@@ -832,7 +854,7 @@ export async function render(): Promise<void> {
         const liveItems = liveSlice.map(c => ({
           url: c.url, thumbnail_url: c.thumbnail_url, title: c.title,
           duration: c.duration, view_count: c.view_count, game_id: c.game_id ?? '',
-          game_name: c.game_name, game_name_ja: '',
+          game_name: c.game_name, game_name_ja: _gameNameJa.get(c.game_id ?? '') ?? '',
           creator_name: c.creator_name, created_at: c.created_at, isLive: true,
         }));
         const dbItems = dbClips.map(c => toItem(c, false));
@@ -927,13 +949,22 @@ function applyTranslations(): void {
   (document.getElementById('date-to-input')   as HTMLInputElement).title = tr.dateTo;
   (document.getElementById('date-to-input')   as HTMLInputElement).lang  = lang;
 
-  (document.getElementById('btn-view-cal')       as HTMLButtonElement).textContent    = tr.viewCalendar;
+  const calBtn = document.getElementById('btn-view-cal') as HTMLButtonElement;
+  calBtn.title = tr.viewCalendar;
+  calBtn.setAttribute('aria-label', tr.viewCalendar);
   (document.getElementById('btn-clear-dates')    as HTMLButtonElement).setAttribute('aria-label', tr.clearDates);
 
   const btnGrid = document.getElementById('btn-view-grid') as HTMLButtonElement | null;
   if (btnGrid) { btnGrid.setAttribute('aria-label', tr.viewGrid); btnGrid.title = tr.viewGrid; }
   const btnList = document.getElementById('btn-view-list') as HTMLButtonElement | null;
   if (btnList) { btnList.setAttribute('aria-label', tr.viewList); btnList.title = tr.viewList; }
+
+  // Controls collapse toggle: keep aria-label in sync with current state.
+  const controlsToggleBtn = document.getElementById('btn-controls-toggle') as HTMLButtonElement | null;
+  if (controlsToggleBtn) {
+    const isCollapsed = document.getElementById('controls')?.classList.contains('controls-collapsed') ?? false;
+    controlsToggleBtn.setAttribute('aria-label', isCollapsed ? tr.controlsExpand : tr.controlsCollapse);
+  }
 
   const loadingText = document.getElementById('loading-text');
   if (loadingText) loadingText.textContent = tr.loading;
@@ -943,9 +974,13 @@ function applyTranslations(): void {
   const loginBtn = document.getElementById('btn-login');
   if (loginBtn) loginBtn.textContent = tr.loginBtn;
   const logoutBtn = document.getElementById('btn-logout');
-  if (logoutBtn) logoutBtn.textContent = tr.logoutBtn;
+  if (logoutBtn) { logoutBtn.title = tr.logoutBtn; logoutBtn.setAttribute('aria-label', tr.logoutBtn); }
   const refreshBtnEl = document.getElementById('btn-refresh-live') as HTMLButtonElement | null;
-  if (refreshBtnEl) refreshBtnEl.textContent = state.liveFetching ? tr.refreshingBtn : tr.refreshBtn;
+  if (refreshBtnEl) {
+    const lbl = state.liveFetching ? tr.refreshingBtn : tr.refreshBtn;
+    refreshBtnEl.title = lbl;
+    refreshBtnEl.setAttribute('aria-label', lbl);
+  }
   const dismissBtn = document.getElementById('btn-dismiss-banner');
   if (dismissBtn) dismissBtn.setAttribute('aria-label', tr.dismissBanner);
 
@@ -1178,6 +1213,21 @@ function bindEvents(): void {
     renderLiveSection();
   });
 
+  // ── Controls bar collapse toggle ────────────────────────────────────────────
+  {
+    const toggleBtn  = document.getElementById('btn-controls-toggle') as HTMLButtonElement | null;
+    const controlsEl = document.getElementById('controls')!;
+    // Restore collapsed state from previous session.
+    if (localStorage.getItem('tc_controls_collapsed') === '1') {
+      controlsEl.classList.add('controls-collapsed');
+    }
+    toggleBtn?.addEventListener('click', () => {
+      const isCollapsed = controlsEl.classList.toggle('controls-collapsed');
+      localStorage.setItem('tc_controls_collapsed', isCollapsed ? '1' : '0');
+      toggleBtn.setAttribute('aria-label', isCollapsed ? t().controlsExpand : t().controlsCollapse);
+    });
+  }
+
   // ── Settings panel ─────────────────────────────────────────────────────────
 
   const settingsBtn   = document.getElementById('btn-settings');
@@ -1245,7 +1295,6 @@ export async function init(): Promise<void> {
     applyTranslations();
     syncAuthUI();
     rebuildMonthSelect();
-    state.setCurrentPage(1);
     void render();
     if (state.currentView === 'calendar') void renderCalendar();
   });
