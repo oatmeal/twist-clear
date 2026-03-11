@@ -418,19 +418,20 @@ function expandCard(card: HTMLElement, skipScroll = false): void {
   if (info) {
     const allCards = Array.from(card.parentElement?.querySelectorAll<HTMLElement>('.clip-card') ?? []);
     const idx = allCards.indexOf(card);
+    const totalPages = Math.ceil(state.totalClips / state.PAGE_SIZE);
     const navRow = document.createElement('div');
     navRow.className = 'clip-nav-row';
     const prevBtn = document.createElement('button');
     prevBtn.className = 'clip-nav-btn clip-prev-btn';
     prevBtn.type = 'button';
     prevBtn.setAttribute('aria-label', t().prevClip);
-    prevBtn.disabled = idx <= 0;
+    prevBtn.disabled = idx <= 0 && state.currentPage <= 1;
     prevBtn.innerHTML = '&#8592;';
     const nextBtn = document.createElement('button');
     nextBtn.className = 'clip-nav-btn clip-next-btn';
     nextBtn.type = 'button';
     nextBtn.setAttribute('aria-label', t().nextClip);
-    nextBtn.disabled = idx >= allCards.length - 1;
+    nextBtn.disabled = idx >= allCards.length - 1 && state.currentPage >= totalPages;
     nextBtn.innerHTML = '&#8594;';
     info.replaceWith(navRow);
     navRow.append(prevBtn, info, nextBtn);
@@ -484,8 +485,8 @@ function expandRow(row: HTMLElement, skipScroll = false): void {
     `<iframe src="${escHtml(src)}" class="clip-iframe" allowfullscreen scrolling="no"></iframe>` +
     `</div>` +
     `<div class="clip-list-nav-row">` +
-    `<button class="clip-nav-btn clip-prev-btn" type="button" aria-label="${escHtml(t().prevClip)}"${idx <= 0 ? ' disabled' : ''}>&#8593;</button>` +
-    `<button class="clip-nav-btn clip-next-btn" type="button" aria-label="${escHtml(t().nextClip)}"${idx >= allRows.length - 1 ? ' disabled' : ''}>&#8595;</button>` +
+    `<button class="clip-nav-btn clip-prev-btn" type="button" aria-label="${escHtml(t().prevClip)}"${idx <= 0 && state.currentPage <= 1 ? ' disabled' : ''}>${idx <= 0 && state.currentPage > 1 ? '&#8592;' : '&#8593;'}</button>` +
+    `<button class="clip-nav-btn clip-next-btn" type="button" aria-label="${escHtml(t().nextClip)}"${idx >= allRows.length - 1 && state.currentPage >= Math.ceil(state.totalClips / state.PAGE_SIZE) ? ' disabled' : ''}>${idx >= allRows.length - 1 && state.currentPage < Math.ceil(state.totalClips / state.PAGE_SIZE) ? '&#8594;' : '&#8595;'}</button>` +
     `</div>`;
   embedRow.appendChild(td);
 
@@ -497,31 +498,66 @@ function expandRow(row: HTMLElement, skipScroll = false): void {
   setTimeout(() => document.addEventListener('click', _onDocClickOutside), 0);
 }
 
-function navigateClip(direction: 'prev' | 'next'): void {
+async function navigateClip(direction: 'prev' | 'next'): Promise<void> {
   if (!_expandedCard) return;
   const allCards = Array.from(_expandedCard.parentElement?.querySelectorAll<HTMLElement>('.clip-card') ?? []);
   const idx = allCards.indexOf(_expandedCard);
   const target = allCards[direction === 'prev' ? idx - 1 : idx + 1];
-  if (!target) return;
-  // Capture the embed's current screen position before the DOM changes,
-  // then instantly correct scroll so it stays at the same vertical position.
-  const topBefore = _expandedCard.getBoundingClientRect().top;
-  expandCard(target, true);
-  const topAfter = target.getBoundingClientRect().top;
-  window.scrollBy({ top: topAfter - topBefore, behavior: 'instant' });
+  if (target) {
+    // Capture the embed's current screen position before the DOM changes,
+    // then instantly correct scroll so it stays at the same vertical position.
+    const topBefore = _expandedCard.getBoundingClientRect().top;
+    expandCard(target, true);
+    const topAfter = target.getBoundingClientRect().top;
+    window.scrollBy({ top: topAfter - topBefore, behavior: 'instant' });
+  } else {
+    const totalPages = Math.ceil(state.totalClips / state.PAGE_SIZE);
+    if (direction === 'next' && state.currentPage < totalPages) {
+      state.setCurrentPage(state.currentPage + 1);
+      await render();
+      const firstCard = document.querySelector<HTMLElement>('#clips-grid .clip-card');
+      if (firstCard) expandCard(firstCard);
+    } else if (direction === 'prev' && state.currentPage > 1) {
+      state.setCurrentPage(state.currentPage - 1);
+      await render();
+      const allNewCards = Array.from(document.querySelectorAll<HTMLElement>('#clips-grid .clip-card'));
+      const lastCard = allNewCards[allNewCards.length - 1];
+      if (lastCard) expandCard(lastCard);
+    }
+  }
 }
 
-function navigateRow(direction: 'prev' | 'next'): void {
+async function navigateRow(direction: 'prev' | 'next'): Promise<void> {
   if (!_expandedRow) return;
   const tbody = _expandedRow.closest('tbody');
   const allRows = tbody ? Array.from(tbody.querySelectorAll<HTMLElement>('.clip-row')) : [];
   const idx = allRows.indexOf(_expandedRow);
   const target = allRows[direction === 'prev' ? idx - 1 : idx + 1];
-  if (!target) return;
-  const topBefore = _expandedRow.getBoundingClientRect().top;
-  expandRow(target, true);
-  const topAfter = target.getBoundingClientRect().top;
-  window.scrollBy({ top: topAfter - topBefore, behavior: 'instant' });
+  if (target) {
+    const topBefore = _expandedRow.getBoundingClientRect().top;
+    expandRow(target, true);
+    const topAfter = target.getBoundingClientRect().top;
+    window.scrollBy({ top: topAfter - topBefore, behavior: 'instant' });
+  } else {
+    const totalPages = Math.ceil(state.totalClips / state.PAGE_SIZE);
+    if (direction === 'next' && state.currentPage < totalPages) {
+      state.setCurrentPage(state.currentPage + 1);
+      await render();
+      const firstRow = document.querySelector<HTMLElement>('#clips-grid .clip-row');
+      if (firstRow) expandRow(firstRow);
+    } else if (direction === 'prev' && state.currentPage > 1) {
+      state.setCurrentPage(state.currentPage - 1);
+      await render();
+      const allNewRows = Array.from(document.querySelectorAll<HTMLElement>('#clips-grid .clip-row'));
+      const lastRow = allNewRows[allNewRows.length - 1];
+      if (lastRow) {
+        expandRow(lastRow, true);
+        // scrollIntoView on the row alone leaves the embed below the fold;
+        // scroll the embed row into view instead so both row and player are visible.
+        _insertedEmbedRow?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }
+    }
+  }
 }
 
 // ── Live clips ────────────────────────────────────────────────────────────
