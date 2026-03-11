@@ -1042,6 +1042,11 @@ function applyTranslations(): void {
   if (btnGrid) { btnGrid.setAttribute('aria-label', tr.viewGrid); btnGrid.title = tr.viewGrid; }
   const btnList = document.getElementById('btn-view-list') as HTMLButtonElement | null;
   if (btnList) { btnList.setAttribute('aria-label', tr.viewList); btnList.title = tr.viewList; }
+  // Short labels shown next to the active icon on narrow screens
+  const gridLabel = btnGrid?.querySelector('.view-btn-label') as HTMLElement | null;
+  if (gridLabel) gridLabel.textContent = tr.viewGridLabel;
+  const listLabel = btnList?.querySelector('.view-btn-label') as HTMLElement | null;
+  if (listLabel) listLabel.textContent = tr.viewListLabel;
 
   // Controls collapse toggle: keep aria-label in sync with current state.
   const controlsToggleBtn = document.getElementById('btn-controls-toggle') as HTMLButtonElement | null;
@@ -1083,11 +1088,38 @@ function applyTranslations(): void {
   if (optEn) optEn.className = lang === 'en' ? 'lang-opt active' : 'lang-opt';
   if (optJa) optJa.className = lang === 'ja' ? 'lang-opt active' : 'lang-opt';
 
-  // Search help modal
-  const helpBtn = document.getElementById('btn-search-help');
+  // Help modal (general "How to use")
+  const helpBtn = document.getElementById('btn-help');
   if (helpBtn) { helpBtn.setAttribute('aria-label', tr.searchHelpBtn); helpBtn.title = tr.searchHelpBtn; }
-  const helpTitle = document.getElementById('search-help-modal-title');
-  if (helpTitle) helpTitle.textContent = tr.searchHelpTitle;
+  const helpModalTitle = document.getElementById('search-help-modal-title');
+  if (helpModalTitle) helpModalTitle.textContent = tr.helpTitle;
+  // Browsing section
+  const helpBrowseH = document.getElementById('help-browse-heading');
+  if (helpBrowseH) helpBrowseH.textContent = tr.helpBrowse;
+  const helpBrowseD = document.getElementById('help-browse-desc');
+  if (helpBrowseD) helpBrowseD.textContent = tr.helpBrowseDesc;
+  // Layout section
+  const helpLayoutH = document.getElementById('help-layout-heading');
+  if (helpLayoutH) helpLayoutH.textContent = tr.helpLayout;
+  const helpLayoutD = document.getElementById('help-layout-desc');
+  if (helpLayoutD) helpLayoutD.textContent = tr.helpLayoutDesc;
+  // Sort section
+  const helpSortH = document.getElementById('help-sort-heading');
+  if (helpSortH) helpSortH.textContent = tr.helpSort;
+  const helpSortD = document.getElementById('help-sort-desc');
+  if (helpSortD) helpSortD.textContent = tr.helpSortDesc;
+  // Game section
+  const helpGameH = document.getElementById('help-game-heading');
+  if (helpGameH) helpGameH.textContent = tr.helpGame;
+  const helpGameD = document.getElementById('help-game-desc');
+  if (helpGameD) helpGameD.textContent = tr.helpGameDesc;
+  // Search section
+  const helpSearchH = document.getElementById('help-search-heading');
+  if (helpSearchH) helpSearchH.textContent = tr.helpSearch;
+  const helpSearchD = document.getElementById('help-search-desc');
+  if (helpSearchD) helpSearchD.textContent = tr.helpSearchDesc;
+  const helpSyntaxH = document.getElementById('help-search-syntax-heading');
+  if (helpSyntaxH) helpSyntaxH.textContent = tr.searchHelpTitle;
   const helpAnd = document.getElementById('search-help-and');
   if (helpAnd) helpAnd.textContent = tr.searchHelpAnd;
   const helpOr = document.getElementById('search-help-or');
@@ -1098,8 +1130,34 @@ function applyTranslations(): void {
   if (helpPhrase) helpPhrase.textContent = tr.searchHelpPhrase;
   const helpNote = document.getElementById('search-help-note');
   if (helpNote) helpNote.textContent = tr.searchHelpNote;
+  // Date section
+  const helpDateH = document.getElementById('help-date-heading');
+  if (helpDateH) helpDateH.textContent = tr.helpDate;
+  const helpDateD = document.getElementById('help-date-desc');
+  if (helpDateD) helpDateD.textContent = tr.helpDateDesc;
+  // Login section — use the precise archive date when available
+  const helpLoginH = document.getElementById('help-login-heading');
+  if (helpLoginH) helpLoginH.textContent = tr.helpLogin;
+  const helpLoginD = document.getElementById('help-login-desc');
+  if (helpLoginD) {
+    const loginDate = _dbScrapeDate ?? _dbCutoffDate;
+    const dateLabel = loginDate ? fmtDateTime(loginDate, lang, state.tzOffset) : null;
+    helpLoginD.textContent = dateLabel
+      ? tr.helpLoginDescWithDate(dateLabel)
+      : tr.helpLoginDescNoDate;
+  }
+  // Share section
+  const helpShareH = document.getElementById('help-share-heading');
+  if (helpShareH) helpShareH.textContent = tr.helpShare;
+  const helpShareD = document.getElementById('help-share-desc');
+  if (helpShareD) helpShareD.textContent = tr.helpShareDesc;
   const closeModalBtn = document.getElementById('btn-close-search-help');
   if (closeModalBtn) closeModalBtn.setAttribute('aria-label', tr.closeModal);
+  // Calendar legend
+  const calLegendFewer = document.getElementById('cal-legend-fewer');
+  if (calLegendFewer) calLegendFewer.textContent = tr.calLegendFewer;
+  const calLegendMore = document.getElementById('cal-legend-more');
+  if (calLegendMore) calLegendMore.textContent = tr.calLegendMore;
 }
 
 // ── Timezone label ────────────────────────────────────────────────────────
@@ -1301,13 +1359,10 @@ function bindEvents(): void {
   {
     const toggleBtn  = document.getElementById('btn-controls-toggle') as HTMLButtonElement | null;
     const controlsEl = document.getElementById('controls')!;
-    // Restore collapsed state from previous session.
-    if (localStorage.getItem('tc_controls_collapsed') === '1') {
-      controlsEl.classList.add('controls-collapsed');
-    }
+    // No cross-session persistence: always start expanded so filters are
+    // visible on first load regardless of screen width or prior sessions.
     toggleBtn?.addEventListener('click', () => {
       const isCollapsed = controlsEl.classList.toggle('controls-collapsed');
-      localStorage.setItem('tc_controls_collapsed', isCollapsed ? '1' : '0');
       toggleBtn.setAttribute('aria-label', isCollapsed ? t().controlsExpand : t().controlsCollapse);
     });
   }
@@ -1362,10 +1417,10 @@ function bindEvents(): void {
     pushHash();
   });
 
-  // ── Search help modal ────────────────────────────────────────────────────
+  // ── Help modal (general "How to use") ────────────────────────────────────
 
   const searchHelpModal = document.getElementById('search-help-modal') as HTMLDialogElement | null;
-  document.getElementById('btn-search-help')?.addEventListener('click', () => {
+  document.getElementById('btn-help')?.addEventListener('click', () => {
     searchHelpModal?.showModal();
   });
   document.getElementById('btn-close-search-help')?.addEventListener('click', () => {

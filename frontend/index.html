@@ -54,6 +54,8 @@
         </label>
       </div>
     </div>
+    <!-- Help button: opens the general how-to-use modal -->
+    <button id="btn-help" class="auth-btn" aria-label="ヘルプ" title="ヘルプ" aria-haspopup="dialog">?</button>
     <button id="lang-toggle" class="lang-toggle" aria-label="Switch language"><span id="lang-opt-en" class="lang-opt">EN</span><span class="lang-divider" aria-hidden="true">/</span><span id="lang-opt-ja" class="lang-opt">JA</span></button>
   </div>
 </header>
@@ -67,7 +69,6 @@
 <div id="controls">
   <div class="search-wrapper">
     <input type="search" id="search" placeholder="クリップタイトルを検索…" autocomplete="off">
-    <button id="btn-search-help" class="search-help-btn" aria-label="検索ヘルプ" aria-haspopup="dialog">?</button>
   </div>
   <select id="sort">
     <option value="view_count_desc">再生回数が多い順</option>
@@ -75,9 +76,6 @@
     <option value="date_desc" selected>新しい順</option>
     <option value="date_asc">古い順</option>
   </select>
-  <!-- Collapse toggle: shown only on narrow screens; sits at the right of the
-       search+sort row via margin-left:auto. -->
-  <button id="btn-controls-toggle" class="controls-toggle-btn" aria-label="フィルターを折りたたむ"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="2 4 6 8 10 4"/></svg></button>
   <!-- Zero-size on wide screens; becomes full-width on narrow screens to push
        game-filter onto its own row. Also hidden when collapsed. -->
   <div class="controls-break-md collapsible-filter"></div>
@@ -101,10 +99,15 @@
   <!-- Grid / list switcher: wraps below date-filter-group on very narrow
        screens, carrying result-count to the right on the same row. -->
   <div class="view-switcher collapsible-filter">
-    <button id="btn-view-grid" class="view-btn active" aria-label="グリッド表示" title="グリッド表示">⊞</button>
-    <button id="btn-view-list" class="view-btn" aria-label="リスト表示" title="リスト表示">☰</button>
+    <button id="btn-view-grid" class="view-btn active" aria-label="グリッド表示" title="グリッド表示">⊞<span class="view-btn-label">グリッド</span></button>
+    <button id="btn-view-list" class="view-btn" aria-label="リスト表示" title="リスト表示">☰<span class="view-btn-label">リスト</span></button>
   </div>
   <span id="result-count" class="collapsible-filter"></span>
+  <!-- Collapse toggle: shown only on narrow screens as an unobtrusive caret at
+       the bottom of the controls bar. Last in DOM so it always occupies its own
+       flex row. Caret direction shows the action that will occur (▼ = expand,
+       ▲ = collapse). -->
+  <button id="btn-controls-toggle" class="controls-toggle-btn" aria-label="フィルターを折りたたむ"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="2 4 6 8 10 4"/></svg></button>
 </div>
 
 <main>
@@ -142,6 +145,18 @@
       <div id="cal-year-strip"></div>
       <div id="cal-month-grid"></div>
     </div>
+    <!-- Heat-map density legend -->
+    <div id="cal-legend" class="cal-legend">
+      <span id="cal-legend-fewer">クリップが少ない</span>
+      <span class="cal-legend-swatches" aria-hidden="true">
+        <span class="cal-legend-swatch" style="background:var(--cal-0)"></span>
+        <span class="cal-legend-swatch" style="background:var(--cal-1)"></span>
+        <span class="cal-legend-swatch" style="background:var(--cal-2)"></span>
+        <span class="cal-legend-swatch" style="background:var(--cal-3)"></span>
+        <span class="cal-legend-swatch" style="background:var(--cal-4)"></span>
+      </span>
+      <span id="cal-legend-more">多い</span>
+    </div>
   </div>
 
   <div id="loading">
@@ -157,32 +172,77 @@
 
 <footer id="site-footer"></footer>
 
+<!-- General help modal — "How to use" / "使い方"
+     Section order: browsing → layout → sort → game → search → date → login → share
+     Keep section text in sync with src/lib/i18n.ts (helpBrowse / helpBrowseDesc etc.)
+     and update both when features change. -->
 <dialog id="search-help-modal" aria-labelledby="search-help-modal-title">
   <div class="search-help-header">
-    <h2 id="search-help-modal-title">検索の使い方</h2>
+    <h2 id="search-help-modal-title">使い方</h2>
     <button id="btn-close-search-help" class="modal-close-btn" aria-label="閉じる">&#x2715;</button>
   </div>
-  <table class="search-help-table">
-    <tbody>
-      <tr>
-        <td><code>word1 word2</code></td>
-        <td id="search-help-and">両方の語を含む（AND）</td>
-      </tr>
-      <tr>
-        <td><code>word1 OR word2</code><br><code>word1 | word2</code><br><code>word1 ｜ word2</code></td>
-        <td id="search-help-or">どちらかの語を含む（OR）</td>
-      </tr>
-      <tr>
-        <td><code>-word</code></td>
-        <td id="search-help-not">語を除外</td>
-      </tr>
-      <tr>
-        <td><code>"exact phrase"</code></td>
-        <td id="search-help-phrase">フレーズ検索</td>
-      </tr>
-    </tbody>
-  </table>
-  <p id="search-help-note" class="search-help-note">OR・|・｜ の前後にはスペースが必要です。</p>
+
+  <section class="help-section">
+    <h3 id="help-browse-heading">クリップを見る</h3>
+    <p id="help-browse-desc">サムネイルをクリック（リスト表示では行をクリック）するとその場で再生できます。Escキーまたは外側をクリックで閉じます。</p>
+  </section>
+
+  <section class="help-section">
+    <h3 id="help-layout-heading">グリッドとリスト表示</h3>
+    <p id="help-layout-desc">フィルターバーのボタンでグリッド（⊞）とリスト（☰）を切り替えられます。グリッドはサムネイル付き、リストはコンパクトな一覧表示です。</p>
+  </section>
+
+  <section class="help-section">
+    <h3 id="help-sort-heading">並び替え</h3>
+    <p id="help-sort-desc">並び替えメニューで、再生回数の多い順・少ない順、新しい順・古い順に並べ替えられます。</p>
+  </section>
+
+  <section class="help-section">
+    <h3 id="help-game-heading">ゲームで絞り込む</h3>
+    <p id="help-game-desc">ゲームメニューで1つのゲームのクリップだけを表示できます。クリップカード内のゲーム名をクリックすると、そのゲームで即座に絞り込めます。</p>
+  </section>
+
+  <section class="help-section">
+    <h3 id="help-search-heading">検索</h3>
+    <p id="help-search-desc">検索ボックスに入力するとタイトルで絞り込めます。</p>
+    <h4 id="help-search-syntax-heading" class="help-search-syntax-title">検索の使い方</h4>
+    <table class="search-help-table">
+      <tbody>
+        <tr>
+          <td><code>word1 word2</code></td>
+          <td id="search-help-and">両方の語を含む（AND）</td>
+        </tr>
+        <tr>
+          <td><code>word1 OR word2</code><br><code>word1 | word2</code><br><code>word1 ｜ word2</code></td>
+          <td id="search-help-or">どちらかの語を含む（OR）</td>
+        </tr>
+        <tr>
+          <td><code>-word</code></td>
+          <td id="search-help-not">語を除外</td>
+        </tr>
+        <tr>
+          <td><code>"exact phrase"</code></td>
+          <td id="search-help-phrase">フレーズ検索</td>
+        </tr>
+      </tbody>
+    </table>
+    <p id="search-help-note" class="search-help-note">OR・|・｜ の前後にはスペースが必要です。</p>
+  </section>
+
+  <section class="help-section">
+    <h3 id="help-date-heading">日付で絞り込む</h3>
+    <p id="help-date-desc">開始日・終了日に直接入力するか、カレンダーアイコンをクリックして年・月・週・日単位で選択できます。</p>
+  </section>
+
+  <section class="help-section">
+    <h3 id="help-login-heading">ログイン</h3>
+    <p id="help-login-desc">このサイトには最近の日付までのクリップが保存されています。Twitchでログインすると、それ以降の新着クリップも確認できます。</p>
+  </section>
+
+  <section class="help-section">
+    <h3 id="help-share-heading">URLで共有</h3>
+    <p id="help-share-desc">フィルターや並び順などのページの状態はURLに反映されます。アドレスバーをコピーしてそのまま共有できます。</p>
+  </section>
 </dialog>
 
 </body>

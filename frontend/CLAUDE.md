@@ -280,8 +280,24 @@ normalized to ASCII space globally. Full-width minus (`\uff0d`) is recognized
 as a negation-prefix alias only at the start of a token — inside a bare word it
 is preserved as-is, so searches for titles containing `－` work correctly.
 Each bare term is wrapped in FTS5 double-quotes to neutralize any special
-characters in the term text. A `?` button next to the search input opens a
-modal summarising the syntax (translated to EN/JA).
+characters in the term text. A `?` / Help button in `#header-controls` opens
+a general "How to use" modal (`#search-help-modal`, `id="btn-help"`) covering
+browsing, layout, sort, game filter, search syntax (translated EN/JA), date
+filtering, login, and URL sharing.
+
+**Keeping the help modal up to date**: The modal has one `<section
+class="help-section">` per major feature, in the order: browsing → layout →
+sort → game → search → date → login → share. When a feature is added,
+removed, or its behaviour changes in a user-visible way:
+
+1. Update (or add/remove) the relevant `<section>` in `index.html`.
+2. Update the corresponding i18n keys in `src/lib/i18n.ts` — heading key
+   `help<Feature>`, description key `help<Feature>Desc` — for both `en`
+   and `ja`.
+3. Wire the new elements in the "Help modal" block of `applyTranslations()`
+   in `app.ts`.
+4. Default text in `index.html` must be Japanese (house rule: no English in
+   static HTML).
 
 ### Precomputed metadata (`useMeta`)
 

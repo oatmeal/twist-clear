@@ -31,20 +31,48 @@ export interface Translations {
   liveTitleNoDate: (n: number) => string;
   liveSectionShow: string;
   liveSectionCollapse: string;
-  // Search help modal
-  searchHelpBtn: string;
-  searchHelpTitle: string;
+  // Help modal — button + title
+  searchHelpBtn: string;        // header help button label / aria-label
+  helpTitle: string;            // modal h2: "How to use" / "使い方"
+  // Help modal — browsing section
+  helpBrowse: string;
+  helpBrowseDesc: string;
+  // Help modal — layout section
+  helpLayout: string;
+  helpLayoutDesc: string;
+  // Help modal — sort section
+  helpSort: string;
+  helpSortDesc: string;
+  // Help modal — game filter section
+  helpGame: string;
+  helpGameDesc: string;
+  // Help modal — search section + syntax table
+  helpSearch: string;
+  helpSearchDesc: string;
+  searchHelpTitle: string;      // syntax subsection heading
   searchHelpAnd: string;
   searchHelpOr: string;
   searchHelpNot: string;
   searchHelpPhrase: string;
   searchHelpNote: string;
+  // Help modal — date section
+  helpDate: string;
+  helpDateDesc: string;
+  // Help modal — login section
+  helpLogin: string;
+  helpLoginDescWithDate: (date: string) => string;
+  helpLoginDescNoDate: string;
+  // Help modal — share section
+  helpShare: string;
+  helpShareDesc: string;
   // Controls bar collapse toggle (narrow screens)
   controlsCollapse: string;
   controlsExpand: string;
   // View layout toggle
   viewGrid: string;
   viewList: string;
+  viewGridLabel: string;        // short label shown next to icon on narrow screens
+  viewListLabel: string;
   // List view column headers
   listColTitle: string;
   listColViews: string;
@@ -65,6 +93,8 @@ export interface Translations {
   resultCount: (n: number) => string;
   // Calendar
   clipCount: (n: number) => string;
+  calLegendFewer: string;       // heat-map legend: low end
+  calLegendMore: string;        // heat-map legend: high end
   dayTooltip: (date: string, n: number) => string;
   monthTooltip: (name: string, n: number) => string;
   weekLabel: (date: string) => string;
@@ -103,15 +133,35 @@ const en: Translations = {
   liveSectionCollapse: 'Collapse',
   controlsCollapse: 'Collapse filters',
   controlsExpand: 'Expand filters',
-  searchHelpBtn: 'Search help',
+  searchHelpBtn: 'Help',
+  helpTitle: 'How to use',
+  helpBrowse: 'Watching clips',
+  helpBrowseDesc: 'Click a thumbnail (or any row in list view) to watch inline. Press Escape or click outside to close.',
+  helpLayout: 'Grid and list views',
+  helpLayoutDesc: 'Toggle between grid (⊞) and list (☰) using the buttons in the filter bar. Grid shows thumbnails; list shows a compact table.',
+  helpSort: 'Sorting',
+  helpSortDesc: 'Use the sort dropdown to order clips by Most Viewed, Least Viewed, Newest First, or Oldest First.',
+  helpGame: 'Game filter',
+  helpGameDesc: 'Use the game dropdown to show only clips from one game. You can also click any game name within a clip card to filter by that game instantly.',
+  helpSearch: 'Searching',
+  helpSearchDesc: 'Type in the search box to filter clips by title.',
   searchHelpTitle: 'Search syntax',
   searchHelpAnd: 'Both words (AND)',
   searchHelpOr: 'Either word (OR)',
   searchHelpNot: 'Exclude word',
   searchHelpPhrase: 'Exact phrase',
   searchHelpNote: 'Spaces are required around OR and |.',
+  helpDate: 'Filtering by date',
+  helpDateDesc: 'Type dates into the From / End date boxes, or click the calendar icon to browse by year, month, week, or day.',
+  helpLogin: 'Logging in',
+  helpLoginDescWithDate: (date) => `Clips up to ${date} are saved here. Log in with Twitch to also fetch newer clips live from Twitch.`,
+  helpLoginDescNoDate: 'Clips up to a recent date are saved here. Log in with Twitch to also fetch newer clips live from Twitch.',
+  helpShare: 'Sharing a view',
+  helpShareDesc: 'Filters, sort order, and page are encoded in the URL — copy the address bar to share exactly what you see.',
   viewGrid: 'Grid view',
   viewList: 'List view',
+  viewGridLabel: 'Grid',
+  viewListLabel: 'List',
   listColTitle: 'Title',
   listColViews: 'Views',
   listColGame: 'Game',
@@ -126,6 +176,8 @@ const en: Translations = {
   creatorLine: (creator, date) => `by ${creator} · ${date}`,
   resultCount: (n) => `${n.toLocaleString()} clip${n !== 1 ? 's' : ''}`,
   clipCount: (n) => `${n} clip${n !== 1 ? 's' : ''}`,
+  calLegendFewer: 'fewer clips',
+  calLegendMore: 'more',
   dayTooltip: (date, n) => `${date}: ${n} clip${n !== 1 ? 's' : ''}`,
   monthTooltip: (name, n) => `${name}: ${n.toLocaleString()} clip${n !== 1 ? 's' : ''}`,
   weekLabel: (date) => {
@@ -175,15 +227,35 @@ const ja: Translations = {
   liveSectionCollapse: '折りたたむ',
   controlsCollapse: 'フィルターを折りたたむ',
   controlsExpand: 'フィルターを展開する',
-  searchHelpBtn: '検索ヘルプ',
+  searchHelpBtn: 'ヘルプ',
+  helpTitle: '使い方',
+  helpBrowse: 'クリップを見る',
+  helpBrowseDesc: 'サムネイルをクリック（リスト表示では行をクリック）するとその場で再生できます。Escキーまたは外側をクリックで閉じます。',
+  helpLayout: 'グリッドとリスト表示',
+  helpLayoutDesc: 'フィルターバーのボタンでグリッド（⊞）とリスト（☰）を切り替えられます。グリッドはサムネイル付き、リストはコンパクトな一覧表示です。',
+  helpSort: '並び替え',
+  helpSortDesc: '並び替えメニューで、再生回数の多い順・少ない順、新しい順・古い順に並べ替えられます。',
+  helpGame: 'ゲームで絞り込む',
+  helpGameDesc: 'ゲームメニューで1つのゲームのクリップだけを表示できます。クリップカード内のゲーム名をクリックすると、そのゲームで即座に絞り込めます。',
+  helpSearch: '検索',
+  helpSearchDesc: '検索ボックスに入力するとタイトルで絞り込めます。',
   searchHelpTitle: '検索の使い方',
   searchHelpAnd: '両方の語を含む（AND）',
   searchHelpOr: 'どちらかの語を含む（OR）',
   searchHelpNot: '語を除外',
   searchHelpPhrase: 'フレーズ検索',
   searchHelpNote: 'OR・|・｜ の前後にはスペースが必要です。',
+  helpDate: '日付で絞り込む',
+  helpDateDesc: '開始日・終了日に直接入力するか、カレンダーアイコンをクリックして年・月・週・日単位で選択できます。',
+  helpLogin: 'ログイン',
+  helpLoginDescWithDate: (date) => `${date}までのクリップが保存されています。Twitchでログインすると、それ以降の新着クリップも確認できます。`,
+  helpLoginDescNoDate: 'このサイトには最近の日付までのクリップが保存されています。Twitchでログインすると、それ以降の新着クリップも確認できます。',
+  helpShare: 'URLで共有',
+  helpShareDesc: 'フィルターや並び順などのページの状態はURLに反映されます。アドレスバーをコピーしてそのまま共有できます。',
   viewGrid: 'グリッド表示',
   viewList: 'リスト表示',
+  viewGridLabel: 'グリッド',
+  viewListLabel: 'リスト',
   listColTitle: 'タイトル',
   listColViews: '再生数',
   listColGame: 'ゲーム',
@@ -198,6 +270,8 @@ const ja: Translations = {
   creatorLine: (creator, date) => `作成者: ${creator}さん · ${date}`,
   resultCount: (n) => `${n.toLocaleString()}本のクリップ`,
   clipCount: (n) => `${n}本`,
+  calLegendFewer: 'クリップが少ない',
+  calLegendMore: '多い',
   dayTooltip: (date, n) => {
     const parts = date.split('-');
     const fmt = new Date(Number(parts[0]!), Number(parts[1]!) - 1, Number(parts[2]!))

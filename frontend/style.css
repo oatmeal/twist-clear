@@ -129,6 +129,13 @@ header .streamer-tag {
 }
 /* Spinning animation for the refresh button while fetching */
 .auth-btn.refreshing svg { animation: spin 0.8s linear infinite; }
+/* Help button: slightly wider than icon-only buttons so the ? is comfortably tappable */
+#btn-help {
+  font-size: 14px;
+  font-weight: 700;
+  min-width: 32px;
+  text-align: center;
+}
 #btn-settings {
   font-variant-numeric: tabular-nums;
   min-width: 54px;
@@ -257,8 +264,11 @@ header .streamer-tag {
   border-radius: 8px;
   color: var(--text);
   padding: 18px 20px;
-  max-width: 400px;
+  max-width: 440px;
   width: 90vw;
+  /* Scrollable on small screens — the modal now has several sections */
+  max-height: 85dvh;
+  overflow-y: auto;
 }
 #search-help-modal::backdrop {
   background: rgba(0, 0, 0, 0.55);
@@ -308,6 +318,33 @@ header .streamer-tag {
   font-size: 12px;
   color: var(--muted);
 }
+/* ── Help modal sections ─────────────────────────────────────────────────── */
+.help-section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.help-section h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 5px;
+}
+.help-section p {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
+}
+/* Sub-heading for the search syntax table inside the search section */
+.help-search-syntax-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 10px 0 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
 
 select {
   background: var(--surface2);
@@ -336,26 +373,33 @@ select:focus { border-color: var(--accent); }
 .controls-break-md { flex: 0 0 0;    height: 0; }
 
 /* ── Controls collapse toggle ───────────────────────────────────────────────
-   Hidden on wide screens; shown on narrow screens (≤600 px).
-   margin-left:auto pushes it to the right end of the search+sort row. */
+   Hidden on wide screens; shown on narrow screens (≤600 px) as an unobtrusive
+   caret strip at the bottom of the controls bar. The button is last in DOM
+   order so it always occupies its own flex row when visible.
+   Caret shows the ACTION that will occur:
+     ▲ when expanded  → clicking will collapse (fold up)
+     ▼ when collapsed → clicking will expand  (unfold down)
+   The SVG polyline points downward by default (▼); we rotate it 180° in the
+   default (expanded) state so it shows ▲, and remove the rotation when
+   collapsed so it shows ▼. */
 .controls-toggle-btn {
   display: none;
-  margin-left: auto;
-  background: var(--surface2);
-  border: 1px solid var(--border);
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border);
   color: var(--muted);
-  padding: 6px 9px;
-  border-radius: 6px;
   cursor: pointer;
-  line-height: 0;
   align-items: center;
   justify-content: center;
-  transition: border-color 0.12s, color 0.12s;
+  padding: 3px;
+  margin-top: 4px;
+  transition: color 0.12s;
 }
-.controls-toggle-btn:hover { border-color: var(--accent); color: var(--text); }
-/* Chevron rotates when the bar is collapsed (points up = "tap to expand"). */
-.controls-toggle-btn svg { transition: transform 0.15s ease; }
-#controls.controls-collapsed .controls-toggle-btn svg { transform: rotate(180deg); }
+.controls-toggle-btn:hover { color: var(--text); }
+/* Default (expanded): rotate ▼ → ▲ to show "collapse" action */
+.controls-toggle-btn svg { transform: rotate(180deg); transition: transform 0.15s ease; }
+/* Collapsed: restore ▼ to show "expand" action */
+#controls.controls-collapsed .controls-toggle-btn svg { transform: none; }
 
 /* ── Date filter group (calendar toggle + date inputs) ──────────────────────
    One flex item so calendar button and date pickers always share a row; only
@@ -400,7 +444,20 @@ select:focus { border-color: var(--accent); }
 /* ── View switcher ── */
 .view-switcher { display: flex; gap: 4px; align-items: center; }
 /* All three view buttons use the same compact sizing */
-#btn-view-grid, #btn-view-list { font-size: 15px; padding: 6px 9px; }
+#btn-view-grid, #btn-view-list {
+  font-size: 15px;
+  padding: 6px 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+/* Short text label: hidden on inactive button, shown on active one.
+   Only visible on narrow screens (≤600 px) via media query below. */
+.view-btn-label {
+  display: none;
+  font-size: 12px;
+  font-weight: 500;
+}
 #btn-view-cal { padding: 6px 9px; line-height: 0; display: inline-flex; align-items: center; justify-content: center; }
 .view-btn {
   background: var(--surface2);
@@ -906,12 +963,12 @@ header .streamer-tag a:hover {
 #site-footer a:hover { color: var(--text); }
 
 /* ── Narrow screens (≤600 px) ───────────────────────────────────────────────
-   Three-row controls layout:
-     row 1 — search + sort + collapse-toggle
+   Controls layout:
+     row 1 — search + sort
      row 2 — game-filter (fills full width)
      row 3 — date-filter-group + view-switcher + result-count
-             (view-switcher + result-count wrap to row 4 on the very narrowest
-              screens because date-filter-group is too wide to share the row) */
+             (view-switcher may wrap to row 4 on the very narrowest screens)
+     last  — collapse toggle strip (full-width, always at bottom) */
 @media (max-width: 600px) {
   header    { padding: 10px 12px; }
   #controls { padding: 8px 12px; }
@@ -931,8 +988,18 @@ header .streamer-tag a:hover {
   .controls-break-md { flex-basis: 100%; }
   /* Game filter fills the full width of its row */
   #game-filter { flex: 1 1 0; min-width: 0; }
-  /* Show the collapse toggle button */
-  .controls-toggle-btn { display: flex; }
+  /* Collapse toggle: full-width strip at the bottom of the controls bar */
+  .controls-toggle-btn {
+    display: flex;
+    flex: 0 0 100%;
+  }
   /* Collapsed state: hide everything below the search+sort row */
   #controls.controls-collapsed .collapsible-filter { display: none; }
+  /* Show short text labels on both view buttons — both labels keeps them
+     symmetrical in width, preventing one button from unexpectedly wrapping. */
+  .view-btn .view-btn-label { display: inline; }
+  /* On very narrow screens suppress labels entirely to avoid crowding */
+  @media (max-width: 380px) {
+    .view-btn .view-btn-label { display: none !important; }
+  }
 }

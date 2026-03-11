@@ -356,3 +356,23 @@
   #cal-month-nav { border-left: none; padding-left: 0; }
   #cal-day-nav   { border-left: none; padding-left: 0; }
 }
+
+/* ── Heat-map density legend ─────────────────────────────────────────────── */
+.cal-legend {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  justify-content: flex-end;
+  margin-top: 14px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.cal-legend-swatches {
+  display: flex;
+  gap: 2px;
+}
+.cal-legend-swatch {
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+}
