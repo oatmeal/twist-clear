@@ -171,7 +171,7 @@ function renderFooter(): void {
   if (footer) footer.innerHTML = html;
 }
 
-async function updateGameFilter(): Promise<void> {
+async function updateGameFilter(liveGameCounts: Map<string, number>): Promise<void> {
   let rows: Awaited<ReturnType<typeof q>>;
 
   if (state.useMeta && state.calDateFrom === null && state.calDateTo === null) {
@@ -217,9 +217,11 @@ async function updateGameFilter(): Promise<void> {
   const showCounts = !state.searchQuery;
   for (const row of rows) {
     const opt = document.createElement('option');
-    opt.value = String(row['id']);
+    const id = String(row['id']);
+    opt.value = id;
     const displayName = (lang === 'ja' && row['name_ja']) ? String(row['name_ja']) : String(row['name']);
-    opt.textContent = showCounts ? `${displayName} (${Number(row['cnt']).toLocaleString()})` : displayName;
+    const totalCnt = Number(row['cnt']) + (liveGameCounts.get(id) ?? 0);
+    opt.textContent = showCounts ? `${displayName} (${totalCnt.toLocaleString()})` : displayName;
     sel.appendChild(opt);
   }
 
@@ -689,7 +691,26 @@ export async function render(): Promise<void> {
     }
     if (ctrl.signal.aborted) return;
 
-    await updateGameFilter();
+    // Compute per-game live clip counts (date-filtered, no game/search filter)
+    // to add to the game dropdown counts alongside the DB totals.
+    const liveGameCounts = new Map<string, number>();
+    if (state.liveClips.length > 0 && !state.searchQuery) {
+      const dateLive = filterLiveClips({
+        clips:        state.liveClips,
+        dbCutoffDate: _dbCutoffDate,
+        calDateFrom:  state.calDateFrom,
+        calDateTo:    state.calDateTo,
+        gameFilter:   '',
+        searchQuery:  '',
+        tzOffset:     state.tzOffset,
+      });
+      for (const c of dateLive) {
+        const id = c.game_id ?? '';
+        if (id) liveGameCounts.set(id, (liveGameCounts.get(id) ?? 0) + 1);
+      }
+    }
+
+    await updateGameFilter(liveGameCounts);
     if (ctrl.signal.aborted) return;
 
     const { where, params } = buildWhere({
