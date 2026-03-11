@@ -131,7 +131,7 @@ def _fetch_twitch_ja_name(session: requests.Session, en_name: str) -> str | None
         if not resp.ok:
             return None  # 4xx (e.g. slug not found) — no point retrying
 
-        resp.encoding = 'utf-8'  # Twitch omits charset in Content-Type; requests
+        resp.encoding = "utf-8"  # Twitch omits charset in Content-Type; requests
         # defaults to ISO-8859-1 for text/html per RFC 2616, causing mojibake.
         m = _TITLE_RE.search(resp.text)
         if not m:

@@ -40,10 +40,10 @@ class TestFetchTwitchJaName:
     can pass a MagicMock directly — no patching of global state needed.
     """
 
-    def _response(self, html: str = '', status_code: int = 200) -> MagicMock:
+    def _response(self, html: str = "", status_code: int = 200) -> MagicMock:
         resp = MagicMock()
         resp.status_code = status_code
-        resp.ok = (200 <= status_code < 300)
+        resp.ok = 200 <= status_code < 300
         resp.text = html
         return resp
 
@@ -73,7 +73,7 @@ class TestFetchTwitchJaName:
         session = self._session("<html><head><title>Twitch</title></head></html>")
         assert _fetch_twitch_ja_name(session, "Something") is None
 
-    @patch('lib.igdb.time.sleep')
+    @patch("lib.igdb.time.sleep")
     def test_returns_none_after_all_retries_exhausted(self, mock_sleep):
         # All four attempts (1 initial + 3 retries) fail → return None.
         session = MagicMock()
@@ -98,7 +98,7 @@ class TestFetchTwitchJaName:
         assert "lang=ja" in url
         assert "just-chatting" in url
 
-    @patch('lib.igdb.time.sleep')
+    @patch("lib.igdb.time.sleep")
     def test_retries_on_request_exception_then_succeeds(self, mock_sleep):
         # First attempt raises a network error; second succeeds.
         session = MagicMock()
@@ -110,7 +110,7 @@ class TestFetchTwitchJaName:
         assert session.get.call_count == 2
         mock_sleep.assert_called_once()
 
-    @patch('lib.igdb.time.sleep')
+    @patch("lib.igdb.time.sleep")
     def test_retries_on_429_then_succeeds(self, mock_sleep):
         # First attempt gets rate-limited; second succeeds.
         session = MagicMock()
@@ -122,7 +122,7 @@ class TestFetchTwitchJaName:
         assert session.get.call_count == 2
         mock_sleep.assert_called_once()
 
-    @patch('lib.igdb.time.sleep')
+    @patch("lib.igdb.time.sleep")
     def test_retries_on_500_then_succeeds(self, mock_sleep):
         # First attempt hits a server error; second succeeds.
         session = MagicMock()
@@ -161,8 +161,8 @@ class TestFetchTwitchJaName:
         html = '<meta property="og:title" content="雑談 - Twitch"/>'
         resp = req_module.models.Response()
         resp.status_code = 200
-        resp.headers['Content-Type'] = 'text/html'  # no charset → ISO-8859-1 default
-        resp._content = html.encode('utf-8')
+        resp.headers["Content-Type"] = "text/html"  # no charset → ISO-8859-1 default
+        resp._content = html.encode("utf-8")
 
         session = MagicMock()
         session.get.return_value = resp

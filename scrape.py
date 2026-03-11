@@ -21,10 +21,10 @@ except ImportError:
 from lib.api import TwitchAPI
 from lib.db import (
     get_all_games,
-    get_unenriched_games,
     get_known_game_ids,
     get_streamer,
     get_streamers,
+    get_unenriched_games,
     init_db,
     mark_full_history_fetched,
     reset_fetch_state,
