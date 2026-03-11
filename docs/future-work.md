@@ -8,7 +8,6 @@ Deferred items with rationale. See the relevant source files for implementation 
 
 Fixes:
 - date inputs require both to be set? Maybe make a little more obvious with an explicit "set" button or more feedback?
-- Browse clears time filter; but it's not that obvious yet
 
 
 Other stuff required before release:
@@ -16,6 +15,23 @@ Other stuff required before release:
 
 Later:
 - template repo: fork + change settings to deploy an archive for a streamer
+
+---
+
+## Calendar: navigation-only level changes without updating the filter
+
+Clicking a year/month/day/week in the calendar always applies the corresponding
+date filter ("click = select" semantics). It would be nice to also be able to
+navigate *into* or *out of* a level without changing the active filter — e.g.
+drilling into a month's heat-map to explore clip density before committing to a
+new selection.
+
+Possible approaches: a modifier key (e.g. Shift+click) that navigates without
+selecting; or a dedicated "expand" affordance within the calendar panel.
+Breadcrumb clicks already update the filter when navigating back up; they could
+also have a navigation-only mode.
+
+Deferred because click = select is simple and covers most use cases.
 
 ---
 

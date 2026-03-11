@@ -8,8 +8,8 @@ export interface Translations {
   sortNewest: string;
   sortOldest: string;
   allGames: string;
-  viewGrid: string;
   viewCalendar: string;
+  clearDates: string;
   dateFrom: string;
   dateTo: string;
   // Loading / empty / error
@@ -68,8 +68,8 @@ const en: Translations = {
   sortNewest: 'Newest First',
   sortOldest: 'Oldest First',
   allGames: 'All Games',
-  viewGrid: 'Browse',
   viewCalendar: 'Calendar',
+  clearDates: 'Clear dates',
   dateFrom: 'From date',
   dateTo: 'To date (inclusive)',
   loading: 'Loading clips database…',
@@ -130,8 +130,8 @@ const ja: Translations = {
   sortNewest: '新しい順',
   sortOldest: '古い順',
   allGames: 'すべてのゲーム',
-  viewGrid: '一覧',
   viewCalendar: 'カレンダー',
+  clearDates: '日付フィルターをクリア',
   dateFrom: '開始日',
   dateTo: '終了日（当日含む）',
   loading: 'クリップデータベースを読み込み中…',

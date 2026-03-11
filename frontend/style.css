@@ -271,6 +271,18 @@ select:focus { border-color: var(--accent); }
 }
 .date-range-filter input[type="date"]:focus { border-color: var(--accent); }
 .date-range-sep { color: var(--muted); font-size: 13px; }
+.clear-dates-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 6px;
+  transition: border-color 0.12s, color 0.12s;
+}
+.clear-dates-btn:hover { border-color: var(--accent); color: var(--text); }
 
 /* ── View switcher ── */
 .view-switcher { display: flex; gap: 4px; }

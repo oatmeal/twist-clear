@@ -653,24 +653,78 @@ function selectWeek(weekMonStr: string): void {
 
 // ── View switching ────────────────────────────────────────────────────────
 
+/**
+ * Derive a sensible calendar navigation position from the current date filter:
+ * - No filter → year view for the most-recent year with data
+ * - Filter span ≤ 62 days → month view for the start month of the range
+ * - Filter span > 62 days → year view for the midpoint year
+ *
+ * Called when the user opens the calendar panel so it lands somewhere relevant.
+ * Resets calDay / calWeek because they were associated with the previous
+ * navigation session, not the current filter.
+ */
+function deriveNavigationPosition(): void {
+  const from = state.calDateFrom;
+  const to   = state.calDateTo; // exclusive upper bound
+
+  if (!from || !to) {
+    // No filter: navigate to the most recent year with data.
+    const maxY = state.calMaxDate
+      ? parseInt(state.calMaxDate.slice(0, 4), 10)
+      : new Date().getFullYear();
+    state.setCalYear(maxY);
+    state.setCalMonth(null);
+    state.setCalDay(null);
+    state.setCalWeek(null);
+    return;
+  }
+
+  // Use Date.UTC to compute span in days — avoids DST-related surprises.
+  const f = Date.UTC(
+    parseInt(from.slice(0, 4), 10),
+    parseInt(from.slice(5, 7), 10) - 1,
+    parseInt(from.slice(8, 10), 10),
+  );
+  const t = Date.UTC(
+    parseInt(to.slice(0, 4), 10),
+    parseInt(to.slice(5, 7), 10) - 1,
+    parseInt(to.slice(8, 10), 10),
+  );
+  const span = Math.round((t - f) / 86400000);
+
+  const fromYear  = parseInt(from.slice(0, 4), 10);
+  const fromMonth = parseInt(from.slice(5, 7), 10) - 1; // 0-based
+
+  if (span <= 62) {
+    // ≤ 2 months: month view for the start of the range.
+    state.setCalYear(fromYear);
+    state.setCalMonth(fromMonth);
+    state.setCalDay(null);
+    state.setCalWeek(null);
+  } else {
+    // > 2 months: year view for the midpoint year.
+    const midYear = new Date((f + t) / 2).getUTCFullYear();
+    state.setCalYear(midYear);
+    state.setCalMonth(null);
+    state.setCalDay(null);
+    state.setCalWeek(null);
+  }
+}
+
 export function switchView(view: 'grid' | 'calendar'): void {
   state.setCurrentView(view);
 
-  const gridBtn  = document.getElementById('btn-view-grid')!;
   const calBtn   = document.getElementById('btn-view-cal')!;
   const calPanel = document.getElementById('calendar-panel')!;
 
   if (view === 'grid') {
-    gridBtn.classList.add('active');
     calBtn.classList.remove('active');
     calPanel.style.display = 'none';
-    clearCalDateFilter();
     state.setCurrentPage(1);
     callRender();
   } else {
     calBtn.classList.add('active');
-    gridBtn.classList.remove('active');
-    setYearFilter(state.calYear);
+    deriveNavigationPosition();
     void renderCalendar();
     state.setCurrentPage(1);
     callRender();
@@ -686,7 +740,6 @@ function prevYear(): void {
   state.setCalMonth(null);
   state.setCalDay(null);
   state.setCalWeek(null);
-  setYearFilter(state.calYear);
   void renderCalendar();
   state.setCurrentPage(1);
   callRender();
@@ -699,7 +752,6 @@ function nextYear(): void {
   state.setCalMonth(null);
   state.setCalDay(null);
   state.setCalWeek(null);
-  setYearFilter(state.calYear);
   void renderCalendar();
   state.setCurrentPage(1);
   callRender();
@@ -712,7 +764,6 @@ function prevMonth(): void {
   else                       { state.setCalMonth(state.calMonth! - 1); }
   state.setCalDay(null);
   state.setCalWeek(null);
-  setMonthFilter(state.calYear, state.calMonth!);
   void renderCalendar();
   state.setCurrentPage(1);
   callRender();
@@ -725,7 +776,6 @@ function nextMonth(): void {
   else                        { state.setCalMonth(state.calMonth! + 1); }
   state.setCalDay(null);
   state.setCalWeek(null);
-  setMonthFilter(state.calYear, state.calMonth!);
   void renderCalendar();
   state.setCurrentPage(1);
   callRender();
@@ -875,7 +925,6 @@ export async function initCalendar(onRender: () => Promise<void>): Promise<void>
     state.setCalMonth(null);
     state.setCalDay(null);
     state.setCalWeek(null);
-    setYearFilter(state.calYear);
     void renderCalendar();
     state.setCurrentPage(1);
     callRender();
@@ -892,7 +941,6 @@ export async function initCalendar(onRender: () => Promise<void>): Promise<void>
     state.setCalMonth(parseInt(mSel.value, 10));
     state.setCalDay(null);
     state.setCalWeek(null);
-    setMonthFilter(state.calYear, state.calMonth!);
     void renderCalendar();
     state.setCurrentPage(1);
     callRender();
@@ -913,7 +961,7 @@ export async function initCalendar(onRender: () => Promise<void>): Promise<void>
     const toVal = (document.getElementById('date-to-input') as HTMLInputElement).value;
     state.setCalDateTo(toVal ? addDays(toVal, 1) : null);
     state.setCurrentPage(1);
-    void renderCalendar();
+    if (state.currentView === 'calendar') void renderCalendar();
     callRender();
   });
 
@@ -924,12 +972,20 @@ export async function initCalendar(onRender: () => Promise<void>): Promise<void>
     state.setCalDay(null);
     state.setCalWeek(null);
     state.setCurrentPage(1);
-    void renderCalendar();
+    if (state.currentView === 'calendar') void renderCalendar();
     callRender();
   });
 
-  document.getElementById('btn-view-grid')!.addEventListener('click', () => switchView('grid'));
-  document.getElementById('btn-view-cal')!.addEventListener('click', () => switchView('calendar'));
+  document.getElementById('btn-view-cal')!.addEventListener('click', () => {
+    switchView(state.currentView === 'calendar' ? 'grid' : 'calendar');
+  });
+
+  document.getElementById('btn-clear-dates')!.addEventListener('click', () => {
+    clearCalDateFilter();
+    state.setCurrentPage(1);
+    callRender();
+    if (state.currentView === 'calendar') void renderCalendar();
+  });
 
   document.getElementById('cal-prev-year')!.addEventListener('click', prevYear);
   document.getElementById('cal-next-year')!.addEventListener('click', nextYear);

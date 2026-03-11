@@ -79,11 +79,9 @@ function applyStateHash(hashStr: string): void {
   if (isCalendar) {
     state.setCurrentView('calendar');
     document.getElementById('btn-view-cal')!.classList.add('active');
-    document.getElementById('btn-view-grid')!.classList.remove('active');
     void renderCalendar();
   } else {
     state.setCurrentView('grid');
-    document.getElementById('btn-view-grid')!.classList.add('active');
     document.getElementById('btn-view-cal')!.classList.remove('active');
     document.getElementById('calendar-panel')!.style.display = 'none';
   }
@@ -767,8 +765,8 @@ function applyTranslations(): void {
   (document.getElementById('date-to-input')   as HTMLInputElement).title = tr.dateTo;
   (document.getElementById('date-to-input')   as HTMLInputElement).lang  = lang;
 
-  (document.getElementById('btn-view-grid') as HTMLButtonElement).textContent = tr.viewGrid;
-  (document.getElementById('btn-view-cal')  as HTMLButtonElement).textContent = tr.viewCalendar;
+  (document.getElementById('btn-view-cal')       as HTMLButtonElement).textContent    = tr.viewCalendar;
+  (document.getElementById('btn-clear-dates')    as HTMLButtonElement).setAttribute('aria-label', tr.clearDates);
 
   const loadingText = document.getElementById('loading-text');
   if (loadingText) loadingText.textContent = tr.loading;
@@ -1146,7 +1144,6 @@ export async function init(): Promise<void> {
         (document.getElementById('search') as HTMLInputElement).value       = '';
         (document.getElementById('sort') as HTMLSelectElement).value        = 'date_desc';
         (document.getElementById('game-filter') as HTMLSelectElement).value = '';
-        document.getElementById('btn-view-grid')!.classList.add('active');
         document.getElementById('btn-view-cal')!.classList.remove('active');
         document.getElementById('calendar-panel')!.style.display = 'none';
         void render();
