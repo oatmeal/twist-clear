@@ -133,6 +133,15 @@ header .streamer-tag {
   font-variant-numeric: tabular-nums;
   min-width: 54px;
   text-align: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+/* Small dropdown caret makes the timezone button read as a disclosure control */
+#btn-settings::after {
+  content: '▾';
+  font-size: 14px;
+  opacity: 0.6;
 }
 
 .lang-toggle {
