@@ -59,7 +59,12 @@ _TWITCH_UA = (
 _TITLE_RE = re.compile(r'(?:og:title"|name="title") content="([^"]*?) - Twitch"')
 
 # Polite delay between consecutive Twitch web requests (seconds).
-_TWITCH_DELAY = 0.5
+_TWITCH_DELAY = 1.0
+
+# Delays (seconds) before each retry attempt after the initial request fails.
+# Applied on: network errors, HTTP 429 (rate-limited), HTTP 5xx (server error).
+# Non-retriable failures (HTTP 4xx other than 429) return None immediately.
+_RETRY_DELAYS = (2.0, 5.0, 10.0)
 
 
 def _name_to_slug(name: str) -> str:
@@ -91,28 +96,45 @@ def _fetch_twitch_ja_name(session: requests.Session, en_name: str) -> str | None
     Returns ``None`` if:
 
     * the slug cannot be derived (empty result),
-    * the HTTP request fails,
+    * the request fails on all attempts,
     * no title meta tag is found (slug does not match any Twitch category), or
     * Twitch echoes the English name back (meaning no Japanese localisation).
+
+    Retries up to ``len(_RETRY_DELAYS)`` times (with the configured back-off
+    delays) on network errors, HTTP 429 (rate-limited), and HTTP 5xx (server
+    error).  Non-retriable HTTP errors (4xx other than 429) return ``None``
+    immediately.
     """
     slug = _name_to_slug(en_name)
     if not slug:
         return None
-    try:
-        resp = session.get(
-            _TWITCH_CAT_URL.format(slug=slug),
-            headers={"User-Agent": _TWITCH_UA},
-            timeout=10,
-        )
-        resp.raise_for_status()
-    except requests.RequestException:
-        return None
-    m = _TITLE_RE.search(resp.text)
-    if not m:
-        return None
-    ja_name = m.group(1).strip()
-    # If Twitch just echoes the English name, there is no Japanese localisation.
-    return None if ja_name == en_name else ja_name
+
+    url = _TWITCH_CAT_URL.format(slug=slug)
+
+    for delay in (0.0, *_RETRY_DELAYS):
+        if delay:
+            time.sleep(delay)
+        try:
+            resp = session.get(url, headers={"User-Agent": _TWITCH_UA}, timeout=10)
+        except requests.RequestException:
+            continue  # network error — retry
+
+        if resp.status_code == 429 or resp.status_code >= 500:
+            continue  # rate-limited or server error — retry
+
+        if not resp.ok:
+            return None  # 4xx (e.g. slug not found) — no point retrying
+
+        resp.encoding = 'utf-8'  # Twitch omits charset in Content-Type; requests
+        # defaults to ISO-8859-1 for text/html per RFC 2616, causing mojibake.
+        m = _TITLE_RE.search(resp.text)
+        if not m:
+            return None
+        ja_name = m.group(1).strip()
+        # If Twitch just echoes the English name, there is no Japanese localisation.
+        return None if ja_name == en_name else ja_name
+
+    return None  # all attempts exhausted
 
 
 # ---------------------------------------------------------------------------

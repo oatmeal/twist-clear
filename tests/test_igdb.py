@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import requests
 
@@ -40,12 +40,16 @@ class TestFetchTwitchJaName:
     can pass a MagicMock directly — no patching of global state needed.
     """
 
+    def _response(self, html: str = '', status_code: int = 200) -> MagicMock:
+        resp = MagicMock()
+        resp.status_code = status_code
+        resp.ok = (200 <= status_code < 300)
+        resp.text = html
+        return resp
+
     def _session(self, html: str) -> MagicMock:
         session = MagicMock()
-        resp = MagicMock()
-        resp.text = html
-        resp.raise_for_status = MagicMock()
-        session.get.return_value = resp
+        session.get.return_value = self._response(html)
         return session
 
     def test_parses_og_title(self):
@@ -69,10 +73,14 @@ class TestFetchTwitchJaName:
         session = self._session("<html><head><title>Twitch</title></head></html>")
         assert _fetch_twitch_ja_name(session, "Something") is None
 
-    def test_returns_none_on_request_error(self):
+    @patch('lib.igdb.time.sleep')
+    def test_returns_none_after_all_retries_exhausted(self, mock_sleep):
+        # All four attempts (1 initial + 3 retries) fail → return None.
         session = MagicMock()
         session.get.side_effect = requests.RequestException("network error")
         assert _fetch_twitch_ja_name(session, "Just Chatting") is None
+        assert session.get.call_count == 4
+        assert mock_sleep.call_count == 3
 
     def test_title_containing_dash_parsed_correctly(self):
         # Japanese title that itself contains spaces (no inner " - ") still
@@ -89,3 +97,68 @@ class TestFetchTwitchJaName:
         url = session.get.call_args[0][0]
         assert "lang=ja" in url
         assert "just-chatting" in url
+
+    @patch('lib.igdb.time.sleep')
+    def test_retries_on_request_exception_then_succeeds(self, mock_sleep):
+        # First attempt raises a network error; second succeeds.
+        session = MagicMock()
+        session.get.side_effect = [
+            requests.RequestException("network error"),
+            self._response('<meta property="og:title" content="雑談 - Twitch"/>'),
+        ]
+        assert _fetch_twitch_ja_name(session, "Just Chatting") == "雑談"
+        assert session.get.call_count == 2
+        mock_sleep.assert_called_once()
+
+    @patch('lib.igdb.time.sleep')
+    def test_retries_on_429_then_succeeds(self, mock_sleep):
+        # First attempt gets rate-limited; second succeeds.
+        session = MagicMock()
+        session.get.side_effect = [
+            self._response(status_code=429),
+            self._response('<meta property="og:title" content="雑談 - Twitch"/>'),
+        ]
+        assert _fetch_twitch_ja_name(session, "Just Chatting") == "雑談"
+        assert session.get.call_count == 2
+        mock_sleep.assert_called_once()
+
+    @patch('lib.igdb.time.sleep')
+    def test_retries_on_500_then_succeeds(self, mock_sleep):
+        # First attempt hits a server error; second succeeds.
+        session = MagicMock()
+        session.get.side_effect = [
+            self._response(status_code=500),
+            self._response('<meta property="og:title" content="雑談 - Twitch"/>'),
+        ]
+        assert _fetch_twitch_ja_name(session, "Just Chatting") == "雑談"
+        assert session.get.call_count == 2
+        mock_sleep.assert_called_once()
+
+    def test_returns_none_immediately_on_404(self):
+        # 404 means the slug doesn't exist — no point retrying.
+        session = MagicMock()
+        session.get.return_value = self._response(status_code=404)
+        assert _fetch_twitch_ja_name(session, "Unknown Game") is None
+        assert session.get.call_count == 1
+
+    def test_utf8_decoding_forced_regardless_of_content_type(self):
+        """requests defaults to ISO-8859-1 for text/html when no charset is present
+        in the Content-Type header, turning UTF-8 Japanese into mojibake.
+        _fetch_twitch_ja_name must force UTF-8 decoding explicitly.
+
+        "雑談" in UTF-8: E9 9B 93 E8 AB 87.  Decoded as Latin-1 those bytes produce
+        visible characters é, è, « with the non-printable bytes dropped — exactly
+        the corrupt "éè«" observed in the deployed version.
+        """
+        import requests as req_module
+
+        html = '<meta property="og:title" content="雑談 - Twitch"/>'
+        resp = req_module.models.Response()
+        resp.status_code = 200
+        resp.headers['Content-Type'] = 'text/html'  # no charset → ISO-8859-1 default
+        resp._content = html.encode('utf-8')
+
+        session = MagicMock()
+        session.get.return_value = resp
+
+        assert _fetch_twitch_ja_name(session, "Just Chatting") == "雑談"
