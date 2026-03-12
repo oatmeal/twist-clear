@@ -497,7 +497,7 @@ select:focus { border-color: var(--accent); }
 .clip-col-title { width: 100%; }
 /* Separate detail columns (wide screens): wrap rather than truncate; title absorbs the slack. */
 .clip-col-game    { max-width: 180px; min-width: 130px; word-break: keep-all; }
-.clip-col-creator { max-width: 160px; color: var(--muted); }
+.clip-col-creator { max-width: 160px; min-width: 130px; word-break: keep-all; color: var(--muted); }
 .clip-col-date    { color: var(--muted); white-space: nowrap; }
 /* Combined meta column (narrow screens): hidden by default, shown via media query.
    white-space: normal overrides the global th rule so the header can wrap. */
