@@ -41,6 +41,11 @@ export function serializeHash(s: HashState): string {
   return p.toString();
 }
 
+// Serialize app state except for searchQuery.
+export function serializeHashExecptSearchQuery(s: HashState): string {
+  return serializeHash({ ...s, searchQuery: '' });
+}
+
 // Parse a hash string into a partial state. Returns only fields that were
 // present in the hash; callers apply defaults for missing fields.
 export function deserializeHash(hashStr: string): Partial<HashState> {

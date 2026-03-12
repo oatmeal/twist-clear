@@ -3,7 +3,7 @@ import { initDb, q, DB_URL } from './db';
 import { escHtml, fmtDuration, fmtViews, fmtDateTime, fmtDate, fmtTime } from './lib/format';
 import { buildWhere, ORDER } from './lib/query';
 import type { SortKey } from './lib/query';
-import { serializeHash, deserializeHash } from './lib/hash';
+import { serializeHash, serializeHashExecptSearchQuery, deserializeHash, HashState } from './lib/hash';
 import { t, lang, setLang, detectLang } from './lib/i18n';
 import type { Lang } from './lib/i18n';
 import {
@@ -28,8 +28,8 @@ import type { ViewCountSortKey } from './lib/liveRank';
 
 // ── URL hash state ────────────────────────────────────────────────────────
 
-function pushHash(): void {
-  const s = serializeHash({
+function getStateForHash(): HashState {
+  return {
     currentView: state.currentView,
     clipLayout: state.clipLayout,
     searchQuery: state.searchQuery,
@@ -43,8 +43,31 @@ function pushHash(): void {
     calDay: state.calDay,
     calWeek: state.calWeek,
     tzOffset: state.tzOffset,
-  });
-  history.replaceState(null, '', s ? '#' + s : location.pathname + location.search);
+  };
+}
+
+function pushHash(): void {
+  const newState = getStateForHash();
+  const newHash = serializeHash(newState);
+
+  // return if URL is already what we want
+  if (location.hash === '#' + newHash) return;
+
+  // cancel any pending search updates
+  clearTimeout(state.debounceTimer);
+
+  const structuralHash = serializeHashExecptSearchQuery(newState);
+
+  if (structuralHash === state.lastStructuralHash) {
+    history.replaceState(null, '', newHash ? '#' + newHash : location.pathname + location.search);
+    state.setDebounceTimer(setTimeout(() => {
+      if (location.hash !== '#' + newHash)
+        history.pushState(null, '', newHash ? '#' + newHash : location.pathname + location.search);
+    }, 1000));
+  } else {
+    history.pushState(null, '', newHash ? '#' + newHash : location.pathname + location.search);
+    state.setLastStructuralHash(structuralHash);
+  }
 }
 
 function applyStateHash(hashStr: string): void {
@@ -1550,13 +1573,16 @@ export async function init(): Promise<void> {
 
     if (location.hash && location.hash.length > 1) {
       applyStateHash(location.hash);
+      // initialize structuralHash
+      state.setLastStructuralHash(serializeHashExecptSearchQuery(getStateForHash()));
     } else {
       void render();
     }
 
-    window.addEventListener('hashchange', () => {
+    window.addEventListener('popstate', () => {
       if (location.hash && location.hash.length > 1) {
         applyStateHash(location.hash);
+        state.setLastStructuralHash(serializeHashExecptSearchQuery(getStateForHash()));
       } else {
         // Empty hash → reset to default state
         state.setSearchQuery('');
@@ -1572,8 +1598,10 @@ export async function init(): Promise<void> {
         (document.getElementById('game-filter') as HTMLSelectElement).value = '';
         document.getElementById('btn-view-cal')!.classList.remove('active');
         document.getElementById('calendar-panel')!.style.display = 'none';
+        state.setLastStructuralHash(serializeHashExecptSearchQuery(getStateForHash()));
         void render();
       }
+      syncAuthUI();
     });
   } catch (err) {
     document.getElementById('loading')!.style.display = 'none';

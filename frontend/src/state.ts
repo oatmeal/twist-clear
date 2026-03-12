@@ -1,6 +1,7 @@
 import type { SortKey } from './lib/query';
 import type { LiveClip } from './twitch';
 import { browserTzOffset } from './lib/dateUtils';
+import { HashState } from './lib/hash';
 
 export const PAGE_SIZE = 24;
 
@@ -13,6 +14,8 @@ export let sortBy: SortKey = 'date_desc';
 export let gameFilter: string = '';
 export let currentView: 'grid' | 'calendar' = 'grid';
 export let clipLayout: 'grid' | 'list' = 'grid';
+export let debounceTimer: ReturnType<typeof setTimeout>;
+export let lastStructuralHash: string = '';
 
 // ── Calendar navigation state ─────────────────────────────────────────────
 
@@ -61,6 +64,8 @@ export function setCalMinDate(v: string | null): void { calMinDate = v; }
 export function setCalMaxDate(v: string | null): void { calMaxDate = v; }
 export function setUseFts(v: boolean): void { useFts = v; }
 export function setUseMeta(v: boolean): void { useMeta = v; }
+export function setDebounceTimer(v: ReturnType<typeof setTimeout>): void { debounceTimer = v; }
+export function setLastStructuralHash(v: string): void { lastStructuralHash = v; }
 
 // ── Live clips (fetched from Twitch API at runtime) ────────────────────────
 

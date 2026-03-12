@@ -11,10 +11,10 @@ Deferred items with rationale. See the relevant source files for implementation 
 
 ## history API
 
-Currently the frontend only uses `history.replaceState()`. This may be because the
-`pushHash()` function is called by `render()` so if we put `pushState()` there
-a lot of unnecessary entries might pile up (?). If we want to use `pushState()`
-we'll need to replace (?) the `hashchange` event handler with a `popstate` event handler.
+I implemented by hand some basic replaceState handling so back and forwards work.
+Some basic testing shows it works mostly except there may be some glitches around login / logout.
+The logic around typing and the search filter is especially tricky and is worth some
+careful review.
 
 ---
 

@@ -63,7 +63,8 @@ export function initiateLogin(): void {
     scope:         '',
     state:         oauthState,
   });
-  window.location.href = `https://id.twitch.tv/oauth2/authorize?${params}`;
+  // window.location.href = `https://id.twitch.tv/oauth2/authorize?${params}`;
+  window.location.replace(`https://id.twitch.tv/oauth2/authorize?${params}`);
 }
 
 /**
