@@ -5,7 +5,6 @@ Deferred items with rationale. See the relevant source files for implementation 
 ---
 
 ## Small issues
-- The time zone label shows UTC-XX which is not obviously related to timezones. Maybe just make this show "timezone" or the current time with a clock icon? The help should also mention choosing a timezone to make sure that the timestamps.
 - template repo: fork + change settings to deploy an archive for a streamer
 
 ---

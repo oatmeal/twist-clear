@@ -282,12 +282,12 @@ is preserved as-is, so searches for titles containing `－` work correctly.
 Each bare term is wrapped in FTS5 double-quotes to neutralize any special
 characters in the term text. A `?` / Help button in `#header-controls` opens
 a general "How to use" modal (`#search-help-modal`, `id="btn-help"`) covering
-browsing, layout, sort, game filter, search syntax (translated EN/JA), date
-filtering, login, and URL sharing.
+browsing, timezone, layout, sort, game filter, search syntax (translated EN/JA),
+date filtering, login, and URL sharing.
 
 **Keeping the help modal up to date**: The modal has one `<section
-class="help-section">` per major feature, in the order: browsing → layout →
-sort → game → search → date → login → share. When a feature is added,
+class="help-section">` per major feature, in the order: browsing → timezone →
+layout → sort → game → search → date → login → share. When a feature is added,
 removed, or its behaviour changes in a user-visible way:
 
 1. Update (or add/remove) the relevant `<section>` in `index.html`.

@@ -1098,6 +1098,11 @@ function applyTranslations(): void {
   if (helpBrowseH) helpBrowseH.textContent = tr.helpBrowse;
   const helpBrowseD = document.getElementById('help-browse-desc');
   if (helpBrowseD) helpBrowseD.textContent = tr.helpBrowseDesc;
+  // Timezone section
+  const helpTzH = document.getElementById('help-tz-heading');
+  if (helpTzH) helpTzH.textContent = tr.helpTimezone;
+  const helpTzD = document.getElementById('help-tz-desc');
+  if (helpTzD) helpTzD.textContent = tr.helpTimezoneDesc;
   // Layout section
   const helpLayoutH = document.getElementById('help-layout-heading');
   if (helpLayoutH) helpLayoutH.textContent = tr.helpLayout;
@@ -1163,13 +1168,10 @@ function applyTranslations(): void {
 // ── Timezone label ────────────────────────────────────────────────────────
 
 function fmtTzOffset(off: number): string {
-  if (off === 0) return 'UTC';
   const absH = Math.floor(Math.abs(off) / 60);
   const absM = Math.abs(off) % 60;
-  const sign = off > 0 ? '+' : '−';
-  return absM === 0
-    ? `UTC${sign}${absH}`
-    : `UTC${sign}${absH}:${String(absM).padStart(2, '0')}`;
+  const sign = off < 0 ? '−' : '+';
+  return `UTC${sign}${absH}:${String(absM).padStart(2, '0')}`;
 }
 
 function updateTzLabel(): void {

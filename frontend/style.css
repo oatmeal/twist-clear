@@ -129,16 +129,22 @@ header .streamer-tag {
 }
 /* Spinning animation for the refresh button while fetching */
 .auth-btn.refreshing svg { animation: spin 0.8s linear infinite; }
-/* Help button: slightly wider than icon-only buttons so the ? is comfortably tappable */
+/* Help button: accent-coloured outline so it stands out as the primary discovery action */
 #btn-help {
   font-size: 14px;
   font-weight: 700;
   min-width: 32px;
   text-align: center;
+  color: var(--accent);
+  border-color: var(--accent);
 }
+#btn-help:hover {
+  background: var(--accent);
+  color: var(--bg);
+}
+/* Timezone button: clock icon + UTC offset label; natural width (tabular-nums keeps digits stable) */
 #btn-settings {
   font-variant-numeric: tabular-nums;
-  min-width: 54px;
   text-align: center;
   display: inline-flex;
   align-items: center;

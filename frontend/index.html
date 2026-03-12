@@ -46,16 +46,16 @@
       <button id="btn-refresh-live" class="auth-btn icon-btn" title="新着クリップ更新" aria-label="新着クリップ更新"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.07-3.3"/><polyline points="13.5 3.5 13.5 8 9 8"/></svg></button>
       <button id="btn-logout" class="auth-btn icon-btn" title="ログアウト" aria-label="ログアウト"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/><polyline points="10 5 13 8 10 11"/><line x1="13" y1="8" x2="6" y2="8"/></svg></button>
     </div>
+    <!-- Help button: opens the general how-to-use modal -->
+    <button id="btn-help" class="auth-btn" aria-label="ヘルプ" title="ヘルプ" aria-haspopup="dialog">?</button>
     <div class="settings-wrapper" id="tz-wrapper">
-      <button id="btn-settings" class="auth-btn" title="タイムゾーン" aria-label="タイムゾーン"><span id="tz-label">UTC</span></button>
+      <button id="btn-settings" class="auth-btn" title="タイムゾーン" aria-label="タイムゾーン"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6.5"/><polyline points="8 5 8 8 10.5 8"/></svg><span id="tz-label">UTC</span></button>
       <div id="settings-panel" class="settings-panel" hidden>
         <label><span id="tz-label-text">タイムゾーン</span>
           <select id="tz-select"></select>
         </label>
       </div>
     </div>
-    <!-- Help button: opens the general how-to-use modal -->
-    <button id="btn-help" class="auth-btn" aria-label="ヘルプ" title="ヘルプ" aria-haspopup="dialog">?</button>
     <button id="lang-toggle" class="lang-toggle" aria-label="Switch language"><span id="lang-opt-en" class="lang-opt">EN</span><span class="lang-divider" aria-hidden="true">/</span><span id="lang-opt-ja" class="lang-opt">JA</span></button>
   </div>
 </header>
@@ -173,7 +173,7 @@
 <footer id="site-footer"></footer>
 
 <!-- General help modal — "How to use" / "使い方"
-     Section order: browsing → layout → sort → game → search → date → login → share
+     Section order: browsing → timezone → layout → sort → game → search → date → login → share
      Keep section text in sync with src/lib/i18n.ts (helpBrowse / helpBrowseDesc etc.)
      and update both when features change. -->
 <dialog id="search-help-modal" aria-labelledby="search-help-modal-title">
@@ -185,6 +185,11 @@
   <section class="help-section">
     <h3 id="help-browse-heading">クリップを見る</h3>
     <p id="help-browse-desc">サムネイルをクリック（リスト表示では行をクリック）するとその場で再生できます。Escキーまたは外側をクリックで閉じます。</p>
+  </section>
+
+  <section class="help-section">
+    <h3 id="help-tz-heading">タイムゾーン</h3>
+    <p id="help-tz-desc">クリップの日時は選択中のタイムゾーンで表示されます。初期設定ではブラウザのタイムゾーンが自動的に適用されます。変更するには、右上の時計ボタンをクリックしてください。</p>
   </section>
 
   <section class="help-section">

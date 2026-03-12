@@ -62,6 +62,9 @@ export interface Translations {
   helpLogin: string;
   helpLoginDescWithDate: (date: string) => string;
   helpLoginDescNoDate: string;
+  // Help modal — timezone section (between browsing and layout)
+  helpTimezone: string;
+  helpTimezoneDesc: string;
   // Help modal — share section
   helpShare: string;
   helpShareDesc: string;
@@ -156,6 +159,8 @@ const en: Translations = {
   helpLogin: 'Logging in',
   helpLoginDescWithDate: (date) => `Clips up to ${date} are saved here. Log in with Twitch to also fetch newer clips live from Twitch.`,
   helpLoginDescNoDate: 'Clips up to a recent date are saved here. Log in with Twitch to also fetch newer clips live from Twitch.',
+  helpTimezone: 'Timezone',
+  helpTimezoneDesc: 'Clip dates and times are shown in your selected timezone, automatically set from your browser by default. Click the clock button in the top-right corner to change it.',
   helpShare: 'Sharing a view',
   helpShareDesc: 'Filters, sort order, and page are encoded in the URL — copy the address bar to share exactly what you see.',
   viewGrid: 'Grid view',
@@ -250,6 +255,8 @@ const ja: Translations = {
   helpLogin: 'ログイン',
   helpLoginDescWithDate: (date) => `${date}までのクリップが保存されています。Twitchでログインすると、それ以降の新着クリップも確認できます。`,
   helpLoginDescNoDate: 'このサイトには最近の日付までのクリップが保存されています。Twitchでログインすると、それ以降の新着クリップも確認できます。',
+  helpTimezone: 'タイムゾーン',
+  helpTimezoneDesc: 'クリップの日時は選択中のタイムゾーンで表示されます。初期設定ではブラウザのタイムゾーンが自動的に適用されます。変更するには、右上の時計ボタンをクリックしてください。',
   helpShare: 'URLで共有',
   helpShareDesc: 'フィルターや並び順などのページの状態はURLに反映されます。アドレスバーをコピーしてそのまま共有できます。',
   viewGrid: 'グリッド表示',
