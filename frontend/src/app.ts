@@ -669,28 +669,32 @@ function renderLiveSection(): void {
  * Must be called after _dbCutoffDate and _dbScrapeDate are set.
  */
 function syncAuthUI(): void {
-  const banner     = document.getElementById('login-banner')!;
-  const indicator  = document.getElementById('auth-indicator')!;
-  const usernameEl = document.getElementById('auth-username')!;
-  const bannerText = document.getElementById('banner-text')!;
+  const banner      = document.getElementById('login-banner')!;
+  const indicator   = document.getElementById('auth-indicator')!;
+  const headerLogin = document.getElementById('header-login')!;
+  const usernameEl  = document.getElementById('auth-username')!;
+  const bannerText  = document.getElementById('banner-text')!;
 
   if (!auth.hasClientId) {
     // No Client ID configured at build time — hide auth UI entirely.
-    banner.style.display    = 'none';
-    indicator.style.display = 'none';
+    banner.style.display      = 'none';
+    indicator.style.display   = 'none';
+    headerLogin.style.display = 'none';
     return;
   }
 
   if (auth.isLoggedIn()) {
-    banner.style.display    = 'none';
-    indicator.style.display = 'flex';
-    usernameEl.textContent  = state.twitchUsername ?? auth.getUsername() ?? '';
+    banner.style.display      = 'none';
+    indicator.style.display   = 'flex';
+    usernameEl.textContent    = state.twitchUsername ?? auth.getUsername() ?? '';
+    headerLogin.style.display = 'none';
   } else {
     indicator.style.display = 'none';
 
     const dismissed = localStorage.getItem('tc_banner_dismissed') === '1';
     if (dismissed) {
-      banner.style.display = 'none';
+      banner.style.display      = 'none';
+      headerLogin.style.display = 'flex';
     } else {
       const displayDate = _dbScrapeDate ?? _dbCutoffDate;
       const dateLabel = displayDate ? fmtDateTime(displayDate, lang, state.tzOffset) : '';
@@ -698,6 +702,7 @@ function syncAuthUI(): void {
         ? t().loginBannerWithDate(dateLabel)
         : t().loginBannerNoDate;
       banner.style.display = 'flex';
+      headerLogin.style.display = 'none';
     }
   }
 }
@@ -1062,6 +1067,8 @@ function applyTranslations(): void {
   // Auth / login
   const loginBtn = document.getElementById('btn-login');
   if (loginBtn) loginBtn.textContent = tr.loginBtn;
+  const headerLoginBtn = document.getElementById('header-btn-login');
+  if (headerLoginBtn) headerLoginBtn.textContent = tr.loginBtn;
   const logoutBtn = document.getElementById('btn-logout');
   if (logoutBtn) { logoutBtn.title = tr.logoutBtn; logoutBtn.setAttribute('aria-label', tr.logoutBtn); }
   const refreshBtnEl = document.getElementById('btn-refresh-live') as HTMLButtonElement | null;
@@ -1335,6 +1342,10 @@ function bindEvents(): void {
     void auth.initiateLogin();
   });
 
+  document.getElementById('header-btn-login')?.addEventListener('click', () => {
+    void auth.initiateLogin();
+  });
+
   document.getElementById('btn-refresh-live')?.addEventListener('click', () => {
     void fetchLiveClips();
   });
@@ -1349,6 +1360,7 @@ function bindEvents(): void {
   document.getElementById('btn-dismiss-banner')?.addEventListener('click', () => {
     localStorage.setItem('tc_banner_dismissed', '1');
     document.getElementById('login-banner')!.style.display = 'none';
+    document.getElementById('header-login')!.style.display = 'flex';
   });
 
   document.getElementById('btn-live-toggle')?.addEventListener('click', () => {
