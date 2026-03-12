@@ -9,6 +9,15 @@ Deferred items with rationale. See the relevant source files for implementation 
 
 ---
 
+## history API
+
+Currently the frontend only uses `history.replaceState()`. This may be because the
+`pushHash()` function is called by `render()` so if we put `pushState()` there
+a lot of unnecessary entries might pile up (?). If we want to use `pushState()`
+we'll need to replace (?) the `hashchange` event handler with a `popstate` event handler.
+
+---
+
 ## Calendar: navigation-only level changes without updating the filter
 
 Clicking a year/month/day/week in the calendar always applies the corresponding
