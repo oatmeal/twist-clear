@@ -258,6 +258,11 @@ jobs:
       - name: Prepare database
         run: npm --prefix frontend run prepare-db
 
+      - name: Generate Shared Timestamp
+        run: |
+          # Save timestamp as GitHub Actions environment variable
+          echo "VITE_TIMESTAMP=$(date +%s)" | tee -a $GITHUB_ENV
+
       - name: Build frontend
         run: npm --prefix frontend run build
         env:

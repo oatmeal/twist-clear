@@ -116,6 +116,13 @@ function dbRangePlugin(): Plugin {
     process.env['VITE_SITE_DESCRIPTION'] = m?.[1] ?? '';
   }
 
+  // timestamp — used in query parameter to og:image URL.
+  // Not configurable via config.toml
+  // Defaults to empty string so the query parameter is empty when unconfigured.
+  if (!process.env['VITE_TIMESTAMP']) {
+    process.env['VITE_TIMESTAMP'] = '';
+  }
+
   // og_description — text for the og:description meta tag.
   if (!process.env['VITE_OG_DESCRIPTION']) {
     const m = /og_description\s*=\s*"([^"]+)"/.exec(toml);

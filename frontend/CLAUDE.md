@@ -142,10 +142,12 @@ viewport screenshot.
 patches `configurePreviewServer` to handle HTTP Range requests for the DB file.
 Without it, sql.js-httpvfs would download the entire DB on every query.
 
-The `og:image` URL in `index.html` is `%VITE_SITE_URL%og-image.png` — a fixed
-path that requires no post-build HTML surgery. When `VITE_SITE_URL` is empty
+The `og:image` URL in `index.html` is `%VITE_SITE_URL%og-image.png?v=%VITE_TIMESTAMP` —
+a fixed path that requires no post-build HTML surgery. When `VITE_SITE_URL` is empty
 (local dev without the env var set) the tag resolves to a relative path, which
 crawlers won't follow, but that's fine since og:image only matters in production.
+`VITE_TIMESTAMP` is an env var set to the unix timestamp in production, this is used
+to ensure that e.g. Discord will always fetch the latest image.
 
 ### Site description (`VITE_SITE_DESCRIPTION`)
 
