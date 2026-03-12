@@ -1150,14 +1150,7 @@ function applyTranslations(): void {
   // Login section — use the precise archive date when available
   const helpLoginH = document.getElementById('help-login-heading');
   if (helpLoginH) helpLoginH.textContent = tr.helpLogin;
-  const helpLoginD = document.getElementById('help-login-desc');
-  if (helpLoginD) {
-    const loginDate = _dbScrapeDate ?? _dbCutoffDate;
-    const dateLabel = loginDate ? fmtDateTime(loginDate, lang, state.tzOffset) : null;
-    helpLoginD.textContent = dateLabel
-      ? tr.helpLoginDescWithDate(dateLabel)
-      : tr.helpLoginDescNoDate;
-  }
+  updateHelpLoginDesc();
   // Share section
   const helpShareH = document.getElementById('help-share-heading');
   if (helpShareH) helpShareH.textContent = tr.helpShare;
@@ -1170,6 +1163,22 @@ function applyTranslations(): void {
   if (calLegendFewer) calLegendFewer.textContent = tr.calLegendFewer;
   const calLegendMore = document.getElementById('cal-legend-more');
   if (calLegendMore) calLegendMore.textContent = tr.calLegendMore;
+}
+
+/**
+ * Update the login section in the help modal
+ * Must be called after _dbCutoffDate and _dbScrapeDate are set.
+ */
+function updateHelpLoginDesc(): void {
+  const tr = t();
+  const helpLoginD = document.getElementById('help-login-desc');
+  if (helpLoginD) {
+    const loginDate = _dbScrapeDate ?? _dbCutoffDate;
+    const dateLabel = loginDate ? fmtDateTime(loginDate, lang, state.tzOffset) : null;
+    helpLoginD.textContent = dateLabel
+      ? tr.helpLoginDescWithDate(dateLabel)
+      : tr.helpLoginDescNoDate;
+  }
 }
 
 // ── Timezone label ────────────────────────────────────────────────────────
@@ -1531,6 +1540,9 @@ export async function init(): Promise<void> {
     renderFooter();
     bindEvents();
     syncAuthUI();
+    // called in applyTranslations() above, but need to update after _dbScrapeDate and
+    // _dbCutoffDate are available
+    updateHelpLoginDesc();
     await initCalendar(render); // must await: queries clip date range for nav bounds
 
     // Fetch live clips in the background; render() is called again when done.
