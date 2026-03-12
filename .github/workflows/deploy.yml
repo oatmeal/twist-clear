@@ -1,6 +1,6 @@
 name: Deploy to GitHub Pages
 
-# Reusable workflow — call this from an archive repo's workflow.
+# Reusable workflow — call this from a viewer repo's workflow.
 # See docs/deploying.md for setup instructions.
 on:
   workflow_call:
@@ -44,17 +44,17 @@ on:
         description: >
           Title prefix shown in the browser tab and page heading.
           Streamer names are appended automatically at runtime
-          (e.g. "My Archive: streamer1, streamer2").
-          Defaults to "twist-clear clip archive".
+          (e.g. "My favorite streamers: streamer1, streamer2").
+          Defaults to "twist-clear clip viewer".
         required: false
         type: string
-        default: 'twist-clear clip archive'
+        default: 'twist-clear clip viewer'
       og_description:
         description: >
           Text for the og:description meta tag used in social link previews.
         required: false
         type: string
-        default: 'A Twitch clip archive.'
+        default: 'A Twitch clip viewer.'
       site_description:
         description: >
           Optional subtitle shown in the page header below the site title.
@@ -276,11 +276,11 @@ jobs:
           VITE_OG_DESCRIPTION:    ${{ inputs.og_description }}
           VITE_SITE_DESCRIPTION:  ${{ inputs.site_description }}
           VITE_SITE_URL:          ${{ steps.site-url.outputs.url }}
-          # Footer: links back to the code repo and the archive repo with commit SHAs.
-          VITE_CODE_REPO:      ${{ inputs.code_repo || 'oatmeal/twist-clear' }}
-          VITE_CODE_SHA:       ${{ steps.code-sha.outputs.sha }}
-          VITE_ARCHIVE_REPO:   ${{ github.repository }}
-          VITE_ARCHIVE_SHA:    ${{ github.sha }}
+          # Footer: links back to the code repo and the viewer repo with commit SHAs.
+          VITE_CODE_REPO:     ${{ inputs.code_repo || 'oatmeal/twist-clear' }}
+          VITE_CODE_SHA:      ${{ steps.code-sha.outputs.sha }}
+          VITE_VIEWER_REPO:   ${{ github.repository }}
+          VITE_VIEWER_SHA:    ${{ github.sha }}
           # Optional colour overrides (empty string = CSS default in style.css :root).
           # See docs/theming.md for guidance and example palettes.
           VITE_COLOR_ACCENT:   ${{ inputs.accent_color }}

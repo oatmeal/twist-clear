@@ -1,6 +1,6 @@
-# Deploying a clip archive to GitHub Pages
+# Deploying a clip viewer to GitHub Pages
 
-This guide walks through deploying a live clip archive as a GitHub Pages site. With the settings below, the archive runs on a schedule: once a day it scrapes the latest clips and redeploys the viewer.
+This guide walks through deploying a live clip viewer as a GitHub Pages site. With the settings below, the archive runs on a schedule: once a day it scrapes the latest clips and redeploys the viewer.
 
 ## Architecture overview
 
@@ -9,9 +9,9 @@ Two GitHub repositories are involved:
 | Repo | Visibility | Purpose |
 |---|---|---|
 | `twist-clear` (this repo) | Public | Scraper code + frontend + reusable workflow |
-| `my-clips` (your archive repo) | Public or private* | Schedule config + Twitch secrets |
+| `my-clips` (your viewer repo) | Public or private* | Schedule config + Twitch secrets |
 
-The archive repo's workflow calls the reusable `deploy.yml` in this repo, which handles everything: checking out the code, scraping, building, and deploying to the archive repo's GitHub Pages site.
+The viewer repo's workflow calls the reusable `deploy.yml` in this repo, which handles everything: checking out the code, scraping, building, and deploying to the viewer repo's GitHub Pages site.
 
 > \* GitHub Pages for private repositories requires GitHub Pro or a paid organisation plan.
 
@@ -19,15 +19,15 @@ The archive repo's workflow calls the reusable `deploy.yml` in this repo, which 
 
 ---
 
-## Step 1 — Create the archive repo
+## Step 1 — Create the viewer repo
 
-Create a new GitHub repository for your archive. It can be named anything (e.g. `my-clips`). No special files are needed; the workflow downloads all code from this repo.
+Create a new GitHub repository for your viewer. It can be named anything (e.g. `my-clips`). No special files are needed; the workflow downloads all code from this repo.
 
 ---
 
 ## Step 2 — Add Twitch credentials as secrets
 
-In your archive repo, go to **Settings → Secrets and variables → Actions** and add the following repository secrets:
+In your viewer repo, go to **Settings → Secrets and variables → Actions** and add the following repository secrets:
 
 | Secret name | Required | Value |
 |---|---|---|
@@ -43,7 +43,7 @@ If you haven't created Twitch applications yet, see [Setting up Twitch applicati
 
 ## Step 3 — Enable GitHub Pages
 
-In your archive repo, go to **Settings → Pages**:
+In your viewer repo, go to **Settings → Pages**:
 
 - **Source**: select **GitHub Actions**
 
@@ -53,10 +53,10 @@ That's all. GitHub will create a `github-pages` deployment environment automatic
 
 ## Step 4 — Create the workflow file
 
-Create `.github/workflows/deploy.yml` in your archive repo with the following content, replacing the streamer logins:
+Create `.github/workflows/deploy.yml` in your viewer repo with the following content, replacing the streamer logins:
 
 ```yaml
-name: Deploy clip archive
+name: Deploy clip viewer
 
 on:
   schedule:
@@ -95,13 +95,13 @@ Commit and push this file.
 
 The scheduled workflow won't run until GitHub activates the schedule (which can take up to 24 hours after the first commit). To deploy immediately:
 
-1. Go to your archive repo's **Actions** tab.
-2. Select the **Deploy clip archive** workflow.
+1. Go to your viewer repo's **Actions** tab.
+2. Select the **Deploy clip viewer** workflow.
 3. Click **Run workflow**.
 
 The first run performs a full historical scrape, which can take up to ~30 minutes depending on how many clips the channels have. The database is cached between runs, so subsequent runs using `scrape_mode: update` are much faster (incremental only). With the default `scrape_mode: fetch` (one full rescan per day), each run takes roughly the same amount of time but keeps view counts current.
 
-Once complete, your clip archive will be live at:
+Once complete, your clip viewer will be live at:
 ```
 https://YOUR_GITHUB_USERNAME.github.io/my-clips/
 ```
@@ -120,7 +120,7 @@ If the scrape is ever interrupted mid-run, the next run picks up where it left o
 
 ### Refresh on a different schedule
 
-Edit the `cron` expression in your archive repo's workflow. Some examples:
+Edit the `cron` expression in your viewer repo's workflow. Some examples:
 
 ```yaml
 - cron: '0 6 * * *'     # daily at 06:00 UTC (default)
@@ -141,7 +141,7 @@ uses: oatmeal/twist-clear/.github/workflows/deploy.yml@v1.2.3
 For an archive that updates throughout the day while still refreshing view counts once daily, use two schedules and pass `scrape_mode` based on which cron fired:
 
 ```yaml
-name: Deploy clip archive
+name: Deploy clip viewer
 
 on:
   schedule:
@@ -214,9 +214,9 @@ with:
 
 | Input | Required | Default | Description |
 |---|---|---|---|
-| `site_title` | No | `twist-clear clip archive` | Title prefix shown in the browser tab and page heading (streamer names are appended automatically at runtime) |
+| `site_title` | No | `twist-clear clip viewer` | Title prefix shown in the browser tab and page heading (streamer names are appended automatically at runtime) |
 | `site_description` | No | *(empty)* | Optional subtitle shown below the site title in the page header. Visible on desktop; collapsible via a chevron button on narrow screens. Leave empty for no subtitle. |
-| `og_description` | No | `A Twitch clip archive.` | Text for the `og:description` meta tag used in social link previews |
+| `og_description` | No | `A Twitch clip viewer.` | Text for the `og:description` meta tag used in social link previews |
 | `site_url` | No | *(auto-computed)* | Canonical URL for the `og:url` meta tag (e.g. `https://user.github.io/my-clips/`). Auto-computed from the calling repo if omitted |
 
 ### Colours
@@ -242,7 +242,7 @@ All colour inputs accept any valid CSS colour value (`#rrggbb`, `hsl()`, `oklch(
 Check that the `streamers` input in your workflow file contains at least one login.
 
 **The workflow fails at "Deploy to GitHub Pages"**
-Make sure GitHub Pages is enabled with **GitHub Actions** as the source in your archive repo's settings. Also check that the `github-pages` environment exists (it's created automatically, but only after the first Pages deployment attempt).
+Make sure GitHub Pages is enabled with **GitHub Actions** as the source in your viewer repo's settings. Also check that the `github-pages` environment exists (it's created automatically, but only after the first Pages deployment attempt).
 
 **The deployed site loads but shows no clips**
 The scrape completed but found no clips. Verify the streamer logins are correct (Twitch login names are lowercase). Check the workflow logs for any API errors.

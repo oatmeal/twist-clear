@@ -102,11 +102,11 @@ function dbRangePlugin(): Plugin {
     if (m?.[1]) process.env['VITE_TWITCH_CLIENT_ID'] = m[1];
   }
 
-  // site_title — archive name shown in the browser tab and page heading.
+  // site_title — viewer site name shown in the browser tab and page heading.
   // Streamer names are appended at runtime by JS.
   if (!process.env['VITE_SITE_TITLE']) {
     const m = /site_title\s*=\s*"([^"]+)"/.exec(toml);
-    process.env['VITE_SITE_TITLE'] = m?.[1] ?? 'twist-clear clip archive';
+    process.env['VITE_SITE_TITLE'] = m?.[1] ?? 'twist-clear clip viewer';
   }
 
   // site_description — optional subtitle shown in the page header (hidden on mobile).
@@ -126,7 +126,7 @@ function dbRangePlugin(): Plugin {
   // og_description — text for the og:description meta tag.
   if (!process.env['VITE_OG_DESCRIPTION']) {
     const m = /og_description\s*=\s*"([^"]+)"/.exec(toml);
-    process.env['VITE_OG_DESCRIPTION'] = m?.[1] ?? 'A Twitch clip archive.';
+    process.env['VITE_OG_DESCRIPTION'] = m?.[1] ?? 'A Twitch clip viewer.';
   }
 
   // site_url — canonical URL for og:url. Empty in local dev; CI auto-computes it.

@@ -16,15 +16,15 @@ client_secret = "your_client_secret_here"
 [frontend]
 # Title prefix shown in the browser tab and page heading.
 # Streamer names from the database are appended automatically at runtime,
-# e.g. "My Archive: streamer1, streamer2".
-# site_title = "twist-clear clip archive"
+# e.g. "My Favorite Streams: streamer1, streamer2".
+# site_title = "twist-clear clip viewer"
 
 # Optional subtitle shown below the title in the page header (hidden on mobile).
 # Omit or leave empty to show nothing.
-# site_description = "A clip archive for streamer_one and streamer_two"
+# site_description = "A clip viewer for streamer_one and streamer_two"
 
 # Text for the og:description meta tag (social link previews).
-# og_description = "A Twitch clip archive."
+# og_description = "A Twitch clip viewer."
 
 # Canonical URL for the og:url meta tag. Auto-computed in CI from the GitHub
 # Pages URL; set here if deploying to a custom domain.

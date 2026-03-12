@@ -121,7 +121,7 @@ async function setStreamerTag(): Promise<string | null> {
   if (!rows.length) return null;
 
   const siteTitle = (import.meta.env as Record<string, string>)['VITE_SITE_TITLE']
-    || 'twist-clear clip archive';
+    || 'twist-clear clip viewer';
 
   const plainNames:  string[] = [];
   const linkedNames: string[] = [];
@@ -146,24 +146,24 @@ function renderFooter(): void {
   const env        = import.meta.env as Record<string, string>;
   const codeRepo   = env['VITE_CODE_REPO']    || '';
   const codeSha    = env['VITE_CODE_SHA']     || '';
-  const archiveRepo = env['VITE_ARCHIVE_REPO'] || '';
-  const archiveSha  = env['VITE_ARCHIVE_SHA']  || '';
+  const viewerRepo = env['VITE_VIEWER_REPO'] || '';
+  const viewerSha  = env['VITE_VIEWER_SHA']  || '';
 
   if (!codeRepo) return;
 
   const codeShort    = codeSha    ? codeSha.slice(0, 7)    : '';
-  const archiveShort = archiveSha ? archiveSha.slice(0, 7) : '';
+  const viewerShort = viewerSha ? viewerSha.slice(0, 7) : '';
   const codeBase    = `https://github.com/${escHtml(codeRepo)}`;
-  const archiveBase = archiveRepo ? `https://github.com/${escHtml(archiveRepo)}` : '';
+  const viewerBase = viewerRepo ? `https://github.com/${escHtml(viewerRepo)}` : '';
 
   let html = `Built with <a href="${codeBase}" target="_blank" rel="noopener">twist-clear</a>`;
   if (codeShort) {
     html += ` (<a href="${codeBase}/commit/${escHtml(codeSha)}" target="_blank" rel="noopener">${escHtml(codeShort)}</a>)`;
   }
-  if (archiveBase) {
-    html += ` · Archive: <a href="${archiveBase}" target="_blank" rel="noopener">${escHtml(archiveRepo)}</a>`;
-    if (archiveShort) {
-      html += ` (<a href="${archiveBase}/commit/${escHtml(archiveSha)}" target="_blank" rel="noopener">${escHtml(archiveShort)}</a>)`;
+  if (viewerBase) {
+    html += ` · Viewer: <a href="${viewerBase}" target="_blank" rel="noopener">${escHtml(viewerRepo)}</a>`;
+    if (viewerShort) {
+      html += ` (<a href="${viewerBase}/commit/${escHtml(viewerSha)}" target="_blank" rel="noopener">${escHtml(viewerShort)}</a>)`;
     }
   }
 

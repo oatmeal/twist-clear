@@ -1,12 +1,12 @@
 # twist-clear
 
-A two-part tool for building and browsing a personal archive of Twitch clip metadata.
+A two-part tool for building and browsing an archive of Twitch clip metadata.
 
 **Scraper** (`scrape.py`, `lib/`) — fetches clip metadata for your chosen channels via the Twitch Helix API and stores it in a local SQLite database. Handles full historical scrapes and lightweight incremental updates.
 
 **Viewer** (`frontend/`) — a browser-based SPA that queries the database directly in the browser via HTTP Range requests ([sql.js-httpvfs](https://github.com/phiresky/sql.js-httpvfs)), so only the pages needed for each query are fetched — the full database is never downloaded at once.
 
-The easiest way to get a live, automatically-updating archive is to [deploy it to GitHub Pages](#deploying-to-github-pages) — no other server required. If you prefer to run everything locally, see [Running locally](#running-locally).
+The easiest way to get a live, automatically-updating viewer site is to [deploy it to GitHub Pages](#deploying-to-github-pages) — no other server required. If you prefer to run everything locally, see [Running locally](#running-locally).
 
 ---
 
@@ -15,22 +15,22 @@ The easiest way to get a live, automatically-updating archive is to [deploy it t
 The recommended setup uses two GitHub repositories:
 
 - **This repo** (`twist-clear`) — contains all the code and a reusable GitHub Actions workflow.
-- **Your archive repo** (e.g. `my-clips`) — contains only your credentials (as secrets) and a short workflow file that calls the reusable one. The archive repo's GitHub Pages site hosts your clip viewer.
+- **Your viewer repo** (e.g. `my-clips`) — contains only your credentials (as secrets) and a short workflow file that calls the reusable one. The viewer repo's GitHub Pages site hosts your clip viewer.
 
-A daily Actions run scrapes all clips from scratch and redeploys the site. Each run takes roughly 30 minutes for a typical archive, which is well within Actions' free tier limits.
+A daily Actions run scrapes all clips from scratch and redeploys the site. For a channel with around 30000 clips, a run takes roughly 6 minutes, which is well within Actions' free tier limits.
 
 **Full walkthrough:** [docs/deploying.md](docs/deploying.md)
 
 **Quick summary:**
 
 1. **Twitch app** — create one at https://dev.twitch.tv/console/apps (see [step-by-step instructions](#1-create-a-twitch-application) below; you'll need Client ID and Client Secret).
-2. **Create the archive repo** — any name.
+2. **Create the viewer repo** — any name.
 3. **Add secrets** — `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET` (required); `TWITCH_WEB_CLIENT_ID` (optional, enables Login with Twitch) under *Settings → Secrets and variables → Actions*.
 4. **Enable Pages** — *Settings → Pages*, source set to **GitHub Actions**.
-5. **Add this workflow file** as `.github/workflows/deploy.yml` in the archive repo, replacing `YOUR_USERNAME` and the streamer logins:
+5. **Add this workflow file** as `.github/workflows/deploy.yml` in the viewer repo, replacing `YOUR_USERNAME` and the streamer logins:
 
 ```yaml
-name: Deploy clip archive
+name: Deploy clip viewer
 
 on:
   schedule:
@@ -61,7 +61,7 @@ jobs:
       TWITCH_WEB_CLIENT_ID: ${{ secrets.TWITCH_WEB_CLIENT_ID }}  # optional, enables Login with Twitch
 ```
 
-6. **Trigger the first run** manually from the Actions tab. Once it completes, your archive is live at `https://YOUR_USERNAME.github.io/my-clips/`.
+6. **Trigger the first run** manually from the Actions tab. Once it completes, your viewer site is live at `https://YOUR_USERNAME.github.io/my-clips/`.
 
 Optional inputs let you customise the site title, social-preview metadata, and the full colour palette — see [Inputs reference](docs/deploying.md#inputs-reference) in the deployment guide.
 
@@ -101,7 +101,7 @@ The scraper uses the **Client Credentials** flow to read public clip data.
 
 **App 2 — Browser login (optional)**
 
-Enables the **"Login with Twitch"** button in the viewer, which fetches clips newer than the archive date. Uses Twitch's implicit grant OAuth (response_type=token) — no secret is ever sent from the browser.
+Enables the **"Login with Twitch"** button in the viewer, which fetches clips newer than the scraped date. Uses Twitch's implicit grant OAuth (response_type=token) — no secret is ever sent from the browser.
 
 1. Register a second application at the same URL.
 
@@ -220,7 +220,7 @@ Requires `frontend/public/clips.db` — run `prepare-db` first. Serve `frontend/
 - Date range filter and calendar view (year heatmap → month grid, also selectable by day or week)
 - URL hash preserves all filter state — links are bookmarkable and shareable
 - Click a thumbnail to embed the clip inline; click outside or press Escape to close
-- **Login with Twitch** — fetches clips newer than the archive date live from the Twitch API and displays them above the archive grid (no backend required; uses Twitch's implicit grant OAuth)
+- **Login with Twitch** — fetches clips newer than the data from the scraper live from the Twitch API and merges them into the previously scraped clips (no backend required; uses Twitch's implicit grant OAuth)
 
 ---
 
