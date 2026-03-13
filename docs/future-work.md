@@ -53,6 +53,7 @@ for a personal viewer; to fix, escape them before interpolation and add an
 ## Title search
 
 Support more complicated queries (parentheses around AND and OR clauses, etc.)?
+Make sure the updates to i18n strings to explain NOT syntax are accurate.
 
 ---
 

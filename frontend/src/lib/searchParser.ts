@@ -3,12 +3,12 @@
  * LIKE clause for terms shorter than 3 characters (below the trigram minimum).
  *
  * Supported syntax:
- *   word1 word2        → "word1" "word2"   (implicit AND)
- *   word1 OR word2     → "word1" OR "word2"
- *   word1 | word2      → "word1" OR "word2"  (full-width ｜ also accepted)
- *   -word              → NOT "word"
- *   "exact phrase"     → "exact phrase"
- *   -"exact phrase"    → NOT "exact phrase"
+ *   word1 word2           → "word1" "word2"   (implicit AND)
+ *   word1 OR word2        → "word1" OR "word2"
+ *   word1 | word2         → "word1" OR "word2"  (full-width ｜ also accepted)
+ *   word1 -word2          → "word1" NOT "word2"
+ *   "exact phrase"        → "exact phrase"
+ *   word -"exact phrase" → "word" NOT "exact phrase"
  *
  * Japanese IME normalization:
  *   full-width space \u3000 → ASCII space (applied globally)
