@@ -6,6 +6,20 @@ Deferred items with rationale. See the relevant source files for implementation 
 
 ## Small issues
 - template repo: fork + change settings to deploy an archive for a streamer
+- featured clips
+---
+
+## Show (truncated) titles of prev / next clip next to prev / next buttons in expanded view
+
+The logic here is tricky, especially for the mergingViewCount cases. I attempted to
+use LEAD/LAG functions but merging in the live clips means that those may be incorrect.
+
+---
+
+## remove the live clips section / logic
+
+It's been commented out and the page still works, but this deserves a full scan
+over the codebase to ensure it can be removed completely.
 
 ---
 
@@ -15,6 +29,12 @@ I implemented by hand some basic replaceState handling so back and forwards work
 Some basic testing shows it works mostly except there may be some glitches around login / logout.
 The logic around typing and the search filter is especially tricky and is worth some
 careful review.
+
+---
+
+## Skip over clips with the default title
+
+This seems to be difficult. We don't have any way to know if the title of the stream has been edited.
 
 ---
 
