@@ -305,8 +305,9 @@ function clipCardHtml(clip: {
       <div class="clip-info">
         <div class="clip-title">
           <a href="${escHtml(clip.url)}" target="_blank" rel="noopener noreferrer">
-            ${escHtml(clip.title)}<svg class="clip-ext-icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 1H1v10h10V8.5M7 1h4m0 0v4m0-4L5 7"/></svg>
+            <svg class="clip-ext-icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 1H1v10h10V8.5M7 1h4m0 0v4m0-4L5 7"/></svg>
           </a>
+          <span class="clip-title-text">${escHtml(clip.title)}</span>
         </div>
         <div class="clip-meta">
           <span class="views">${t().views(fmtViews(clip.view_count, lang))}</span>
@@ -336,7 +337,8 @@ function clipListRowHtml(clip: ClipItem): string {
             <img src="${escHtml(clip.thumbnail_url)}" alt="${escHtml(clip.title)}" loading="lazy">
             <span class="clip-duration">${fmtDuration(clip.duration)}</span>
           </div>
-          <a href="${escHtml(clip.url)}" target="_blank" rel="noopener noreferrer">${escHtml(clip.title)}<svg class="clip-ext-icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 1H1v10h10V8.5M7 1h4m0 0v4m0-4L5 7"/></svg></a>
+          <a href="${escHtml(clip.url)}" target="_blank" rel="noopener noreferrer"><svg class="clip-ext-icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 1H1v10h10V8.5M7 1h4m0 0v4m0-4L5 7"/></svg></a>
+          <span class="clip-title-text">${escHtml(clip.title)}</span>
         </div>
       </td>
       <td class="clip-col-game">${gameEl}</td>
@@ -384,6 +386,10 @@ let _expandedCard: HTMLElement | null = null;
 // List-view expand state: the expanded <tr> row and the embed <tr> inserted after it.
 let _expandedRow: HTMLElement | null = null;
 let _insertedEmbedRow: HTMLElement | null = null;
+// Titles of the last clip on the previous page / first clip on the next page.
+// Prefetched during render() so page-boundary nav buttons can show a title hint.
+let _prevPageLastTitle: string | null = null;
+let _nextPageFirstTitle: string | null = null;
 
 function _onDocClickOutside(e: MouseEvent): void {
   const target = e.target as Node;
@@ -442,6 +448,15 @@ function expandCard(card: HTMLElement, skipScroll = false): void {
     const allCards = Array.from(card.parentElement?.querySelectorAll<HTMLElement>('.clip-card') ?? []);
     const idx = allCards.indexOf(card);
     const totalPages = Math.ceil(state.totalClips / state.PAGE_SIZE);
+    // Read adjacent titles: same-page neighbour from the DOM, page-boundary from prefetch cache.
+    const prevTitle =
+      allCards[idx - 1]?.querySelector<HTMLElement>('.clip-title-text')?.textContent?.trim()
+      ?? (idx === 0 ? _prevPageLastTitle : null)
+      ?? '';
+    const nextTitle =
+      allCards[idx + 1]?.querySelector<HTMLElement>('.clip-title-text')?.textContent?.trim()
+      ?? (idx === allCards.length - 1 ? _nextPageFirstTitle : null)
+      ?? '';
     const navRow = document.createElement('div');
     navRow.className = 'clip-nav-row';
     const prevBtn = document.createElement('button');
@@ -449,13 +464,13 @@ function expandCard(card: HTMLElement, skipScroll = false): void {
     prevBtn.type = 'button';
     prevBtn.setAttribute('aria-label', t().prevClip);
     prevBtn.disabled = idx <= 0 && state.currentPage <= 1;
-    prevBtn.innerHTML = '&#8592;';
+    prevBtn.innerHTML = `&#8592;<span class="clip-nav-title">${escHtml(prevTitle)}</span>`;
     const nextBtn = document.createElement('button');
     nextBtn.className = 'clip-nav-btn clip-next-btn';
     nextBtn.type = 'button';
     nextBtn.setAttribute('aria-label', t().nextClip);
     nextBtn.disabled = idx >= allCards.length - 1 && state.currentPage >= totalPages;
-    nextBtn.innerHTML = '&#8594;';
+    nextBtn.innerHTML = `<span class="clip-nav-title">${escHtml(nextTitle)}</span>&#8594;`;
     info.replaceWith(navRow);
     navRow.append(prevBtn, info, nextBtn);
   }
@@ -495,6 +510,22 @@ function expandRow(row: HTMLElement, skipScroll = false): void {
   const allRows = tbody ? Array.from(tbody.querySelectorAll<HTMLElement>('.clip-row')) : [];
   const idx = allRows.indexOf(row);
 
+  // Read adjacent titles: same-page neighbour from the DOM, page-boundary from prefetch cache.
+  const prevTitle =
+    allRows[idx - 1]?.querySelector<HTMLElement>('.clip-title-text')?.textContent?.trim()
+    ?? (idx === 0 ? _prevPageLastTitle : null)
+    ?? '';
+  const nextTitle =
+    allRows[idx + 1]?.querySelector<HTMLElement>('.clip-title-text')?.textContent?.trim()
+    ?? (idx === allRows.length - 1 ? _nextPageFirstTitle : null)
+    ?? '';
+
+  const totalPagesRow = Math.ceil(state.totalClips / state.PAGE_SIZE);
+  const prevDisabled = idx <= 0 && state.currentPage <= 1;
+  const nextDisabled = idx >= allRows.length - 1 && state.currentPage >= totalPagesRow;
+  const prevArrow = idx <= 0 && state.currentPage > 1 ? '&#8592;' : '&#8593;';
+  const nextArrow = idx >= allRows.length - 1 && state.currentPage < totalPagesRow ? '&#8594;' : '&#8595;';
+
   // Count only visible cells — hidden cells (display:none from responsive CSS) must be excluded.
   const colCount = Array.from(row.querySelectorAll('td'))
     .filter(td => getComputedStyle(td).display !== 'none').length;
@@ -508,8 +539,8 @@ function expandRow(row: HTMLElement, skipScroll = false): void {
     `<iframe src="${escHtml(src)}" class="clip-iframe" allowfullscreen scrolling="no"></iframe>` +
     `</div>` +
     `<div class="clip-list-nav-row">` +
-    `<button class="clip-nav-btn clip-prev-btn" type="button" aria-label="${escHtml(t().prevClip)}"${idx <= 0 && state.currentPage <= 1 ? ' disabled' : ''}>${idx <= 0 && state.currentPage > 1 ? '&#8592;' : '&#8593;'}</button>` +
-    `<button class="clip-nav-btn clip-next-btn" type="button" aria-label="${escHtml(t().nextClip)}"${idx >= allRows.length - 1 && state.currentPage >= Math.ceil(state.totalClips / state.PAGE_SIZE) ? ' disabled' : ''}>${idx >= allRows.length - 1 && state.currentPage < Math.ceil(state.totalClips / state.PAGE_SIZE) ? '&#8594;' : '&#8595;'}</button>` +
+    `<button class="clip-nav-btn clip-prev-btn" type="button" aria-label="${escHtml(t().prevClip)}"${prevDisabled ? ' disabled' : ''}><span class="clip-nav-title">${escHtml(prevTitle)}</span>${prevArrow}</button>` +
+    `<button class="clip-nav-btn clip-next-btn" type="button" aria-label="${escHtml(t().nextClip)}"${nextDisabled ? ' disabled' : ''}>${nextArrow}<span class="clip-nav-title">${escHtml(nextTitle)}</span></button>` +
     `</div>`;
   embedRow.appendChild(td);
 
@@ -740,6 +771,8 @@ export async function render(): Promise<void> {
   _renderController?.abort();
   const ctrl = new AbortController();
   _renderController = ctrl;
+  _prevPageLastTitle = null;
+  _nextPageFirstTitle = null;
 
   try {
     // Decide whether to merge live clips into the main grid.
@@ -900,6 +933,82 @@ export async function render(): Promise<void> {
         )
       : [];
     if (ctrl.signal.aborted) return;
+
+    // ── Adjacent-page boundary title prefetch ───────────────────────────────
+    // Fetch the title of the one clip just before / after the current page so
+    // page-boundary nav buttons can show a title hint.  We already know enough
+    // from the pagination math to avoid touching extra DB rows in most cases:
+    // for date sorts, live clips in sortedLive may cover the boundary; for
+    // view_count sorts, check rankedLive.  When it really is a DB row we need,
+    // a LIMIT 1 OFFSET n query fetches exactly one row.
+    const totalPages = Math.ceil(state.totalClips / state.PAGE_SIZE);
+    if (state.currentPage > 1) {
+      const prevPos = pageStart - 1;
+      if (mergingDesc && prevPos < liveCount) {
+        _prevPageLastTitle = sortedLive[prevPos]?.title ?? null;
+      } else if (mergingAsc && prevPos >= dbCount) {
+        _prevPageLastTitle = sortedLive[prevPos - dbCount]?.title ?? null;
+      } else if (mergingViewCount) {
+        const live = rankedLive.find(r => r.mergedPos === prevPos);
+        if (live) {
+          _prevPageLastTitle = live.clip.title;
+        } else if (vcPage!.dbOffset > 0) {
+          const rows = await q(
+            `SELECT c.title FROM clips c ${where} ORDER BY ${ORDER[state.sortBy]} LIMIT 1 OFFSET ${vcPage!.dbOffset - 1}`,
+            params,
+          );
+          if (ctrl.signal.aborted) return;
+          _prevPageLastTitle = (rows[0]?.['title'] as string | undefined) ?? null;
+        }
+      } else {
+        // Non-merging or date sorts where the prev boundary is a DB clip.
+        // For mergingDesc (prevPos >= liveCount): DB offset = prevPos - liveCount = dbOffset - 1.
+        // For mergingAsc (prevPos < dbCount):    DB offset = prevPos = dbOffset - 1.
+        // For non-merging:                       DB offset = prevPos = dbOffset - 1.
+        if (dbOffset > 0) {
+          const rows = await q(
+            `SELECT c.title FROM clips c ${where} ORDER BY ${ORDER[state.sortBy]} LIMIT 1 OFFSET ${dbOffset - 1}`,
+            params,
+          );
+          if (ctrl.signal.aborted) return;
+          _prevPageLastTitle = (rows[0]?.['title'] as string | undefined) ?? null;
+        }
+      }
+    }
+    if (state.currentPage < totalPages) {
+      const nextPos = pageStart + state.PAGE_SIZE;
+      if (mergingDesc && nextPos < liveCount) {
+        _nextPageFirstTitle = sortedLive[nextPos]?.title ?? null;
+      } else if (mergingAsc && nextPos >= dbCount) {
+        _nextPageFirstTitle = sortedLive[nextPos - dbCount]?.title ?? null;
+      } else if (mergingViewCount) {
+        const live = rankedLive.find(r => r.mergedPos === nextPos);
+        if (live) {
+          _nextPageFirstTitle = live.clip.title;
+        } else {
+          const nextDbOffset = vcPage!.dbOffset + vcPage!.dbOnPage;
+          const rows = await q(
+            `SELECT c.title FROM clips c ${where} ORDER BY ${ORDER[state.sortBy]} LIMIT 1 OFFSET ${nextDbOffset}`,
+            params,
+          );
+          if (ctrl.signal.aborted) return;
+          _nextPageFirstTitle = (rows[0]?.['title'] as string | undefined) ?? null;
+        }
+      } else {
+        // Non-merging or date sorts where the next boundary is a DB clip.
+        // For mergingDesc (nextPos >= liveCount): DB offset = nextPos - liveCount = dbOffset + dbOnPage.
+        // For mergingAsc (nextPos < dbCount):    DB offset = nextPos = dbOffset + dbOnPage.
+        // For non-merging:                       DB offset = nextPos = dbOffset + dbOnPage.
+        const nextDbOffset = dbOffset + dbOnPage;
+        const rows = await q(
+          `SELECT c.title FROM clips c ${where} ORDER BY ${ORDER[state.sortBy]} LIMIT 1 OFFSET ${nextDbOffset}`,
+          params,
+        );
+        if (ctrl.signal.aborted) return;
+        _nextPageFirstTitle = (rows[0]?.['title'] as string | undefined) ?? null;
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────
 
     document.getElementById('result-count')!.textContent = t().resultCount(state.totalClips);
 

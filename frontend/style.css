@@ -595,7 +595,7 @@ select:focus { border-color: var(--accent); }
 .clip-list-nav-row {
   display: flex;
   justify-content: center;
-  gap: 8px;
+  gap: 0;
   padding: 6px 12px;
   background: var(--surface2);
   border-top: 1px solid var(--border);
@@ -603,9 +603,12 @@ select:focus { border-color: var(--accent); }
 .clip-list-nav-row .clip-nav-btn {
   border: 1px solid var(--border);
   border-radius: 4px;
-  width: 36px;
+  flex: 1;
   height: 32px;
 }
+/* Each button takes exactly half the row; arrows face inward at the centre seam */
+.clip-list-nav-row .clip-prev-btn { justify-content: flex-end; border-right: none; border-radius: 4px 0 0 4px; }
+.clip-list-nav-row .clip-next-btn { justify-content: flex-start; border-radius: 0 4px 4px 0; }
 
 /* Responsive list: swap separate columns for the combined meta cell on narrow screens */
 @media (max-width: 700px) {
@@ -770,6 +773,10 @@ main { padding: 24px; }
   border-color: var(--accent);
   transform: none;
 }
+.clip-card.expanded .clip-embed-wrap {
+  max-width: 854px;
+  margin-inline: auto;
+}
 
 .clip-embed-wrap {
   position: relative;
@@ -809,17 +816,15 @@ main { padding: 24px; }
 }
 
 /* ── Prev / next navigation row (below embedded video) ── */
+/* Three-column grid: equal-width side columns guarantee clip-info stays centred
+   regardless of how long the prev/next title text is. */
 .clip-nav-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(40px, 28%) 1fr minmax(40px, 28%);
   align-items: stretch;
 }
-.clip-nav-row .clip-info {
-  flex: 1;
-  min-width: 0;
-}
 .clip-nav-btn {
-  flex-shrink: 0;
-  width: 40px;
+  overflow: hidden;
   background: transparent;
   border: none;
   border-top: 1px solid var(--border);
@@ -830,6 +835,15 @@ main { padding: 24px; }
   align-items: center;
   justify-content: center;
   transition: background 0.15s, color 0.15s;
+}
+.clip-nav-title {
+  display: inline-block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  vertical-align: middle;
+  margin: 0 3px;
 }
 .clip-nav-btn:hover:not(:disabled) {
   background: var(--surface2);

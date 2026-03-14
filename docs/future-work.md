@@ -9,13 +9,6 @@ Deferred items with rationale. See the relevant source files for implementation 
 - featured clips
 ---
 
-## Show (truncated) titles of prev / next clip next to prev / next buttons in expanded view
-
-The logic here is tricky, especially for the mergingViewCount cases. I attempted to
-use LEAD/LAG functions but merging in the live clips means that those may be incorrect.
-
----
-
 ## remove the live clips section / logic
 
 It's been commented out and the page still works, but this deserves a full scan
