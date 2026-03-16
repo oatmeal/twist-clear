@@ -183,6 +183,34 @@ The expression resolves to:
 
 To redeploy after a styling change without waiting for the scraper, trigger a manual run and select **skip**.
 
+### Site assets (icons, images, custom files)
+
+Place any files you want served from the site root in a `site-assets/` directory in your viewer repo:
+
+```
+my-clips/
+  site-assets/
+    icon.png
+    banner.webp
+```
+
+The workflow copies them into `frontend/public/` before the build, so after deployment they are available at the site root:
+
+```
+https://user.github.io/my-clips/icon.png
+```
+
+You can reference them in `site_heading` or `site_description` using **relative paths** (without a leading `/`):
+
+```yaml
+with:
+  site_heading: 'My Clips <img src="icon.png" height="20" alt="">'
+```
+
+A leading `/` would resolve to the root of `github.io` rather than the subpath your site lives at, so always omit it.
+
+If `site-assets/` does not exist the step is silently skipped — no input or configuration needed.
+
 ### Using a fork or copy of the code under a different account
 
 If your copy of `twist-clear` is under a different account than `oatmeal`, pass the `code_repo` input:

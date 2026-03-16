@@ -268,6 +268,23 @@ jobs:
       - name: Prepare database
         run: npm --prefix frontend run prepare-db
 
+      - name: Check out viewer repo
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.sha }}
+          path: _viewer
+
+      - name: Copy viewer site assets
+        run: |
+          if [ -d "_viewer/site-assets" ]; then
+            mkdir -p frontend/public
+            cp -r _viewer/site-assets/. frontend/public/
+            echo "Copied $(find _viewer/site-assets -type f | wc -l) file(s) from site-assets/ to frontend/public/"
+          else
+            echo "No site-assets/ directory in viewer repo — skipping"
+          fi
+
       - name: Generate Shared Timestamp
         run: |
           # Save timestamp as GitHub Actions environment variable
