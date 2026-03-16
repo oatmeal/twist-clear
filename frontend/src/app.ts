@@ -671,51 +671,6 @@ function _filteredLiveClips(): LiveClip[] {
   });
 }
 
-// /** Render (or hide) the live clips section above the main grid. */
-// function renderLiveSection(): void {
-//   const section  = document.getElementById('live-section')!;
-//   const titleEl  = document.getElementById('live-section-title')!;
-//   const toggleEl = document.getElementById('btn-live-toggle')!;
-//   const grid     = document.getElementById('live-clips-grid')!;
-
-//   // If an expanded card was in the live section, it's about to be wiped.
-//   if (_expandedCard?.closest('#live-section')) {
-//     _expandedCard = null;
-//     document.removeEventListener('click', _onDocClickOutside);
-//   }
-
-//   if (!auth.isLoggedIn() || state.liveClips.length === 0) {
-//     section.style.display = 'none';
-//     grid.innerHTML = '';
-//     return;
-//   }
-
-//   const filtered = _filteredLiveClips();
-//   if (filtered.length === 0) {
-//     section.style.display = 'none';
-//     grid.innerHTML = '';
-//     return;
-//   }
-
-//   const dateLabel = _dbCutoffDate ? fmtDate(_dbCutoffDate, state.tzOffset, lang) : '';
-//   titleEl.textContent = dateLabel
-//     ? t().liveTitle(filtered.length, dateLabel)
-//     : t().liveTitleNoDate(filtered.length);
-
-//   const collapsed = localStorage.getItem('tc_live_collapsed') === '1';
-//   toggleEl.textContent = collapsed ? '▶' : '▼';
-//   toggleEl.title       = collapsed ? t().liveSectionShow : t().liveSectionCollapse;
-//   toggleEl.setAttribute('aria-label', collapsed ? t().liveSectionShow : t().liveSectionCollapse);
-//   grid.style.display   = collapsed ? 'none' : '';
-
-//   grid.innerHTML = filtered.map(c => clipCardHtml(
-//     { ...c, game_name_ja: _gameNameJa.get(c.game_id) ?? '' }, ' live-clip',
-//   )).join('');
-//   attachImgErrorHandlers(grid);
-
-//   section.style.display = 'block';
-// }
-
 // ── Auth UI ───────────────────────────────────────────────────────────────
 
 /**
@@ -787,19 +742,6 @@ export async function render(): Promise<void> {
                               && filteredLive.length > 0;
     const merging = mergingDesc || mergingAsc || mergingViewCount;
 
-    // if (merging) {
-    //   // Hide the collapsible panel — live clips appear inline in the main grid.
-    //   const liveSection = document.getElementById('live-section')!;
-    //   if (_expandedCard?.closest('#live-section')) {
-    //     _expandedCard = null;
-    //     document.removeEventListener('click', _onDocClickOutside);
-    //   }
-    //   liveSection.style.display = 'none';
-    //   document.getElementById('live-clips-grid')!.innerHTML = '';
-    // } else {
-    //   // Live section is pure in-memory — no async DB reads needed.
-    //   renderLiveSection();
-    // }
     if (ctrl.signal.aborted) return;
 
     // Compute per-game live clip counts (date-filtered, no game/search filter)
@@ -1503,12 +1445,6 @@ function bindEvents(): void {
     document.getElementById('login-banner')!.style.display = 'none';
     document.getElementById('header-login')!.style.display = 'flex';
   });
-
-  // document.getElementById('btn-live-toggle')?.addEventListener('click', () => {
-  //   const collapsed = localStorage.getItem('tc_live_collapsed') === '1';
-  //   localStorage.setItem('tc_live_collapsed', collapsed ? '0' : '1');
-  //   renderLiveSection();
-  // });
 
   // ── Controls bar collapse toggle ────────────────────────────────────────────
   {

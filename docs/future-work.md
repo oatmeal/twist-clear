@@ -9,13 +9,6 @@ Deferred items with rationale. See the relevant source files for implementation 
 - featured clips
 ---
 
-## remove the live clips section / logic
-
-It's been commented out and the page still works, but this deserves a full scan
-over the codebase to ensure it can be removed completely.
-
----
-
 ## history API
 
 I implemented by hand some basic replaceState handling so back and forwards work.

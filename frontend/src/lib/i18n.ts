@@ -26,11 +26,6 @@ export interface Translations {
   dismissBanner: string;
   loginBannerWithDate: (date: string) => string;
   loginBannerNoDate: string;
-  // Live clips section
-  liveTitle: (n: number, date: string) => string;
-  liveTitleNoDate: (n: number) => string;
-  liveSectionShow: string;
-  liveSectionCollapse: string;
   // Help modal — button + title
   searchHelpBtn: string;        // header help button label / aria-label
   helpTitle: string;            // modal h2: "How to use" / "使い方"
@@ -130,10 +125,6 @@ const en: Translations = {
   dismissBanner: 'Dismiss',
   loginBannerWithDate: (date) => `Clips up to ${date} are available on this site. Log in with Twitch to view newer ones.`,
   loginBannerNoDate: 'Some recent clips may not yet be available. Log in with Twitch to view the latest clips.',
-  liveTitle: (n, date) => `${n} new ${n === 1 ? 'clip' : 'clips'} since ${date}`,
-  liveTitleNoDate: (n) => `${n} new ${n === 1 ? 'clip' : 'clips'}`,
-  liveSectionShow: 'Show',
-  liveSectionCollapse: 'Collapse',
   controlsCollapse: 'Collapse filters',
   controlsExpand: 'Expand filters',
   searchHelpBtn: 'Help',
@@ -226,10 +217,6 @@ const ja: Translations = {
   dismissBanner: '閉じる',
   loginBannerWithDate: (date) => `${date}までのクリップが見られます。それ以降の新着クリップを見るにはTwitchでログインしてください。`,
   loginBannerNoDate: '新着クリップが見られない場合があります。新着クリップを見るにはTwitchでログインすると見られます。',
-  liveTitle: (n, date) => `${date}以降の新着クリップ（${n}本）`,
-  liveTitleNoDate: (n) => `新着クリップ（${n}本）`,
-  liveSectionShow: '表示',
-  liveSectionCollapse: '折りたたむ',
   controlsCollapse: 'フィルターを折りたたむ',
   controlsExpand: 'フィルターを展開する',
   searchHelpBtn: 'ヘルプ',
