@@ -24,6 +24,7 @@ src/
   auth.ts       # Twitch OAuth 2.0 implicit grant (token storage, logout)
   calendar.ts   # Calendar view — year → month → day/week drill-down
   db.ts         # sql.js-httpvfs worker init; exports async q() query helper
+  embed.ts      # Clip embed expand/collapse, prev/next navigation (grid + list)
   state.ts      # All shared mutable state + explicit typed setters
   twitch.ts     # Helix API client for live clips (auto-paginates, resolves game names)
   lib/
@@ -242,12 +243,16 @@ keeps the URL hash in sync with the new navigation position).
 clicks): change both the navigation position **and** the date filter, then
 re-render both the calendar and the clip grid.
 
-### Circular dependency: calendar ↔ app
+### Circular dependency: calendar ↔ app, embed ↔ app
 
-`calendar.ts` needs to trigger a re-render in `app.ts`, but `app.ts` imports
-from `calendar.ts`. To break the cycle, `initCalendar(onRender)` accepts a
-callback injected by `app.ts`. `calendar.ts` calls `void _onRender?.()` (fire
-and forget; the AbortController in `render()` handles deduplication).
+Both `calendar.ts` and `embed.ts` need to trigger a re-render in `app.ts`,
+but `app.ts` imports from both modules. The same callback-injection pattern
+breaks both cycles:
+
+- `initCalendar(onRender)` — `calendar.ts` calls `void _onRender?.()` (fire
+  and forget; the AbortController in `render()` handles deduplication).
+- `initEmbed(render)` — `embed.ts` stores the callback in `_render` and calls
+  `await _render?.()` when navigating across page boundaries.
 
 ### Pure functions for testability
 
