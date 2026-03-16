@@ -55,6 +55,16 @@ on:
         required: false
         type: string
         default: 'A Twitch clip viewer.'
+      site_heading:
+        description: >
+          HTML content for the <h1> page heading. Can contain HTML (e.g. an
+          <img> tag for a custom icon). Falls back to site_title when omitted,
+          so existing deployments need no change.
+          Note: site_title remains plain text and continues to drive the browser
+          tab title and og:title — only site_heading accepts HTML.
+        required: false
+        type: string
+        default: ''
       site_description:
         description: >
           Optional subtitle shown in the page header below the site title.
@@ -273,6 +283,7 @@ jobs:
           VITE_TWITCH_CLIENT_ID: ${{ secrets.TWITCH_WEB_CLIENT_ID }}
           # Branding / metadata baked into the frontend bundle.
           VITE_SITE_TITLE:        ${{ inputs.site_title }}
+          VITE_SITE_HEADING:      ${{ inputs.site_heading }}
           VITE_OG_DESCRIPTION:    ${{ inputs.og_description }}
           VITE_SITE_DESCRIPTION:  ${{ inputs.site_description }}
           VITE_SITE_URL:          ${{ steps.site-url.outputs.url }}

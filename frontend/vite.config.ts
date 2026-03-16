@@ -109,6 +109,15 @@ function dbRangePlugin(): Plugin {
     process.env['VITE_SITE_TITLE'] = m?.[1] ?? 'twist-clear clip viewer';
   }
 
+  // site_heading — HTML content for the <h1> in the page header.
+  // Falls back to site_title when unset, so plain-text titles work without change.
+  // Unlike site_title, this may contain HTML (e.g. <img> for icons).
+  // site_title remains plain text and continues to drive <title> and document.title.
+  if (!process.env['VITE_SITE_HEADING']) {
+    const m = /site_heading\s*=\s*"([^"]+)"/.exec(toml);
+    process.env['VITE_SITE_HEADING'] = m?.[1] || process.env['VITE_SITE_TITLE'];
+  }
+
   // site_description — optional subtitle shown in the page header (hidden on mobile).
   // Defaults to empty string so nothing is rendered when unconfigured.
   if (!process.env['VITE_SITE_DESCRIPTION']) {

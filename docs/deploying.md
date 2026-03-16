@@ -214,8 +214,9 @@ with:
 
 | Input | Required | Default | Description |
 |---|---|---|---|
-| `site_title` | No | `twist-clear clip viewer` | Title prefix shown in the browser tab and page heading (streamer names are appended automatically at runtime) |
-| `site_description` | No | *(empty)* | Optional subtitle shown below the site title in the page header. Visible on desktop; collapsible via a chevron button on narrow screens. Leave empty for no subtitle. |
+| `site_title` | No | `twist-clear clip viewer` | Plain-text title prefix shown in the browser tab (`<title>`) and `og:title`. Streamer names are appended automatically at runtime. Must be plain text — use `site_heading` for HTML content. |
+| `site_heading` | No | *(falls back to `site_title`)* | HTML content for the `<h1>` page heading. Can contain HTML (e.g. `<img src="icon.png" height="20">` for a custom icon). When omitted, the `<h1>` shows the same text as `site_title`. |
+| `site_description` | No | *(empty)* | Optional subtitle shown below the site heading in the page header. Can contain HTML. Visible on desktop; collapsible via a chevron button on narrow screens. Leave empty for no subtitle. |
 | `og_description` | No | `A Twitch clip viewer.` | Text for the `og:description` meta tag used in social link previews |
 | `site_url` | No | *(auto-computed)* | Canonical URL for the `og:url` meta tag (e.g. `https://user.github.io/my-clips/`). Auto-computed from the calling repo if omitted |
 
