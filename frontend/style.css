@@ -851,13 +851,14 @@ main { padding: 24px; }
 
 .clip-info { padding: 10px 12px 12px; }
 
-.clip-title {
-  font-size: 13px;
+.clip-title, .clip-title-text {
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.45;
   margin-bottom: 8px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
