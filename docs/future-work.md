@@ -9,6 +9,24 @@ Deferred items with rationale. See the relevant source files for implementation 
 - featured clips
 ---
 
+## DOM/integration testing (jsdom or Playwright)
+
+Unit tests currently cover only pure functions (query builder, hash
+serialisation, format helpers, etc.). The render pipeline, embed expand/collapse,
+and event wiring in `app.ts` are exercised only by manual browser testing.
+
+Adding [jsdom](https://github.com/jsdom/jsdom) via Vitest's `environment: 'jsdom'`
+would let us unit-test DOM-touching code (e.g. `expandCard`, `expandRow`, clip
+HTML rendering) without a real browser. The main blocker is that sql.js-httpvfs
+uses `SharedArrayBuffer` and a Web Worker, neither of which jsdom emulates — so
+DB-dependent code paths would still need to be mocked or tested with a full
+browser tool like Playwright.
+
+Deferred: the benefit is real but the setup cost (worker mocks, WASM stubs) is
+non-trivial. Worth revisiting once the pure-function test suite is mature.
+
+---
+
 ## history API
 
 I implemented by hand some basic replaceState handling so back and forwards work.

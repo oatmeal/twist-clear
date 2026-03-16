@@ -301,7 +301,7 @@ export function detectLang(): Lang {
 
 export function setLang(l: Lang): void {
   lang = l;
-  document.documentElement.lang = l;
+  if (typeof document !== 'undefined') document.documentElement.lang = l;
 }
 
 export function t(): Translations {

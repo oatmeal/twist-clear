@@ -28,6 +28,8 @@ src/
   state.ts      # All shared mutable state + explicit typed setters
   twitch.ts     # Helix API client for live clips (auto-paginates, resolves game names)
   lib/
+    clipHtml.ts   # ClipItem type + clipCardHtml/clipListRowHtml/attachImgErrorHandlers
+                  #   Pure HTML template functions; tzOffset is an explicit param (no state import)
     dateUtils.ts  # Timezone-aware date arithmetic + UTC-offset helpers
     format.ts     # escHtml, fmtDuration, fmtViews, fmtDateTime
     hash.ts       # Pure serializeHash() / deserializeHash() — URL hash state
@@ -257,9 +259,12 @@ breaks both cycles:
 ### Pure functions for testability
 
 `buildWhere(opts)` in `lib/query.ts`, `serializeHash`/`deserializeHash` in
-`lib/hash.ts`, and `filterLiveClips(opts)` in `lib/liveFilter.ts` all take
-their inputs as explicit parameters and do not read from `state`. This makes
-them fully unit-testable without a DOM or DB.
+`lib/hash.ts`, `filterLiveClips(opts)` in `lib/liveFilter.ts`, and the clip
+HTML template functions in `lib/clipHtml.ts` all take their inputs as explicit
+parameters and do not read from `state`. This makes them fully unit-testable
+without a DOM or DB. In particular, `clipCardHtml` and `clipListRowHtml` accept
+`tzOffset` as an explicit parameter rather than reading `state.tzOffset`
+directly.
 
 ### FTS5 trigram search
 
@@ -466,6 +471,8 @@ npm run test:watch   # re-run on change
 ```
 
 Tests cover: `buildWhere` combinations, `serializeHash`/`deserializeHash`
-round-trips, date utilities, format helpers, live clip filtering, and OAuth
-crypto helpers. The render pipeline and DOM interactions are not unit-tested
-(they require a live DB and browser environment).
+round-trips, date utilities, format helpers, live clip filtering, OAuth crypto
+helpers, `extractClipSlug` URL parsing, and `clipCardHtml`/`clipListRowHtml`
+HTML structure, XSS escaping, game name language switching, and live-clip class.
+The render pipeline and DOM interactions are not unit-tested (they require a
+live DB and browser environment).

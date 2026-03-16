@@ -62,7 +62,7 @@ export function resetIfInGrid(): void {
 
 // ── Internal helpers ──────────────────────────────────────────────────────
 
-function extractClipSlug(url: string): string | null {
+export function extractClipSlug(url: string): string | null {
   try {
     const u = new URL(url);
     const parts = u.pathname.split('/').filter(Boolean);

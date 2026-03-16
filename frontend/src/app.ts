@@ -1,6 +1,6 @@
 import * as state from './state';
 import { initDb, q, DB_URL } from './db';
-import { escHtml, fmtDuration, fmtViews, fmtDateTime, fmtDate, fmtTime } from './lib/format';
+import { escHtml, fmtDateTime } from './lib/format';
 import { buildWhere, ORDER } from './lib/query';
 import type { SortKey } from './lib/query';
 import { serializeHash, serializeHashExecptSearchQuery, deserializeHash, HashState } from './lib/hash';
@@ -34,6 +34,8 @@ import {
   rankLiveClips, computeViewCountPage, interleavePage,
 } from './lib/liveRank';
 import type { ViewCountSortKey } from './lib/liveRank';
+import { clipCardHtml, clipListRowHtml, attachImgErrorHandlers } from './lib/clipHtml';
+import type { ClipItem } from './lib/clipHtml';
 
 // ── URL hash state ────────────────────────────────────────────────────────
 
@@ -278,100 +280,6 @@ async function updateGameFilter(liveGameCounts: Map<string, LiveGameEntry>): Pro
 }
 
 // ── Clip card HTML helper ─────────────────────────────────────────────────
-
-// Shared template for DB clips (render) and live clips (renderLiveSection).
-// Shared clip data shape used by both grid cards and list rows.
-type ClipItem = {
-  url: string; thumbnail_url: string; title: string; duration: number;
-  view_count: number; game_name: string; game_name_ja: string;
-  game_id: string; creator_name: string; created_at: string;
-  isLive: boolean;
-};
-
-// The onerror attribute is intentionally omitted — broken images are handled
-// by attachImgErrorHandlers() after setting innerHTML, avoiding inline JS
-// which is blocked by the Content-Security-Policy.
-function clipCardHtml(clip: {
-  url: string; thumbnail_url: string; title: string; duration: number;
-  view_count: number; game_name: string; game_name_ja?: string;
-  game_id?: string; creator_name: string; created_at: string;
-}, extraClass = ''): string {
-  // Show the Japanese name when the UI language is Japanese and one is available;
-  // otherwise fall back to the English name from the games table.
-  const displayGameName = (lang === 'ja' && clip.game_name_ja) ? clip.game_name_ja : clip.game_name;
-  const gameEl = displayGameName
-    ? `<button class="clip-game-link" type="button" data-game-id="${escHtml(clip.game_id ?? '')}">${escHtml(displayGameName)}</button>`
-    : '';
-  return `
-    <div class="clip-card${extraClass}" data-clip-url="${escHtml(clip.url)}">
-      <div class="clip-thumb">
-        <img src="${escHtml(clip.thumbnail_url)}" alt="${escHtml(clip.title)}" loading="lazy">
-        <div class="clip-play-icon">
-          <svg viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
-        </div>
-        <span class="clip-duration">${fmtDuration(clip.duration)}</span>
-      </div>
-      <div class="clip-info">
-        <div class="clip-title">
-          <a href="${escHtml(clip.url)}" target="_blank" rel="noopener noreferrer">
-            <svg class="clip-ext-icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 1H1v10h10V8.5M7 1h4m0 0v4m0-4L5 7"/></svg>
-          </a>
-          <span class="clip-title-text">${escHtml(clip.title)}</span>
-        </div>
-        <div class="clip-meta">
-          <span class="views">${t().views(fmtViews(clip.view_count, lang))}</span>
-          ${gameEl}
-          <span>${t().creatorLine(escHtml(clip.creator_name), fmtDateTime(clip.created_at, lang, state.tzOffset))}</span>
-        </div>
-      </div>
-    </div>`;
-}
-
-function clipListRowHtml(clip: ClipItem): string {
-  const displayGameName = (lang === 'ja' && clip.game_name_ja) ? clip.game_name_ja : clip.game_name;
-  const gameEl = displayGameName
-    ? `<button class="clip-game-link" type="button" data-game-id="${escHtml(clip.game_id)}">${escHtml(displayGameName)}</button>`
-    : '';
-  const dateStr = fmtDateTime(clip.created_at, lang, state.tzOffset);
-  // Split into date-only and time-only so the meta cell can wrap between them
-  // (never mid-date or mid-time) via white-space: nowrap on each span.
-  const datePart = fmtDate(clip.created_at, state.tzOffset, lang);
-  const timePart = fmtTime(clip.created_at, lang, state.tzOffset);
-  const liveClass = clip.isLive ? ' live-clip' : '';
-  return `
-    <tr class="clip-row${liveClass}" data-clip-url="${escHtml(clip.url)}">
-      <td class="clip-col-title">
-        <div class="clip-list-title-cell">
-          <div class="clip-thumb clip-list-thumb">
-            <img src="${escHtml(clip.thumbnail_url)}" alt="${escHtml(clip.title)}" loading="lazy">
-            <span class="clip-duration">${fmtDuration(clip.duration)}</span>
-          </div>
-          <a href="${escHtml(clip.url)}" target="_blank" rel="noopener noreferrer"><svg class="clip-ext-icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 1H1v10h10V8.5M7 1h4m0 0v4m0-4L5 7"/></svg></a>
-          <span class="clip-title-text">${escHtml(clip.title)}</span>
-        </div>
-      </td>
-      <td class="clip-col-game">${gameEl}</td>
-      <td class="clip-col-creator">${escHtml(clip.creator_name)}</td>
-      <td class="clip-col-date">${dateStr}</td>
-      <td class="clip-col-meta">
-        <div class="clip-meta-game">${gameEl}</div>
-        <div class="clip-meta-creator">${escHtml(clip.creator_name)}</div>
-        <div class="clip-meta-date">
-          <span class="clip-meta-date-part">${escHtml(datePart)}</span>
-          <span class="clip-meta-date-part">${escHtml(timePart)}</span>
-        </div>
-      </td>
-      <td class="clip-col-views">${fmtViews(clip.view_count, lang)}</td>
-    </tr>`;
-}
-
-// Attach img error handlers after innerHTML is set (avoids inline onerror
-// attributes which are blocked by the Content-Security-Policy).
-function attachImgErrorHandlers(container: HTMLElement): void {
-  container.querySelectorAll<HTMLImageElement>('.clip-thumb img').forEach(img => {
-    img.addEventListener('error', () => img.classList.add('broken'), { once: true });
-  });
-}
 
 // ── Live clips ────────────────────────────────────────────────────────────
 
@@ -790,12 +698,12 @@ export async function render(): Promise<void> {
           `<th class="clip-col-meta">${escHtml(tr.listColGame)} / ${escHtml(tr.listColCreator)} / ${escHtml(tr.listColDate)}</th>` +
           `<th class="clip-col-views">${escHtml(tr.listColViews)}</th>` +
           `</tr></thead>`;
-        const tbody = clipItems.map(clip => clipListRowHtml(clip)).join('');
+        const tbody = clipItems.map(clip => clipListRowHtml(clip, state.tzOffset)).join('');
         grid.innerHTML = `<table class="clips-table">${thead}<tbody>${tbody}</tbody></table>`;
         grid.classList.add('is-list');
         attachImgErrorHandlers(grid);
       } else {
-        grid.innerHTML = clipItems.map(clip => clipCardHtml(clip, clip.isLive ? ' live-clip' : '')).join('');
+        grid.innerHTML = clipItems.map(clip => clipCardHtml(clip, clip.isLive ? ' live-clip' : '', state.tzOffset)).join('');
         grid.classList.remove('is-list');
         attachImgErrorHandlers(grid);
       }
