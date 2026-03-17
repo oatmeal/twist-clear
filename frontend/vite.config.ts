@@ -87,6 +87,30 @@ function dbRangePlugin(): Plugin {
   };
 }
 
+// Extract a string value from a TOML document by key.
+// Supports all four TOML string types:
+//   basic          key = "value"
+//   literal        key = 'value'
+//   multi-line basic    key = """value"""
+//   multi-line literal  key = '''value'''
+// The leading newline that TOML allows immediately after the opening triple-quote
+// is stripped. No other TOML escape processing is performed (sufficient for the
+// simple colour/URL/name values stored in config.toml).
+function readTomlString(toml: string, key: string): string | undefined {
+  let m: RegExpExecArray | null;
+  // Multi-line basic string must be tried before basic to avoid """..."""
+  // being partially matched by the single-quote pattern.
+  m = new RegExp(`${key}\\s*=\\s*"""([\\s\\S]*?)"""`).exec(toml);
+  if (m) return m[1]!.replace(/^\n/, '');
+  m = new RegExp(`${key}\\s*=\\s*'''([\\s\\S]*?)'''`).exec(toml);
+  if (m) return m[1]!.replace(/^\n/, '');
+  m = new RegExp(`${key}\\s*=\\s*"([^"]*)"`).exec(toml);
+  if (m) return m[1]!;
+  m = new RegExp(`${key}\\s*=\\s*'([^']*)'`).exec(toml);
+  if (m) return m[1]!;
+  return undefined;
+}
+
 // Inject VITE_ vars from config.toml for local dev so users don't need a
 // separate .env.local file. In CI, env vars are set explicitly by the workflow
 // and process.env checks below will short-circuit before touching toml content.
@@ -98,15 +122,14 @@ function dbRangePlugin(): Plugin {
   // web_client_id — Public Twitch app for browser OAuth (implicit grant).
   // Must be a separate app from the scraper's Confidential client_id.
   if (!process.env['VITE_TWITCH_CLIENT_ID']) {
-    const m = /web_client_id\s*=\s*"([^"]+)"/.exec(toml);
-    if (m?.[1]) process.env['VITE_TWITCH_CLIENT_ID'] = m[1];
+    const v = readTomlString(toml, 'web_client_id');
+    if (v) process.env['VITE_TWITCH_CLIENT_ID'] = v;
   }
 
   // site_title — viewer site name shown in the browser tab and page heading.
   // Streamer names are appended at runtime by JS.
   if (!process.env['VITE_SITE_TITLE']) {
-    const m = /site_title\s*=\s*"([^"]+)"/.exec(toml);
-    process.env['VITE_SITE_TITLE'] = m?.[1] ?? 'twist-clear clip viewer';
+    process.env['VITE_SITE_TITLE'] = readTomlString(toml, 'site_title') ?? 'twist-clear clip viewer';
   }
 
   // site_heading — HTML content for the <h1> in the page header.
@@ -114,15 +137,13 @@ function dbRangePlugin(): Plugin {
   // Unlike site_title, this may contain HTML (e.g. <img> for icons).
   // site_title remains plain text and continues to drive <title> and document.title.
   if (!process.env['VITE_SITE_HEADING']) {
-    const m = /site_heading\s*=\s*"([^"]+)"/.exec(toml);
-    process.env['VITE_SITE_HEADING'] = m?.[1] || process.env['VITE_SITE_TITLE'];
+    process.env['VITE_SITE_HEADING'] = readTomlString(toml, 'site_heading') || process.env['VITE_SITE_TITLE'];
   }
 
   // site_description — optional subtitle shown in the page header (hidden on mobile).
   // Defaults to empty string so nothing is rendered when unconfigured.
   if (!process.env['VITE_SITE_DESCRIPTION']) {
-    const m = /site_description\s*=\s*"([^"]+)"/.exec(toml);
-    process.env['VITE_SITE_DESCRIPTION'] = m?.[1] ?? '';
+    process.env['VITE_SITE_DESCRIPTION'] = readTomlString(toml, 'site_description') ?? '';
   }
 
   // timestamp — used in query parameter to og:image URL.
@@ -134,14 +155,12 @@ function dbRangePlugin(): Plugin {
 
   // og_description — text for the og:description meta tag.
   if (!process.env['VITE_OG_DESCRIPTION']) {
-    const m = /og_description\s*=\s*"([^"]+)"/.exec(toml);
-    process.env['VITE_OG_DESCRIPTION'] = m?.[1] ?? 'A Twitch clip viewer.';
+    process.env['VITE_OG_DESCRIPTION'] = readTomlString(toml, 'og_description') ?? 'A Twitch clip viewer.';
   }
 
   // site_url — canonical URL for og:url. Empty in local dev; CI auto-computes it.
   if (!process.env['VITE_SITE_URL']) {
-    const m = /site_url\s*=\s*"([^"]+)"/.exec(toml);
-    process.env['VITE_SITE_URL'] = m?.[1] ?? '';
+    process.env['VITE_SITE_URL'] = readTomlString(toml, 'site_url') ?? '';
   }
 
   // Optional CSS colour overrides — no defaults; style.css :root values apply
@@ -159,8 +178,8 @@ function dbRangePlugin(): Plugin {
   ];
   for (const [envVar, tomlKey] of cssVarMap) {
     if (!process.env[envVar]) {
-      const m = new RegExp(`${tomlKey}\\s*=\\s*"([^"]+)"`).exec(toml);
-      if (m?.[1]) process.env[envVar] = m[1];
+      const v = readTomlString(toml, tomlKey);
+      if (v) process.env[envVar] = v;
     }
   }
 }
