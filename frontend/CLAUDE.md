@@ -287,12 +287,16 @@ NOT). This makes boolean searches work for short Japanese terms. Only if
 does the code fall back to a plain `c.title LIKE '%query%'`.
 
 Supported boolean syntax: space-separated terms are implicit AND; `OR` or `|`
-for OR; `-word` or `-"phrase"` to exclude. Full-width space (`\u3000`) is
-normalized to ASCII space globally. Full-width minus (`\uff0d`) is recognized
-as a negation-prefix alias only at the start of a token — inside a bare word it
-is preserved as-is, so searches for titles containing `－` work correctly.
-Each bare term is wrapped in FTS5 double-quotes to neutralize any special
-characters in the term text. A `?` / Help button in `#header-controls` opens
+for OR; `-word`, `-"phrase"`, or `-(A OR B)` to exclude. The `-` operator is
+strictly binary (matching FTS5's own NOT semantics): it binds tightly to exactly
+one atom on its right, so `mario -(zelda OR link)` emits
+`"mario" NOT ("zelda" OR "link")` for FTS5 and expands via De Morgan for the
+LIKE fallback (`NOT (A OR B)` → `NOT A AND NOT B`). Full-width space (`\u3000`)
+is normalized to ASCII space globally. Full-width minus (`\uff0d`) is recognized
+as a NOT-operator alias only at the start of a token — inside a bare word it is
+preserved as-is, so searches for titles containing `－` work correctly. Each
+bare term is wrapped in FTS5 double-quotes to neutralize any special characters
+in the term text. A `?` / Help button in `#header-controls` opens
 a general "How to use" modal (`#search-help-modal`, `id="btn-help"`) covering
 browsing, timezone, layout, sort, game filter, search syntax (translated EN/JA),
 date filtering, login, and URL sharing.

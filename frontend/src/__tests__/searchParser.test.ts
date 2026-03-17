@@ -249,6 +249,98 @@ describe('parseLikeSearchQuery — Japanese IME normalization', () => {
   });
 });
 
+describe('parseSearchQuery — parentheses grouping', () => {
+  it('groups OR inside AND: (A OR B) C', () => {
+    expect(parseSearchQuery('(mario OR zelda) boss')).toBe('("mario" OR "zelda") "boss"');
+  });
+
+  it('groups OR after term: A (B OR C)', () => {
+    expect(parseSearchQuery('mario (zelda OR link)')).toBe('"mario" ("zelda" OR "link")');
+  });
+
+  it('group with negated outer term: (A OR B) -C', () => {
+    expect(parseSearchQuery('(mario OR zelda) -boss')).toBe('("mario" OR "zelda") NOT "boss"');
+  });
+
+  it('three-term group: (A OR B OR C) D', () => {
+    expect(parseSearchQuery('(mario OR zelda OR link) boss')).toBe('("mario" OR "zelda" OR "link") "boss"');
+  });
+
+  it('AND group inside OR: (A B) OR C emits same as A B OR C', () => {
+    // In FTS5, AND binds tighter than OR, so parens around AND-group are redundant
+    expect(parseSearchQuery('(mario boss) OR zelda')).toBe('"mario" "boss" OR "zelda"');
+  });
+
+  it('group containing only negated terms with positive term outside', () => {
+    // (-mario OR -zelda) would be a purely negative group; hasPositiveTerm is
+    // satisfied by "boss" outside the group
+    expect(parseSearchQuery('boss (-mario OR -zelda)')).toBe('"boss" (NOT "mario" OR NOT "zelda")');
+  });
+
+  it('negated group: -(A OR B) is treated as binary NOT with a group operand', () => {
+    expect(parseSearchQuery('mario -(zelda OR link)')).toBe('"mario" NOT ("zelda" OR "link")');
+  });
+
+  it('negated AND group: -(A B)', () => {
+    expect(parseSearchQuery('mario -(zelda boss)')).toBe('"mario" NOT ("zelda" "boss")');
+  });
+
+  it('empty group is ignored', () => {
+    expect(parseSearchQuery('mario ()')).toBe('"mario"');
+  });
+
+  it('unclosed paren — parses whatever is inside', () => {
+    expect(parseSearchQuery('mario (zelda OR link')).toBe('"mario" ("zelda" OR "link")');
+  });
+
+  it('returns null for short terms inside a group (FTS5 trigram minimum)', () => {
+    expect(parseSearchQuery('(ab OR zelda) boss')).toBeNull();
+  });
+
+  it('returns null for group with no positive terms (purely negated group, no outer positive)', () => {
+    expect(parseSearchQuery('(-mario OR -zelda)')).toBeNull();
+  });
+});
+
+describe('parseLikeSearchQuery — parentheses grouping', () => {
+  it('groups OR inside AND: (A OR B) C', () => {
+    const result = parseLikeSearchQuery('(猫 OR 犬) 鳥');
+    expect(result).not.toBeNull();
+    expect(result!.clause).toBe('((c.title LIKE :s0 OR c.title LIKE :s1) AND c.title LIKE :s2)');
+    expect(result!.params).toEqual({ ':s0': '%猫%', ':s1': '%犬%', ':s2': '%鳥%' });
+  });
+
+  it('groups OR after term: A (B OR C)', () => {
+    const result = parseLikeSearchQuery('鳥 (猫 OR 犬)');
+    expect(result!.clause).toBe('(c.title LIKE :s0 AND (c.title LIKE :s1 OR c.title LIKE :s2))');
+    expect(result!.params).toEqual({ ':s0': '%鳥%', ':s1': '%猫%', ':s2': '%犬%' });
+  });
+
+  it('group with negated outer term: (A OR B) -C', () => {
+    const result = parseLikeSearchQuery('(猫 OR 犬) -鳥');
+    expect(result!.clause).toBe('((c.title LIKE :s0 OR c.title LIKE :s1) AND c.title NOT LIKE :s2)');
+    expect(result!.params).toEqual({ ':s0': '%猫%', ':s1': '%犬%', ':s2': '%鳥%' });
+  });
+
+  it('returns null for group with no positive terms', () => {
+    expect(parseLikeSearchQuery('(-猫 OR -犬)')).toBeNull();
+  });
+
+  it('negated OR group: -(A OR B) expands via De Morgan to NOT A AND NOT B', () => {
+    const result = parseLikeSearchQuery('鳥 -(猫 OR 犬)');
+    expect(result).not.toBeNull();
+    expect(result!.clause).toBe('(c.title LIKE :s0 AND (c.title NOT LIKE :s1 AND c.title NOT LIKE :s2))');
+    expect(result!.params).toEqual({ ':s0': '%鳥%', ':s1': '%猫%', ':s2': '%犬%' });
+  });
+
+  it('negated AND group: -(A B) expands via De Morgan to NOT A OR NOT B', () => {
+    const result = parseLikeSearchQuery('鳥 -(猫 犬)');
+    expect(result).not.toBeNull();
+    expect(result!.clause).toBe('(c.title LIKE :s0 AND (c.title NOT LIKE :s1 OR c.title NOT LIKE :s2))');
+    expect(result!.params).toEqual({ ':s0': '%鳥%', ':s1': '%猫%', ':s2': '%犬%' });
+  });
+});
+
 describe('parseSearchQuery — edge cases', () => {
   it('strips embedded double-quotes from a bare word', () => {
     expect(parseSearchQuery('foo"bar')).toBe('"foobar"');

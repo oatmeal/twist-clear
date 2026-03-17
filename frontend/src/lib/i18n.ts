@@ -49,6 +49,7 @@ export interface Translations {
   searchHelpOr: string;
   searchHelpNot: string;
   searchHelpPhrase: string;
+  searchHelpGroup: string;
   searchHelpNote: string;
   // Help modal — date section
   helpDate: string;
@@ -144,8 +145,9 @@ const en: Translations = {
   searchHelpTitle: 'Search syntax',
   searchHelpAnd: 'Both words (AND)',
   searchHelpOr: 'Either word (OR)',
-  searchHelpNot: 'Include first word, exclude second word (NOT)',
+  searchHelpNot: 'Include word1, exclude word2 (NOT)',
   searchHelpPhrase: 'Exact phrase',
+  searchHelpGroup: 'Grouping',
   searchHelpNote: 'Spaces are required around OR and |.',
   helpDate: 'Filtering by date',
   helpDateDesc: 'Type dates into the From / End date boxes, or click the calendar icon to browse by year, month, week, or day.',
@@ -240,6 +242,7 @@ const ja: Translations = {
   searchHelpOr: 'どちらかの語を含む（OR）',
   searchHelpNot: '前者を含んで後者を除外（NOT）',
   searchHelpPhrase: 'フレーズ検索',
+  searchHelpGroup: 'グループ化',
   searchHelpNote: 'OR・|・｜ の前後にはスペースが必要です。',
   helpDate: '日付で絞り込む',
   helpDateDesc: '開始日・終了日に直接入力するか、カレンダーアイコンをクリックして年・月・週・日単位で選択できます。',
