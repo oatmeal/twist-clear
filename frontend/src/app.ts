@@ -876,6 +876,8 @@ function applyTranslations(): void {
   if (helpNot) helpNot.textContent = tr.searchHelpNot;
   const helpPhrase = document.getElementById('search-help-phrase');
   if (helpPhrase) helpPhrase.textContent = tr.searchHelpPhrase;
+  const helpGroup = document.getElementById('search-help-group');
+  if (helpGroup) helpGroup.textContent = tr.searchHelpGroup;
   const helpNote = document.getElementById('search-help-note');
   if (helpNote) helpNote.textContent = tr.searchHelpNote;
   // Date section

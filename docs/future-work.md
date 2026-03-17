@@ -76,8 +76,8 @@ for a personal viewer; to fix, escape them before interpolation and add an
 
 ## Title search
 
-Support more complicated queries (parentheses around AND and OR clauses, etc.)?
-Make sure the updates to i18n strings to explain NOT syntax are accurate.
+Parentheses grouping (`(A OR B) C`) is implemented. NOT syntax i18n strings
+are accurate. No further work identified.
 
 ---
 
