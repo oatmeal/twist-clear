@@ -11,7 +11,7 @@ import {
   localDateToUtcBound,
   utcTimestampToLocalDate,
 } from './lib/dateUtils';
-import { t } from './lib/i18n';
+import { t, lang } from './lib/i18n';
 
 // ── Raw timestamp storage ─────────────────────────────────────────────────
 // Stored at init time so that recomputeDateBounds() can re-derive calMinDate /
@@ -29,6 +29,289 @@ function callRender(): void {
   // Fire and forget — the AbortController in render() handles deduplication
   // when multiple rapid interactions trigger overlapping renders.
   void _onRender?.();
+}
+
+// ── Game preview strip ────────────────────────────────────────────────────
+
+// True when the device supports hover (i.e. not a touch-only device).
+// Evaluated once at module load — hover capability doesn't change mid-session.
+const _supportsHover = window.matchMedia('(hover: hover)').matches;
+
+interface GamePreviewEntry { name: string; name_ja: string; cnt: number; }
+interface PeriodGames { games: GamePreviewEntry[]; totalGames: number; }
+
+// Cache keyed by `"${utcFrom}|${utcTo}"` — avoids re-querying the same period.
+const _previewCache = new Map<string, PeriodGames>();
+
+// The default preview to revert to on mouseleave (current selection or nav position).
+let _defaultPreview: { label: string; data: PeriodGames } | null = null;
+
+// Sequence counter for hover previews — incremented on hover start and mouseleave.
+// Lets async handlers detect when they've been superseded and bail out.
+let _hoverSeq = 0;
+
+// Sequence counter for the default prefetch — incremented on each renderCalendar.
+// Lets a stale prefetchDefault skip its final display if a newer one has started.
+let _defaultSeq = 0;
+
+// True while a hover preview is active. Prevents prefetchDefault from overwriting
+// an in-progress hover preview when the fetch completes after the hover started.
+let _hovering = false;
+
+/**
+ * Called by app.ts after every game count update. Sets the default preview
+ * shown in the strip when nothing is hovered and no specific day/week selection
+ * overrides it. Immediately updates the strip unless a hover is in progress.
+ */
+export function setDefaultPreviewGames(
+  games: GamePreviewEntry[],
+  label: string,
+): void {
+  const data: PeriodGames = { games, totalGames: games.length };
+  _defaultPreview = { label, data };
+  if (!_hovering) displayPreview(label, data);
+}
+
+/** Seed the preview cache from game-filter results already computed by app.ts. */
+export function primePreviewCache(
+  utcFrom: string,
+  utcTo: string,
+  rows: { name: string; name_ja: string; cnt: number }[],
+): void {
+  const cacheKey = `${utcFrom}|${utcTo}`;
+  if (_previewCache.has(cacheKey)) return; // already populated; don't overwrite
+  _previewCache.set(cacheKey, {
+    games: rows.map(r => ({ name: r.name, name_ja: r.name_ja, cnt: r.cnt })),
+    totalGames: rows.length,
+  });
+}
+
+/** Format a YYYY-MM-DD date string for display in the preview label. */
+function formatPreviewDate(dateStr: string): string {
+  const parts = dateStr.split('-');
+  const d = new Date(Number(parts[0]!), Number(parts[1]!) - 1, Number(parts[2]!));
+  return lang === 'ja'
+    ? d.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })
+    : d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+// ── Bound helpers (local dates → UTC strings for preview queries) ──────────
+
+function yearUtcBounds(y: number): [string, string] {
+  return [
+    localDateToUtcBound(`${y}-01-01`, state.tzOffset),
+    localDateToUtcBound(`${y + 1}-01-01`, state.tzOffset),
+  ];
+}
+
+function monthUtcBounds(y: number, m: number): [string, string] {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return [
+    localDateToUtcBound(`${y}-${pad(m + 1)}-01`, state.tzOffset),
+    localDateToUtcBound(
+      m === 11 ? `${y + 1}-01-01` : `${y}-${pad(m + 2)}-01`,
+      state.tzOffset,
+    ),
+  ];
+}
+
+function weekUtcBounds(sundayStr: string): [string, string] {
+  return [
+    localDateToUtcBound(sundayStr, state.tzOffset),
+    localDateToUtcBound(addDays(sundayStr, 7), state.tzOffset),
+  ];
+}
+
+function dayUtcBounds(dateStr: string): [string, string] {
+  return [
+    localDateToUtcBound(dateStr, state.tzOffset),
+    localDateToUtcBound(addDays(dateStr, 1), state.tzOffset),
+  ];
+}
+
+// ── Preview DOM helpers ───────────────────────────────────────────────────
+
+function displayPreview(label: string, data: PeriodGames): void {
+  const strip = document.getElementById('cal-game-preview');
+  if (!strip) return;
+  strip.style.display = 'block';
+  document.getElementById('cal-preview-label')!.textContent = label;
+
+  const gamesEl = document.getElementById('cal-preview-games')!;
+  gamesEl.innerHTML = '';
+
+  const top5 = data.games.slice(0, 5);
+  const maxCnt = top5[0]?.cnt ?? 1; // top5 is sorted by cnt desc
+
+  for (const g of top5) {
+    const gameName = lang === 'ja' && g.name_ja ? g.name_ja : g.name;
+    const pct = Math.round((g.cnt / maxCnt) * 100);
+
+    const row = document.createElement('div');
+    row.className = 'cal-preview-row';
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'cal-preview-name';
+    nameSpan.textContent = gameName;
+
+    const barWrap = document.createElement('span');
+    barWrap.className = 'cal-preview-bar-wrap';
+    const bar = document.createElement('span');
+    bar.className = 'cal-preview-bar';
+    bar.style.width = `${pct}%`;
+    barWrap.appendChild(bar);
+
+    const countSpan = document.createElement('span');
+    countSpan.className = 'cal-preview-count';
+    countSpan.textContent = g.cnt.toLocaleString();
+
+    row.appendChild(nameSpan);
+    row.appendChild(barWrap);
+    row.appendChild(countSpan);
+    gamesEl.appendChild(row);
+  }
+
+  if (data.totalGames > 5) {
+    const more = document.createElement('div');
+    more.className = 'cal-preview-more';
+    more.textContent = t().calPreviewMore(data.totalGames - 5);
+    gamesEl.appendChild(more);
+  }
+}
+
+// ── Preview data fetching ─────────────────────────────────────────────────
+
+async function fetchPreviewData(utcFrom: string, utcTo: string): Promise<PeriodGames> {
+  const cacheKey = `${utcFrom}|${utcTo}`;
+  const cached = _previewCache.get(cacheKey);
+  if (cached) return cached;
+
+  const rows = await q(
+    `SELECT c.game_id, g.name, g.name_ja, COUNT(*) AS cnt
+     FROM clips c
+     JOIN games g ON g.id = c.game_id
+     WHERE c.created_at >= :from AND c.created_at < :to
+     GROUP BY c.game_id
+     ORDER BY cnt DESC`,
+    { ':from': utcFrom, ':to': utcTo },
+  ) as { game_id: unknown; name: unknown; name_ja: unknown; cnt: unknown }[];
+
+  const games: GamePreviewEntry[] = rows.map(r => ({
+    name: String(r.name ?? ''),
+    name_ja: String(r.name_ja ?? ''),
+    cnt: Number(r.cnt),
+  }));
+  const data: PeriodGames = { games, totalGames: games.length };
+  _previewCache.set(cacheKey, data);
+  return data;
+}
+
+// ── Preview show/revert ───────────────────────────────────────────────────
+
+async function showPreviewFor(utcFrom: string, utcTo: string, periodStr: string): Promise<void> {
+  _hovering = true;
+  const seq = ++_hoverSeq;
+  // Show strip and update label immediately — leave games list intact to avoid flicker
+  const strip = document.getElementById('cal-game-preview');
+  if (strip) strip.style.display = 'block';
+  const labelEl = document.getElementById('cal-preview-label');
+  if (labelEl) labelEl.textContent = periodStr;
+
+  const data = await fetchPreviewData(utcFrom, utcTo);
+  if (seq !== _hoverSeq) return; // superseded by another hover or mouseleave
+
+  const total = data.games.reduce((s, g) => s + g.cnt, 0);
+  const label = total > 0 ? `${periodStr} · ${t().clipCount(total)}` : periodStr;
+  displayPreview(label, data);
+}
+
+function revertToDefault(): void {
+  _hovering = false;
+  _hoverSeq++; // cancel any in-flight hover query
+  if (_defaultPreview) {
+    displayPreview(_defaultPreview.label, _defaultPreview.data);
+  } else {
+    // No default yet (e.g. before the first render completes) — hide strip.
+    const strip = document.getElementById('cal-game-preview');
+    if (strip) strip.style.display = 'none';
+  }
+}
+
+// ── Convenience wrappers for each period type ─────────────────────────────
+
+function showPreviewForYear(y: number): void {
+  const [from, to] = yearUtcBounds(y);
+  void showPreviewFor(from, to, String(y));
+}
+
+function showPreviewForMonth(y: number, m: number): void {
+  const [from, to] = monthUtcBounds(y, m);
+  void showPreviewFor(from, to, `${t().monthLong[m]!} ${y}`);
+}
+
+function showPreviewForWeek(sundayStr: string): void {
+  const [from, to] = weekUtcBounds(sundayStr);
+  void showPreviewFor(from, to, t().weekLabel(sundayStr));
+}
+
+function showPreviewForDay(dateStr: string): void {
+  const [from, to] = dayUtcBounds(dateStr);
+  void showPreviewFor(from, to, formatPreviewDate(dateStr));
+}
+
+// ── Default prefetch ──────────────────────────────────────────────────────
+
+/**
+ * Determines the "default" period shown in the strip when nothing is hovered:
+ * - calDay (single-day selection)  → that day
+ * - calWeek (week selection)       → that week
+ * - calMonth (month view)          → that month
+ * - else (year view)               → that year
+ *
+ * Fetches (or hits cache) and stores in _defaultPreview, then displays it.
+ * Called fire-and-forget at the end of renderCalendar().
+ */
+async function prefetchDefault(): Promise<void> {
+  const seq = ++_defaultSeq;
+
+  if (state.calDay && !state.gameFilter) {
+    // Single-day selection, no game filter: override with full day breakdown.
+    // When a game filter is active, app.ts already pushed the correct filtered
+    // default via setDefaultPreviewGames(); don't overwrite it here.
+    const [utcFrom, utcTo] = dayUtcBounds(state.calDay);
+    const periodStr = formatPreviewDate(state.calDay);
+    if (!_hovering) {
+      const strip = document.getElementById('cal-game-preview');
+      if (strip) strip.style.display = 'block';
+      const labelEl = document.getElementById('cal-preview-label');
+      if (labelEl) labelEl.textContent = periodStr;
+    }
+    const data = await fetchPreviewData(utcFrom, utcTo);
+    if (seq !== _defaultSeq) return;
+    const total = data.games.reduce((s, g) => s + g.cnt, 0);
+    const label = total > 0 ? `${periodStr} · ${t().clipCount(total)}` : periodStr;
+    _defaultPreview = { label, data };
+    if (!_hovering) displayPreview(label, data);
+  } else if (state.calWeek && !state.gameFilter) {
+    // Week selection, no game filter: override with full week breakdown.
+    // Same reasoning as calDay above.
+    const [utcFrom, utcTo] = weekUtcBounds(state.calWeek);
+    const periodStr = t().weekLabel(state.calWeek);
+    if (!_hovering) {
+      const strip = document.getElementById('cal-game-preview');
+      if (strip) strip.style.display = 'block';
+      const labelEl = document.getElementById('cal-preview-label');
+      if (labelEl) labelEl.textContent = periodStr;
+    }
+    const data = await fetchPreviewData(utcFrom, utcTo);
+    if (seq !== _defaultSeq) return;
+    const total = data.games.reduce((s, g) => s + g.cnt, 0);
+    const label = total > 0 ? `${periodStr} · ${t().clipCount(total)}` : periodStr;
+    _defaultPreview = { label, data };
+    if (!_hovering) displayPreview(label, data);
+  }
+  // else: no specific day/week — app.ts has already pushed the correct default
+  // via setDefaultPreviewGames(); nothing to do here.
 }
 
 // ── Heat color ────────────────────────────────────────────────────────────
@@ -276,6 +559,10 @@ export async function renderCalendar(): Promise<void> {
   const panel = document.getElementById('calendar-panel')!;
   panel.style.display = 'block';
 
+  // Reset hover state so the default preview isn't suppressed by a stale flag.
+  _hovering = false;
+  _hoverSeq++;
+
   if (state.calMonth === null) {
     await renderYearView();
   } else {
@@ -283,6 +570,7 @@ export async function renderCalendar(): Promise<void> {
   }
 
   renderNavControls();
+  void prefetchDefault(); // fire-and-forget: populate the game preview strip
 }
 
 function renderNavControls(): void {
@@ -427,6 +715,10 @@ async function renderYearView(): Promise<void> {
       state.setCurrentPage(1);
       callRender();
     });
+    if (_supportsHover) {
+      card.addEventListener('mouseenter', () => showPreviewForMonth(state.calYear, m));
+      card.addEventListener('mouseleave', revertToDefault);
+    }
     container.appendChild(card);
   }
 }
@@ -475,6 +767,10 @@ async function renderYearStrip(): Promise<void> {
       state.setCurrentPage(1);
       callRender();
     });
+    if (_supportsHover) {
+      el.addEventListener('mouseenter', () => showPreviewForMonth(state.calYear, m));
+      el.addEventListener('mouseleave', revertToDefault);
+    }
     strip.appendChild(el);
   }
 }
@@ -531,6 +827,10 @@ async function renderMonthGrid(): Promise<void> {
       weekBtn.textContent = String(weekNum);
       weekBtn.title = t().selectWeek(weekNum, rowSunday);
       weekBtn.addEventListener('click', () => selectWeek(rowSunday));
+      if (_supportsHover) {
+        weekBtn.addEventListener('mouseenter', () => showPreviewForWeek(rowSunday));
+        weekBtn.addEventListener('mouseleave', revertToDefault);
+      }
       currentRow.appendChild(weekBtn);
     }
 
@@ -569,6 +869,10 @@ async function renderMonthGrid(): Promise<void> {
       }
 
       cell.addEventListener('click', () => selectDay(dateKey));
+      if (_supportsHover) {
+        cell.addEventListener('mouseenter', () => showPreviewForDay(dateKey));
+        cell.addEventListener('mouseleave', revertToDefault);
+      }
     }
 
     currentRow!.appendChild(cell);
@@ -616,6 +920,11 @@ function renderBreadcrumb(): void {
     state.setCurrentPage(1);
     callRender();
   });
+  if (_supportsHover) {
+    const yearCrumb = bc.querySelector<HTMLElement>('[data-action="year"]');
+    yearCrumb?.addEventListener('mouseenter', () => showPreviewForYear(state.calYear));
+    yearCrumb?.addEventListener('mouseleave', revertToDefault);
+  }
 
   bc.querySelector('[data-action="month"]')?.addEventListener('click', () => {
     state.setCalDay(null);
@@ -625,6 +934,11 @@ function renderBreadcrumb(): void {
     state.setCurrentPage(1);
     callRender();
   });
+  if (_supportsHover) {
+    const monthCrumb = bc.querySelector<HTMLElement>('[data-action="month"]');
+    monthCrumb?.addEventListener('mouseenter', () => showPreviewForMonth(state.calYear, state.calMonth!));
+    monthCrumb?.addEventListener('mouseleave', revertToDefault);
+  }
 }
 
 // ── Selection ─────────────────────────────────────────────────────────────
@@ -993,4 +1307,36 @@ export async function initCalendar(onRender: () => Promise<void>): Promise<void>
   document.getElementById('cal-next-month')!.addEventListener('click', nextMonth);
   document.getElementById('cal-prev-day')!.addEventListener('click', prevDay);
   document.getElementById('cal-next-day')!.addEventListener('click', nextDay);
+
+  if (_supportsHover) {
+    // Prev/next buttons: preview the period they would navigate to.
+    // State is read at event time (not closure-captured) so it reflects the
+    // current navigation position even after the user has moved around.
+    document.getElementById('cal-prev-year')!.addEventListener('mouseenter', () => {
+      showPreviewForYear(state.calYear - 1);
+    });
+    document.getElementById('cal-next-year')!.addEventListener('mouseenter', () => {
+      showPreviewForYear(state.calYear + 1);
+    });
+    document.getElementById('cal-prev-month')!.addEventListener('mouseenter', () => {
+      const prevM = state.calMonth === 0 ? 11 : state.calMonth! - 1;
+      const prevY = state.calMonth === 0 ? state.calYear - 1 : state.calYear;
+      showPreviewForMonth(prevY, prevM);
+    });
+    document.getElementById('cal-next-month')!.addEventListener('mouseenter', () => {
+      const nextM = state.calMonth === 11 ? 0 : state.calMonth! + 1;
+      const nextY = state.calMonth === 11 ? state.calYear + 1 : state.calYear;
+      showPreviewForMonth(nextY, nextM);
+    });
+    document.getElementById('cal-prev-day')!.addEventListener('mouseenter', () => {
+      if (state.calDay) showPreviewForDay(addDays(state.calDay, -1));
+    });
+    document.getElementById('cal-next-day')!.addEventListener('mouseenter', () => {
+      if (state.calDay) showPreviewForDay(addDays(state.calDay, 1));
+    });
+    // Revert on mouseleave for all nav buttons
+    for (const id of ['cal-prev-year', 'cal-next-year', 'cal-prev-month', 'cal-next-month', 'cal-prev-day', 'cal-next-day']) {
+      document.getElementById(id)!.addEventListener('mouseleave', revertToDefault);
+    }
+  }
 }

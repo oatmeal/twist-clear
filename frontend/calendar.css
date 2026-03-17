@@ -376,3 +376,74 @@
   height: 13px;
   border-radius: 3px;
 }
+
+/* ── Game preview strip ──────────────────────────────────────────────────── */
+#cal-game-preview {
+  /* Sticky: stays at the bottom of the viewport while the calendar panel is
+     visible. This keeps the strip in view even when hovering elements near
+     the top of a tall year-view grid. Unsticks naturally when the bottom of
+     the calendar panel scrolls into view. */
+  position: sticky;
+  bottom: 0;
+  background: var(--surface);
+  /* Subtle upward shadow — only visible when the strip overlaps content above
+     it (i.e. when it is actually stuck to the viewport bottom). */
+  box-shadow: 0 -4px 12px rgba(0,0,0,0.12);
+  border-top: 1px solid var(--border);
+  /* Negative l/r/b margins escape the parent #calendar-panel's 20px padding
+     so the strip's border and background reach the panel edges. The matching
+     20px l/r padding restores the interior content inset. */
+  margin: 14px -20px -20px;
+  padding: 12px 20px 4px;
+}
+#cal-preview-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+#cal-preview-games {
+  /* Cap width so name–bar–count columns stay close together on wide screens.
+     The label above and the border-top span full width (not inside this div). */
+  max-width: 440px;
+}
+.cal-preview-row {
+  /* Grid: name column takes remaining space; bar and count are fixed-width.
+     Ensures bars and counts align vertically across all rows. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 64px 44px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.cal-preview-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+.cal-preview-bar-wrap {
+  display: block; /* required: percentage child width only resolves on block boxes */
+  width: 64px;
+  height: 5px;
+  background: var(--surface2);
+  border-radius: 3px;
+}
+.cal-preview-bar {
+  display: block; /* required: width/height don't apply to inline elements */
+  height: 100%;
+  background: var(--cal-accent);
+  border-radius: 3px;
+}
+.cal-preview-count {
+  min-width: 36px;
+  text-align: right;
+  color: var(--muted);
+  font-size: 11px;
+}
+.cal-preview-more {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}

@@ -90,9 +90,11 @@ export interface Translations {
   // Result count
   resultCount: (n: number) => string;
   // Calendar
+  allClips: string;             // default preview label when no date filter and no game filter
   clipCount: (n: number) => string;
   calLegendFewer: string;       // heat-map legend: low end
   calLegendMore: string;        // heat-map legend: high end
+  calPreviewMore: (n: number) => string;  // game preview strip: overflow suffix
   dayTooltip: (date: string, n: number) => string;
   monthTooltip: (name: string, n: number) => string;
   weekLabel: (date: string) => string;
@@ -171,9 +173,11 @@ const en: Translations = {
   views: (f) => `${f} views`,
   creatorLine: (creator, date) => `by ${creator} · ${date}`,
   resultCount: (n) => `${n.toLocaleString()} clip${n !== 1 ? 's' : ''}`,
+  allClips: 'All clips',
   clipCount: (n) => `${n} clip${n !== 1 ? 's' : ''}`,
   calLegendFewer: 'fewer clips',
   calLegendMore: 'more',
+  calPreviewMore: (n) => `+${n} more`,
   dayTooltip: (date, n) => `${date}: ${n} clip${n !== 1 ? 's' : ''}`,
   monthTooltip: (name, n) => `${name}: ${n.toLocaleString()} clip${n !== 1 ? 's' : ''}`,
   weekLabel: (date) => {
@@ -263,9 +267,11 @@ const ja: Translations = {
   views: (f) => `${f}回視聴`,
   creatorLine: (creator, date) => `作成者: ${creator}さん · ${date}`,
   resultCount: (n) => `${n.toLocaleString()}本のクリップ`,
+  allClips: 'すべてのクリップ',
   clipCount: (n) => `${n}本`,
   calLegendFewer: 'クリップが少ない',
   calLegendMore: '多い',
+  calPreviewMore: (n) => `他${n}件`,
   dayTooltip: (date, n) => {
     const parts = date.split('-');
     const fmt = new Date(Number(parts[0]!), Number(parts[1]!) - 1, Number(parts[2]!))

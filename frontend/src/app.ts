@@ -14,6 +14,8 @@ import {
   rebuildMonthSelect,
   onTzChange,
   updateLiveClipBounds,
+  primePreviewCache,
+  setDefaultPreviewGames,
 } from './calendar';
 import {
   initEmbed,
@@ -29,7 +31,7 @@ import * as auth from './auth';
 import * as twitch from './twitch';
 import type { LiveClip } from './twitch';
 import { filterLiveClips } from './lib/liveFilter';
-import { ensureRfc3339, localDateToUtcBound } from './lib/dateUtils';
+import { addDays, ensureRfc3339, localDateToUtcBound } from './lib/dateUtils';
 import {
   rankLiveClips, computeViewCountPage, interleavePage,
 } from './lib/liveRank';
@@ -207,6 +209,47 @@ function renderFooter(): void {
 
 type LiveGameEntry = { count: number; name: string };
 
+// ── Game preview strip helpers ─────────────────────────────────────────────
+
+/** Format a YYYY-MM-DD date for display in the preview strip label. */
+function formatPreviewDateForStrip(dateStr: string): string {
+  const parts = dateStr.split('-');
+  const d = new Date(Number(parts[0]!), Number(parts[1]!) - 1, Number(parts[2]!));
+  return lang === 'ja'
+    ? d.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })
+    : d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+/**
+ * Build the label for the game preview strip default view.
+ * Format: [game name ·] [date range ·] clip count
+ * Falls back to "All clips · N clips" when no game filter and no date range.
+ */
+function buildPreviewLabel(rows: Awaited<ReturnType<typeof q>>): string {
+  const totalClips = rows.reduce((s, r) => s + Number(r['cnt']), 0);
+  const parts: string[] = [];
+
+  if (state.gameFilter) {
+    const gameRow = rows.find(r => String(r['id']) === state.gameFilter);
+    if (gameRow) {
+      const gameName = (lang === 'ja' && gameRow['name_ja'])
+        ? String(gameRow['name_ja'])
+        : String(gameRow['name']);
+      parts.push(gameName);
+    }
+  }
+
+  if (state.calDateFrom && state.calDateTo) {
+    const toInclusive = addDays(state.calDateTo, -1);
+    const fromDate = formatPreviewDateForStrip(state.calDateFrom);
+    const toDate = formatPreviewDateForStrip(toInclusive);
+    parts.push(fromDate === toDate ? fromDate : `${fromDate} – ${toDate}`);
+  }
+
+  const labelBase = parts.length > 0 ? parts.join(' · ') : t().allClips;
+  return `${labelBase} · ${t().clipCount(totalClips)}`;
+}
+
 async function updateGameFilter(liveGameCounts: Map<string, LiveGameEntry>): Promise<void> {
   let rows: Awaited<ReturnType<typeof q>>;
 
@@ -236,6 +279,20 @@ async function updateGameFilter(liveGameCounts: Map<string, LiveGameEntry>): Pro
        ORDER BY cnt DESC`,
       params,
     );
+
+    // Seed the preview cache with these results to avoid a duplicate query
+    // when prefetchDefault() runs for the same date range in renderCalendar().
+    if (state.calDateFrom && state.calDateTo) {
+      primePreviewCache(
+        localDateToUtcBound(state.calDateFrom, state.tzOffset),
+        localDateToUtcBound(state.calDateTo, state.tzOffset),
+        rows.map(r => ({
+          name: String(r['name'] ?? ''),
+          name_ja: String(r['name_ja'] ?? ''),
+          cnt: Number(r['cnt']),
+        })),
+      );
+    }
   }
 
   // Refresh the game_id → name_ja lookup used by live clip rendering.
@@ -277,6 +334,20 @@ async function updateGameFilter(liveGameCounts: Map<string, LiveGameEntry>): Pro
     state.setGameFilter('');
   }
   sel.value = state.gameFilter;
+
+  // Push the current game breakdown to the calendar preview strip.
+  // When a game filter is active, show only that game's bar (the strip reflects
+  // what's displayed in the clip grid below). Hover previews remain unfiltered
+  // (independent of game/search filters, consistent with the heat-map).
+  const filteredForPreview = state.gameFilter
+    ? rows.filter(r => String(r['id']) === state.gameFilter)
+    : rows;
+  const previewGames = filteredForPreview.map(r => ({
+    name: String(r['name'] ?? ''),
+    name_ja: String(r['name_ja'] ?? ''),
+    cnt: Number(r['cnt']),
+  }));
+  setDefaultPreviewGames(previewGames, buildPreviewLabel(filteredForPreview));
 }
 
 // ── Clip card HTML helper ─────────────────────────────────────────────────
