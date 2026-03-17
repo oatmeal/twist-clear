@@ -10,12 +10,17 @@ What this script does
    WAL-safe snapshot regardless of the source journal mode).
 2. Switches the output to DELETE journal mode — required by sql.js-httpvfs,
    which cannot read WAL-mode databases.
-3. Creates and populates a FTS5 trigram virtual table (`clips_fts`) for fast
+3. Normalises clips with no Twitch game category: inserts a synthetic
+   games row ('__none__', 'No Category') and coerces NULL game_id clips
+   to '__none__' so they appear as a filterable option in the browser.
+4. Creates and populates a FTS5 trigram virtual table (`clips_fts`) for fast
    substring title search in the browser.  The trigram tokenizer requires
    SQLite >= 3.38 and enables substring matching without a leading wildcard.
-4. Optimises the FTS index (merges all segments into one) so fewer HTTP Range
+5. Optimises the FTS index (merges all segments into one) so fewer HTTP Range
    requests are needed when searching.
-5. VACUUMs the output file to remove any slack space and produce a compact,
+6. Builds precomputed metadata tables (clips_meta, game_clip_counts) and
+   covering indexes so the browser avoids full-table-scan aggregates.
+7. VACUUMs the output file to remove any slack space and produce a compact,
    contiguous layout that is friendlier to range-request caching.
 
 The output file is intended to be placed in `frontend/public/` and served
@@ -69,7 +74,23 @@ def prepare(src_path: str, dst_path: str) -> None:
     row = dst_conn.execute("PRAGMA journal_mode=DELETE").fetchone()
     print(f"  journal_mode is now: {row[0]}")
 
-    # ── 3. Create FTS5 trigram table ──────────────────────────────────────
+    # ── 3. Normalise NULL game_id clips ───────────────────────────────────
+    # Twitch returns game_id="" for clips from streams with no category set
+    # (unregistered games, pure IRL streams, etc.).  The scraper stores these
+    # as NULL.  Coerce them to the sentinel '__none__' and add a matching
+    # games row so they appear as a filterable "No Category" option in the
+    # browser's game dropdown instead of being silently grouped into "All Games".
+    print("Normalising NULL game_id clips …")
+    dst_conn.execute(
+        "INSERT OR IGNORE INTO games (id, name, name_ja)"
+        " VALUES ('__none__', 'No Category', 'カテゴリなし')"
+    )
+    dst_conn.execute(
+        "UPDATE clips SET game_id = '__none__' WHERE game_id IS NULL"
+    )
+    print("  done.")
+
+    # ── 5. Create FTS5 trigram table ──────────────────────────────────────
     # content=clips makes this a content table — the text is not stored
     # twice; FTS5 reads it from `clips.title` via the rowid when needed.
     # tokenize='trigram' indexes all 3-character substrings so MATCH can
@@ -85,7 +106,7 @@ def prepare(src_path: str, dst_path: str) -> None:
     """)
     print("  done.")
 
-    # ── 4. Populate and optimise the FTS index ────────────────────────────
+    # ── 6. Populate and optimise the FTS index ────────────────────────────
     print("Rebuilding FTS index (this may take a moment) …")
     dst_conn.execute("INSERT INTO clips_fts(clips_fts) VALUES('rebuild')")
     print("  done.")
@@ -94,7 +115,7 @@ def prepare(src_path: str, dst_path: str) -> None:
     dst_conn.execute("INSERT INTO clips_fts(clips_fts) VALUES('optimize')")
     print("  done.")
 
-    # ── 5. Precomputed metadata tables ────────────────────────────────────
+    # ── 7. Precomputed metadata tables ────────────────────────────────────
     # These tiny tables let the browser avoid full-table-scan aggregates on
     # every page load.  Each is a cheap single-page read instead of an
     # O(n) scan that triggers sql.js-httpvfs's exponential read-ahead.
@@ -189,7 +210,7 @@ def prepare(src_path: str, dst_path: str) -> None:
     )
     print("  done.")
 
-    # ── 6. VACUUM ─────────────────────────────────────────────────────────
+    # ── 8. VACUUM ─────────────────────────────────────────────────────────
     print("Vacuuming …")
     dst_conn.execute("VACUUM")
     print("  done.")

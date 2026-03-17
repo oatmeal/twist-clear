@@ -72,7 +72,12 @@ export function setLastStructuralHash(v: string): void { lastStructuralHash = v;
 export let liveClips: LiveClip[] = [];
 export let twitchUsername: string | null = null;
 export let liveFetching: boolean = false;
+// Full ISO UTC timestamp of the newest clip in the DB (MAX(created_at)).
+// Used by calendar.ts to exclude the one boundary clip that is in state.liveClips
+// but is already archived in the DB.
+export let dbCutoffDate: string | null = null;
 
 export function setLiveClips(v: LiveClip[]): void { liveClips = v; }
 export function setTwitchUsername(v: string | null): void { twitchUsername = v; }
 export function setLiveFetching(v: boolean): void { liveFetching = v; }
+export function setDbCutoffDate(v: string | null): void { dbCutoffDate = v; }

@@ -420,6 +420,7 @@ export function syncDateInputs(): void {
 function liveDayCountsForYear(year: number): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const c of state.liveClips) {
+    if (state.dbCutoffDate && c.created_at <= state.dbCutoffDate) continue;
     if (state.gameFilter && c.game_id !== state.gameFilter) continue;
     const day = utcTimestampToLocalDate(c.created_at, state.tzOffset);
     if (day.startsWith(`${year}-`)) {
@@ -433,6 +434,7 @@ function liveDayCountsForYear(year: number): Record<string, number> {
 function liveYearCounts(): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const c of state.liveClips) {
+    if (state.dbCutoffDate && c.created_at <= state.dbCutoffDate) continue;
     if (state.gameFilter && c.game_id !== state.gameFilter) continue;
     const yr = utcTimestampToLocalDate(c.created_at, state.tzOffset).slice(0, 4);
     counts[yr] = (counts[yr] ?? 0) + 1;
@@ -444,6 +446,7 @@ function liveYearCounts(): Record<string, number> {
 function liveMonthCountsForYear(year: number): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const c of state.liveClips) {
+    if (state.dbCutoffDate && c.created_at <= state.dbCutoffDate) continue;
     if (state.gameFilter && c.game_id !== state.gameFilter) continue;
     const day = utcTimestampToLocalDate(c.created_at, state.tzOffset);
     if (day.startsWith(`${year}-`)) {
@@ -466,6 +469,7 @@ function mergeLiveIntoPreview(data: PeriodGames, utcFrom: string, utcTo: string)
   const liveCounts = new Map<string, { name: string; count: number }>();
   for (const c of state.liveClips) {
     // ISO 8601 strings are lexicographically ordered — string comparison is correct.
+    if (state.dbCutoffDate && c.created_at <= state.dbCutoffDate) continue;
     if (c.created_at < utcFrom || c.created_at >= utcTo) continue;
     const entry = liveCounts.get(c.game_id);
     if (entry) { entry.count++; }
@@ -490,6 +494,7 @@ function liveDayCountsForMonth(year: number, month: number): Record<string, numb
   const prefix = `${year}-${pad(month + 1)}-`;
   const counts: Record<string, number> = {};
   for (const c of state.liveClips) {
+    if (state.dbCutoffDate && c.created_at <= state.dbCutoffDate) continue;
     if (state.gameFilter && c.game_id !== state.gameFilter) continue;
     const day = utcTimestampToLocalDate(c.created_at, state.tzOffset);
     if (day.startsWith(prefix)) {

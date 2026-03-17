@@ -5,7 +5,6 @@ Deferred items with rationale. See the relevant source files for implementation 
 ---
 
 ## Small issues
-- issues with result-count not agreeing with "All Games" count in game filter
 - remember list vs grid view? or change default to list view?
 - better visual distinction between currently open row and other rows
 - template repo: fork + change settings to deploy an archive for a streamer

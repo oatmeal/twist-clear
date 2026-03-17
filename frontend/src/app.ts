@@ -251,12 +251,24 @@ function buildPreviewLabel(rows: Awaited<ReturnType<typeof q>>, liveTotal = 0): 
   return `${labelBase} · ${t().clipCount(totalClips)}`;
 }
 
-async function updateGameFilter(liveGameCounts: Map<string, LiveGameEntry>): Promise<void> {
+async function updateGameFilter(liveGameCounts: Map<string, LiveGameEntry>, liveNoGameCount = 0): Promise<void> {
   let rows: Awaited<ReturnType<typeof q>>;
+  // dbTotal is the count of ALL DB clips in the current date range, including
+  // clips whose game_id has no entry in the games table.  The per-game query
+  // uses an INNER JOIN so it misses those clips; we need a separate COUNT(*).
+  let dbTotal: number;
 
   if (state.useMeta && state.calDateFrom === null && state.calDateTo === null) {
-    // Fast path: precomputed table — single page read, no aggregate scan.
-    rows = await q('SELECT id, name, name_ja, cnt FROM game_clip_counts ORDER BY cnt DESC');
+    // Fast path: precomputed tables — single page reads, no aggregate scans.
+    // Run both queries in parallel; clips_meta.total_clips is the authoritative
+    // total (game_clip_counts INNER JOIN misses clips with no matching game row).
+    const [gameRows, metaRows] = await Promise.all([
+      q('SELECT id, name, name_ja, cnt FROM game_clip_counts ORDER BY cnt DESC'),
+      q('SELECT total_clips FROM clips_meta'),
+    ]);
+    rows = gameRows;
+    dbTotal = (metaRows[0]?.['total_clips'] as number | undefined)
+      ?? rows.reduce((s, r) => s + Number(r['cnt']), 0);
   } else {
     // Slow path: live aggregate (needed when a date filter is active, or
     // when running against the raw dev-symlink DB without clips_meta).
@@ -271,15 +283,23 @@ async function updateGameFilter(liveGameCounts: Map<string, LiveGameEntry>): Pro
       params[':dateTo'] = localDateToUtcBound(state.calDateTo, state.tzOffset);
     }
     const dateClause = dateParts.length ? `WHERE ${dateParts.join(' AND ')}` : '';
-    rows = await q(
-      `SELECT g.id, g.name, g.name_ja, COUNT(c.id) AS cnt
-       FROM games g
-       JOIN clips c ON c.game_id = g.id
-       ${dateClause}
-       GROUP BY g.id
-       ORDER BY cnt DESC`,
-      params,
-    );
+    // Run per-game breakdown and overall COUNT(*) in parallel.
+    // COUNT(*) is the authoritative total; the JOIN query misses ungamed clips.
+    const [gameRows, totalRows] = await Promise.all([
+      q(
+        `SELECT g.id, g.name, g.name_ja, COUNT(c.id) AS cnt
+         FROM games g
+         JOIN clips c ON c.game_id = g.id
+         ${dateClause}
+         GROUP BY g.id
+         ORDER BY cnt DESC`,
+        params,
+      ),
+      q(`SELECT COUNT(*) AS cnt FROM clips c ${dateClause}`, params),
+    ]);
+    rows = gameRows;
+    dbTotal = (totalRows[0]?.['cnt'] as number | undefined)
+      ?? rows.reduce((s, r) => s + Number(r['cnt']), 0);
 
     // Seed the preview cache with these results to avoid a duplicate query
     // when prefetchDefault() runs for the same date range in renderCalendar().
@@ -311,9 +331,10 @@ async function updateGameFilter(liveGameCounts: Map<string, LiveGameEntry>): Pro
   // Hide counts when a search is active — they reflect total clips, not the
   // search-filtered subset, so displaying them would be misleading.
   const showCounts = !state.searchQuery;
-  const dbTotal = rows.reduce((s, r) => s + Number(r['cnt']), 0);
   const liveTotal = [...liveGameCounts.values()].reduce((s, e) => s + e.count, 0);
-  const allGamesCount = dbTotal + liveTotal;
+  // liveNoGameCount tracks live clips with no game_id — they belong to no specific
+  // game option but must be included in the "All Games" total to match result-count.
+  const allGamesCount = dbTotal + liveTotal + liveNoGameCount;
   const allGamesLabel = showCounts
     ? `${escHtml(t().allGames)} (${allGamesCount.toLocaleString()})`
     : escHtml(t().allGames);
@@ -526,6 +547,7 @@ export async function render(): Promise<void> {
     // to add to the game dropdown counts alongside the DB totals. Built even
     // when a search is active so live-only game options remain visible.
     const liveGameCounts = new Map<string, LiveGameEntry>();
+    let liveNoGameCount = 0;
     if (state.liveClips.length > 0) {
       const dateLive = filterLiveClips({
         clips:        state.liveClips,
@@ -538,7 +560,12 @@ export async function render(): Promise<void> {
       });
       for (const c of dateLive) {
         const id = c.game_id ?? '';
-        if (!id) continue;
+        if (!id) {
+          // Clip has no game category — count it toward "All Games" but not
+          // toward any specific game option in the dropdown.
+          liveNoGameCount++;
+          continue;
+        }
         const entry = liveGameCounts.get(id);
         if (entry) {
           entry.count++;
@@ -548,7 +575,7 @@ export async function render(): Promise<void> {
       }
     }
 
-    await updateGameFilter(liveGameCounts);
+    await updateGameFilter(liveGameCounts, liveNoGameCount);
     if (ctrl.signal.aborted) return;
 
     // Keep the search notice in sync even when renderCalendar() isn't called
@@ -1377,6 +1404,7 @@ export async function init(): Promise<void> {
     // The clips_created_at index makes this a single B-tree leaf read.
     const cutoffRows = await q('SELECT MAX(created_at) AS max_date FROM clips');
     _dbCutoffDate = (cutoffRows[0]?.['max_date'] as string | undefined) ?? null;
+    state.setDbCutoffDate(_dbCutoffDate);
 
     // Get the scrape timestamp for the login banner. last_scraped_at is when
     // the scraper last ran, which is always >= MAX(created_at) and more
