@@ -6,7 +6,6 @@ Deferred items with rationale. See the relevant source files for implementation 
 
 ## Small issues
 - remember list vs grid view? or change default to list view?
-- better visual distinction between currently open row and other rows
 - template repo: fork + change settings to deploy an archive for a streamer
 - featured clips
 ---

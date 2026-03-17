@@ -528,6 +528,10 @@ select:focus { border-color: var(--accent); }
 }
 .clip-row:hover { background: var(--surface2); }
 .clip-row.expanded { background: var(--surface2); }
+/* Remove the bottom border so the clip row and embed row read as one unit */
+.clip-row.expanded td { border-bottom: none; }
+/* Left accent bar ties the expanded row to the embed row below it */
+.clip-row.expanded td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 
 /* Live clip row: subtle accent tint */
 .clip-row.live-clip { background: color-mix(in srgb, var(--accent) 6%, transparent); }
@@ -581,7 +585,15 @@ select:focus { border-color: var(--accent); }
 /* Embed row inserted below a clicked list row */
 /* min-width: 0 prevents the iframe's intrinsic minimum from forcing the table
    wider than 100%; overflow: hidden clips any residual bleed. */
-.clip-embed-row td { padding: 0; background: var(--surface); overflow: hidden; min-width: 0; }
+.clip-embed-row td {
+  padding: 0;
+  background: var(--surface2);
+  overflow: hidden;
+  min-width: 0;
+  /* Matching left accent bar + bottom border closes the visual bracket */
+  box-shadow: inset 3px 0 0 var(--accent);
+  border-bottom: 2px solid color-mix(in srgb, var(--accent) 50%, var(--border));
+}
 .clip-embed-row .clip-embed-wrap {
   max-width: 854px;
   width: 100%;
@@ -601,10 +613,16 @@ select:focus { border-color: var(--accent); }
   border-top: 1px solid var(--border);
 }
 .clip-list-nav-row .clip-nav-btn {
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
   border-radius: 4px;
   flex: 1;
-  height: 32px;
+  height: 36px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent-h);
+}
+.clip-list-nav-row .clip-nav-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  color: var(--accent-h);
 }
 /* Each button takes exactly half the row; arrows face inward at the centre seam */
 .clip-list-nav-row .clip-prev-btn { justify-content: flex-end; border-right: none; border-radius: 4px 0 0 4px; }
@@ -740,6 +758,7 @@ main { padding: 24px; }
   grid-column: 1 / -1;
   border-color: var(--accent);
   transform: none;
+  background: var(--surface2);
 }
 .clip-card.expanded .clip-embed-wrap {
   max-width: 854px;
@@ -793,10 +812,10 @@ main { padding: 24px; }
 }
 .clip-nav-btn {
   overflow: hidden;
-  background: transparent;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   border: none;
-  border-top: 1px solid var(--border);
-  color: var(--muted);
+  border-top: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  color: var(--accent-h);
   cursor: pointer;
   font-size: 18px;
   display: flex;
@@ -814,15 +833,15 @@ main { padding: 24px; }
   margin: 0 3px;
 }
 .clip-nav-btn:hover:not(:disabled) {
-  background: var(--surface2);
-  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  color: var(--accent-h);
 }
 .clip-nav-btn:disabled {
   opacity: 0.25;
   cursor: default;
 }
-.clip-prev-btn { border-right: 1px solid var(--border); }
-.clip-next-btn { border-left: 1px solid var(--border); }
+.clip-prev-btn { border-right: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border)); }
+.clip-next-btn { border-left: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border)); }
 
 .clip-play-icon {
   position: absolute;
