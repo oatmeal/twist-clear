@@ -226,8 +226,8 @@ function formatPreviewDateForStrip(dateStr: string): string {
  * Format: [game name ·] [date range ·] clip count
  * Falls back to "All clips · N clips" when no game filter and no date range.
  */
-function buildPreviewLabel(rows: Awaited<ReturnType<typeof q>>): string {
-  const totalClips = rows.reduce((s, r) => s + Number(r['cnt']), 0);
+function buildPreviewLabel(rows: Awaited<ReturnType<typeof q>>, liveTotal = 0): string {
+  const totalClips = rows.reduce((s, r) => s + Number(r['cnt']), 0) + liveTotal;
   const parts: string[] = [];
 
   if (state.gameFilter) {
@@ -308,10 +308,16 @@ async function updateGameFilter(liveGameCounts: Map<string, LiveGameEntry>): Pro
   const sel = document.getElementById('game-filter') as HTMLSelectElement;
   const validIds = new Set(rows.map(r => String(r['id'])));
 
-  sel.innerHTML = `<option value="">${escHtml(t().allGames)}</option>`;
   // Hide counts when a search is active — they reflect total clips, not the
   // search-filtered subset, so displaying them would be misleading.
   const showCounts = !state.searchQuery;
+  const dbTotal = rows.reduce((s, r) => s + Number(r['cnt']), 0);
+  const liveTotal = [...liveGameCounts.values()].reduce((s, e) => s + e.count, 0);
+  const allGamesCount = dbTotal + liveTotal;
+  const allGamesLabel = showCounts
+    ? `${escHtml(t().allGames)} (${allGamesCount.toLocaleString()})`
+    : escHtml(t().allGames);
+  sel.innerHTML = `<option value="">${allGamesLabel}</option>`;
   for (const row of rows) {
     const opt = document.createElement('option');
     const id = String(row['id']);
@@ -376,7 +382,10 @@ async function updateGameFilter(liveGameCounts: Map<string, LiveGameEntry>): Pro
     name_ja: String(r['name_ja'] ?? ''),
     cnt:     Number(r['cnt']),
   }));
-  setDefaultPreviewGames(previewGames, buildPreviewLabel(filteredForPreview));
+  const liveForPreview = state.gameFilter
+    ? (liveGameCounts.get(state.gameFilter)?.count ?? 0)
+    : liveTotal;
+  setDefaultPreviewGames(previewGames, buildPreviewLabel(filteredForPreview, liveForPreview));
 }
 
 // ── Clip card HTML helper ─────────────────────────────────────────────────

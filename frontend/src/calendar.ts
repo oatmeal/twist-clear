@@ -221,14 +221,16 @@ async function showPreviewFor(utcFrom: string, utcTo: string, periodStr: string)
   const data = await fetchPreviewData(utcFrom, utcTo);
   if (seq !== _hoverSeq) return; // superseded by another hover or mouseleave
 
+  const mergedData = mergeLiveIntoPreview(data, utcFrom, utcTo);
+
   // When a game filter is active, restrict the preview to that game so hover
   // counts are consistent with the heat-map (which also game-filters).
   const displayData: PeriodGames = state.gameFilter
     ? (() => {
-        const filtered = data.games.filter(g => g.id === state.gameFilter);
+        const filtered = mergedData.games.filter(g => g.id === state.gameFilter);
         return { games: filtered, totalGames: filtered.length };
       })()
-    : data;
+    : mergedData;
 
   const total = displayData.games.reduce((s, g) => s + g.cnt, 0);
   const label = total > 0 ? `${periodStr} · ${t().clipCount(total)}` : periodStr;
@@ -298,10 +300,11 @@ async function prefetchDefault(): Promise<void> {
     }
     const data = await fetchPreviewData(utcFrom, utcTo);
     if (seq !== _defaultSeq) return;
-    const total = data.games.reduce((s, g) => s + g.cnt, 0);
+    const mergedData = mergeLiveIntoPreview(data, utcFrom, utcTo);
+    const total = mergedData.games.reduce((s, g) => s + g.cnt, 0);
     const label = total > 0 ? `${periodStr} · ${t().clipCount(total)}` : periodStr;
-    _defaultPreview = { label, data };
-    if (!_hovering) displayPreview(label, data);
+    _defaultPreview = { label, data: mergedData };
+    if (!_hovering) displayPreview(label, mergedData);
   } else if (state.calWeek && !state.gameFilter) {
     // Week selection, no game filter: override with full week breakdown.
     // Same reasoning as calDay above.
@@ -315,10 +318,11 @@ async function prefetchDefault(): Promise<void> {
     }
     const data = await fetchPreviewData(utcFrom, utcTo);
     if (seq !== _defaultSeq) return;
-    const total = data.games.reduce((s, g) => s + g.cnt, 0);
+    const mergedData = mergeLiveIntoPreview(data, utcFrom, utcTo);
+    const total = mergedData.games.reduce((s, g) => s + g.cnt, 0);
     const label = total > 0 ? `${periodStr} · ${t().clipCount(total)}` : periodStr;
-    _defaultPreview = { label, data };
-    if (!_hovering) displayPreview(label, data);
+    _defaultPreview = { label, data: mergedData };
+    if (!_hovering) displayPreview(label, mergedData);
   }
   // else: no specific day/week — app.ts has already pushed the correct default
   // via setDefaultPreviewGames(); nothing to do here.
@@ -448,6 +452,36 @@ function liveMonthCountsForYear(year: number): Record<string, number> {
     }
   }
   return counts;
+}
+
+/**
+ * Merge in-memory live clips that fall in [utcFrom, utcTo) into a DB-only
+ * PeriodGames result.  Returns `data` unchanged if there are no live clips
+ * in the range.  The cache is intentionally left untouched so it stays
+ * DB-only and can be re-merged whenever live clips update.
+ */
+function mergeLiveIntoPreview(data: PeriodGames, utcFrom: string, utcTo: string): PeriodGames {
+  if (state.liveClips.length === 0) return data;
+
+  const liveCounts = new Map<string, { name: string; count: number }>();
+  for (const c of state.liveClips) {
+    // ISO 8601 strings are lexicographically ordered — string comparison is correct.
+    if (c.created_at < utcFrom || c.created_at >= utcTo) continue;
+    const entry = liveCounts.get(c.game_id);
+    if (entry) { entry.count++; }
+    else        { liveCounts.set(c.game_id, { name: c.game_name, count: 1 }); }
+  }
+  if (liveCounts.size === 0) return data;
+
+  const merged = new Map<string, GamePreviewEntry>(data.games.map(g => [g.id, { ...g }]));
+  for (const [id, { name, count }] of liveCounts) {
+    const existing = merged.get(id);
+    if (existing) { merged.set(id, { ...existing, cnt: existing.cnt + count }); }
+    else          { merged.set(id, { id, name, name_ja: '', cnt: count }); }
+  }
+
+  const games = [...merged.values()].sort((a, b) => b.cnt - a.cnt);
+  return { games, totalGames: games.length };
 }
 
 /** day → count for live clips falling in the given calendar month (local time). */
