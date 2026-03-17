@@ -415,6 +415,19 @@ newer than the DB cutoff. The calendar heat-map counts also include live clips:
 into the DB query results in `renderYearView`, `renderYearStrip`, and
 `renderMonthGrid`.
 
+The calendar heat-map **respects the active game filter** — `queryYearDays`,
+`queryMonthDays`, `queryYearMonthTotals` and the live clip count helpers all
+apply `AND game_id = ?` when `state.gameFilter` is set. The game filter change
+handler and the search debounce both call `renderCalendar()` when the calendar
+is open so the heat-map re-renders immediately. **Title search is intentionally
+not reflected** in calendar counts (no efficient aggregate index); when a search
+is active, a `#cal-search-notice` element is shown inside the calendar panel.
+
+The game filter is **never auto-cleared** when the user clicks a calendar period
+where the selected game has no clips. Instead, `updateGameFilter` adds a (0)
+option to the dropdown so the selection remains coherent, doing a PK lookup on
+the `games` table if the name isn't in the `_gameName` cache yet.
+
 ### Internationalization (`lib/i18n.ts`)
 
 Supports **English** (`en`) and **Japanese** (`ja`). Key exports:

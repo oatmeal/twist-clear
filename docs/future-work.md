@@ -42,6 +42,26 @@ This seems to be difficult. We don't have any way to know if the title of the st
 
 ---
 
+## Calendar preview strip: show other games de-emphasised when a game filter is active
+
+When a game filter is active, the hover preview strip currently shows only the
+filtered game's bar. It would be useful to also show the other games played
+during the hovered period — rendered with a de-emphasised (e.g. lower opacity
+or greyed-out) style — so the user can see the relative context without the
+filter obscuring the full picture.
+
+Possible approach: `showPreviewFor` in `calendar.ts` already fetches the full
+unfiltered `PeriodGames` from the cache. Instead of slicing to just the matching
+game, pass the full list to `displayPreview` with an additional `highlightId`
+parameter; the renderer would draw the active game's bar at full intensity and
+all others at reduced opacity.
+
+Deferred: the current behaviour (filtered strip consistent with the heat-map) is
+already an improvement. The visual treatment of de-emphasised bars requires CSS
+design work.
+
+---
+
 ## Calendar: navigation-only level changes without updating the filter
 
 Clicking a year/month/day/week in the calendar always applies the corresponding

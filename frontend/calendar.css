@@ -357,6 +357,13 @@
   #cal-day-nav   { border-left: none; padding-left: 0; }
 }
 
+/* ── Search notice ───────────────────────────────────────────────────────── */
+#cal-search-notice {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 /* ── Heat-map density legend ─────────────────────────────────────────────── */
 .cal-legend {
   display: flex;

@@ -140,9 +140,10 @@ function updateLayoutButtons(): void {
 
 // Broadcaster ID and DB metadata — set once during init, never change.
 let _broadcasterId: string | null = null;
-// game_id → name_ja lookup populated by updateGameFilter(); used to supply
-// Japanese game names to live clips, which only carry the English name from
-// the Twitch API.
+// game_id → name / name_ja lookups populated by updateGameFilter(); used to
+// supply game names when the active filter has no clips in the current date
+// range, and to supply Japanese names to live clips.
+const _gameName   = new Map<string, string>();
 const _gameNameJa = new Map<string, string>();
 // MAX(created_at) from clips — used as started_at for the Twitch live-clip
 // API call and as the deduplication boundary in filterLiveClips.
@@ -287,16 +288,19 @@ async function updateGameFilter(liveGameCounts: Map<string, LiveGameEntry>): Pro
         localDateToUtcBound(state.calDateFrom, state.tzOffset),
         localDateToUtcBound(state.calDateTo, state.tzOffset),
         rows.map(r => ({
-          name: String(r['name'] ?? ''),
+          id:      String(r['id']      ?? ''),
+          name:    String(r['name']    ?? ''),
           name_ja: String(r['name_ja'] ?? ''),
-          cnt: Number(r['cnt']),
+          cnt:     Number(r['cnt']),
         })),
       );
     }
   }
 
-  // Refresh the game_id → name_ja lookup used by live clip rendering.
+  // Refresh the game_id → name / name_ja lookups used by live clip rendering
+  // and by the zero-count fallback option below.
   for (const row of rows) {
+    _gameName.set(String(row['id']), String(row['name'] ?? ''));
     const nameJa = row['name_ja'];
     if (nameJa) _gameNameJa.set(String(row['id']), String(nameJa));
   }
@@ -331,7 +335,31 @@ async function updateGameFilter(liveGameCounts: Map<string, LiveGameEntry>): Pro
   }
 
   if (state.gameFilter && !validIds.has(String(state.gameFilter))) {
-    state.setGameFilter('');
+    // The filtered game has no clips in the current date range — keep the
+    // filter active but add a 0-count option so the dropdown stays coherent.
+    let name   = _gameName.get(state.gameFilter);
+    let nameJa = _gameNameJa.get(state.gameFilter);
+    if (!name) {
+      // First load with game filter in URL and empty date range — fetch from DB.
+      const fallbackRows = await q(
+        'SELECT name, name_ja FROM games WHERE id = :id',
+        { ':id': state.gameFilter },
+      );
+      const r = fallbackRows[0];
+      if (r) {
+        name   = String(r['name']    ?? state.gameFilter);
+        nameJa = r['name_ja'] ? String(r['name_ja']) : undefined;
+        _gameName.set(state.gameFilter, name);
+        if (nameJa) _gameNameJa.set(state.gameFilter, nameJa);
+      } else {
+        name = state.gameFilter; // ID as fallback (shouldn't happen in practice)
+      }
+    }
+    const opt = document.createElement('option');
+    opt.value = state.gameFilter;
+    const displayName = (lang === 'ja' && nameJa) ? nameJa : name!;
+    opt.textContent = showCounts ? `${displayName} (0)` : displayName;
+    sel.appendChild(opt);
   }
   sel.value = state.gameFilter;
 
@@ -343,9 +371,10 @@ async function updateGameFilter(liveGameCounts: Map<string, LiveGameEntry>): Pro
     ? rows.filter(r => String(r['id']) === state.gameFilter)
     : rows;
   const previewGames = filteredForPreview.map(r => ({
-    name: String(r['name'] ?? ''),
+    id:      String(r['id']      ?? ''),
+    name:    String(r['name']    ?? ''),
     name_ja: String(r['name_ja'] ?? ''),
-    cnt: Number(r['cnt']),
+    cnt:     Number(r['cnt']),
   }));
   setDefaultPreviewGames(previewGames, buildPreviewLabel(filteredForPreview));
 }
@@ -512,6 +541,11 @@ export async function render(): Promise<void> {
 
     await updateGameFilter(liveGameCounts);
     if (ctrl.signal.aborted) return;
+
+    // Keep the search notice in sync even when renderCalendar() isn't called
+    // (e.g. initial load, hash navigation with calendar closed).
+    const calNotice = document.getElementById('cal-search-notice');
+    if (calNotice) calNotice.style.display = state.searchQuery ? '' : 'none';
 
     const { where, params } = buildWhere({
       searchQuery: state.searchQuery,
@@ -972,6 +1006,9 @@ function applyTranslations(): void {
   if (calLegendFewer) calLegendFewer.textContent = tr.calLegendFewer;
   const calLegendMore = document.getElementById('cal-legend-more');
   if (calLegendMore) calLegendMore.textContent = tr.calLegendMore;
+  // Calendar search notice
+  const calSearchNotice = document.getElementById('cal-search-notice');
+  if (calSearchNotice) calSearchNotice.textContent = tr.calSearchNotice;
 }
 
 /**
@@ -1072,6 +1109,7 @@ function bindEvents(): void {
       state.setSearchQuery((e.target as HTMLInputElement).value.trim());
       state.setCurrentPage(1);
       void render();
+      if (state.currentView === 'calendar') void renderCalendar();
     }, 300);
   });
 
@@ -1087,6 +1125,7 @@ function bindEvents(): void {
     state.setGameFilter((e.target as HTMLSelectElement).value);
     state.setCurrentPage(1);
     void render();
+    if (state.currentView === 'calendar') void renderCalendar();
   });
 
   // ── Layout toggle ─────────────────────────────────────────────────────────

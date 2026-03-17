@@ -37,7 +37,7 @@ function callRender(): void {
 // Evaluated once at module load — hover capability doesn't change mid-session.
 const _supportsHover = window.matchMedia('(hover: hover)').matches;
 
-interface GamePreviewEntry { name: string; name_ja: string; cnt: number; }
+interface GamePreviewEntry { id: string; name: string; name_ja: string; cnt: number; }
 interface PeriodGames { games: GamePreviewEntry[]; totalGames: number; }
 
 // Cache keyed by `"${utcFrom}|${utcTo}"` — avoids re-querying the same period.
@@ -76,12 +76,12 @@ export function setDefaultPreviewGames(
 export function primePreviewCache(
   utcFrom: string,
   utcTo: string,
-  rows: { name: string; name_ja: string; cnt: number }[],
+  rows: { id: string; name: string; name_ja: string; cnt: number }[],
 ): void {
   const cacheKey = `${utcFrom}|${utcTo}`;
   if (_previewCache.has(cacheKey)) return; // already populated; don't overwrite
   _previewCache.set(cacheKey, {
-    games: rows.map(r => ({ name: r.name, name_ja: r.name_ja, cnt: r.cnt })),
+    games: rows.map(r => ({ id: r.id, name: r.name, name_ja: r.name_ja, cnt: r.cnt })),
     totalGames: rows.length,
   });
 }
@@ -197,9 +197,10 @@ async function fetchPreviewData(utcFrom: string, utcTo: string): Promise<PeriodG
   ) as { game_id: unknown; name: unknown; name_ja: unknown; cnt: unknown }[];
 
   const games: GamePreviewEntry[] = rows.map(r => ({
-    name: String(r.name ?? ''),
+    id:      String(r.game_id ?? ''),
+    name:    String(r.name ?? ''),
     name_ja: String(r.name_ja ?? ''),
-    cnt: Number(r.cnt),
+    cnt:     Number(r.cnt),
   }));
   const data: PeriodGames = { games, totalGames: games.length };
   _previewCache.set(cacheKey, data);
@@ -220,9 +221,18 @@ async function showPreviewFor(utcFrom: string, utcTo: string, periodStr: string)
   const data = await fetchPreviewData(utcFrom, utcTo);
   if (seq !== _hoverSeq) return; // superseded by another hover or mouseleave
 
-  const total = data.games.reduce((s, g) => s + g.cnt, 0);
+  // When a game filter is active, restrict the preview to that game so hover
+  // counts are consistent with the heat-map (which also game-filters).
+  const displayData: PeriodGames = state.gameFilter
+    ? (() => {
+        const filtered = data.games.filter(g => g.id === state.gameFilter);
+        return { games: filtered, totalGames: filtered.length };
+      })()
+    : data;
+
+  const total = displayData.games.reduce((s, g) => s + g.cnt, 0);
   const label = total > 0 ? `${periodStr} · ${t().clipCount(total)}` : periodStr;
-  displayPreview(label, data);
+  displayPreview(label, displayData);
 }
 
 function revertToDefault(): void {
@@ -384,6 +394,7 @@ export function syncDateInputs(): void {
 function liveDayCountsForYear(year: number): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const c of state.liveClips) {
+    if (state.gameFilter && c.game_id !== state.gameFilter) continue;
     const day = utcTimestampToLocalDate(c.created_at, state.tzOffset);
     if (day.startsWith(`${year}-`)) {
       counts[day] = (counts[day] ?? 0) + 1;
@@ -396,6 +407,7 @@ function liveDayCountsForYear(year: number): Record<string, number> {
 function liveMonthCountsForYear(year: number): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const c of state.liveClips) {
+    if (state.gameFilter && c.game_id !== state.gameFilter) continue;
     const day = utcTimestampToLocalDate(c.created_at, state.tzOffset);
     if (day.startsWith(`${year}-`)) {
       const month = day.slice(0, 7);
@@ -411,6 +423,7 @@ function liveDayCountsForMonth(year: number, month: number): Record<string, numb
   const prefix = `${year}-${pad(month + 1)}-`;
   const counts: Record<string, number> = {};
   for (const c of state.liveClips) {
+    if (state.gameFilter && c.game_id !== state.gameFilter) continue;
     const day = utcTimestampToLocalDate(c.created_at, state.tzOffset);
     if (day.startsWith(prefix)) {
       counts[day] = (counts[day] ?? 0) + 1;
@@ -514,12 +527,15 @@ async function queryYearDays(year: number): Promise<{ day: string; cnt: number }
   const mod  = tzToSqlModifier(state.tzOffset);
   const from = localDateToUtcBound(`${year}-01-01`, state.tzOffset);
   const to   = localDateToUtcBound(`${year + 1}-01-01`, state.tzOffset);
+  const gameClause = state.gameFilter ? ' AND game_id = ?' : '';
+  const params: (string | number)[] = [mod, from, to];
+  if (state.gameFilter) params.push(state.gameFilter);
   return (await q(
     `SELECT strftime('%Y-%m-%d', created_at, ?) AS day, COUNT(*) AS cnt
      FROM clips
-     WHERE created_at >= ? AND created_at < ?
+     WHERE created_at >= ? AND created_at < ?${gameClause}
      GROUP BY day`,
-    [mod, from, to],
+    params,
   )) as { day: string; cnt: number }[];
 }
 
@@ -531,12 +547,15 @@ async function queryMonthDays(year: number, month: number): Promise<{ day: strin
     state.tzOffset,
   );
   const mod  = tzToSqlModifier(state.tzOffset);
+  const gameClause = state.gameFilter ? ' AND game_id = ?' : '';
+  const params: (string | number)[] = [mod, from, to];
+  if (state.gameFilter) params.push(state.gameFilter);
   return (await q(
     `SELECT strftime('%Y-%m-%d', created_at, ?) AS day, COUNT(*) AS cnt
      FROM clips
-     WHERE created_at >= ? AND created_at < ?
+     WHERE created_at >= ? AND created_at < ?${gameClause}
      GROUP BY day`,
-    [mod, from, to],
+    params,
   )) as { day: string; cnt: number }[];
 }
 
@@ -544,12 +563,15 @@ async function queryYearMonthTotals(year: number): Promise<{ month: string; cnt:
   const mod  = tzToSqlModifier(state.tzOffset);
   const from = localDateToUtcBound(`${year}-01-01`, state.tzOffset);
   const to   = localDateToUtcBound(`${year + 1}-01-01`, state.tzOffset);
+  const gameClause = state.gameFilter ? ' AND game_id = ?' : '';
+  const params: (string | number)[] = [mod, from, to];
+  if (state.gameFilter) params.push(state.gameFilter);
   return (await q(
     `SELECT strftime('%Y-%m', created_at, ?) AS month, COUNT(*) AS cnt
      FROM clips
-     WHERE created_at >= ? AND created_at < ?
+     WHERE created_at >= ? AND created_at < ?${gameClause}
      GROUP BY month`,
-    [mod, from, to],
+    params,
   )) as { month: string; cnt: number }[];
 }
 
@@ -568,6 +590,11 @@ export async function renderCalendar(): Promise<void> {
   } else {
     await renderMonthView();
   }
+
+  // Show notice when a title search is active — calendar counts reflect the
+  // game filter but cannot reflect the text search (no efficient aggregate index).
+  const notice = document.getElementById('cal-search-notice');
+  if (notice) notice.style.display = state.searchQuery ? '' : 'none';
 
   renderNavControls();
   void prefetchDefault(); // fire-and-forget: populate the game preview strip
