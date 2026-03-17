@@ -338,6 +338,28 @@ function heatColor(cnt: number): string {
   return `var(--cal-${heatLevel(cnt)})`;
 }
 
+/**
+ * Computes [p25, p50, p75] quantile thresholds from an array of counts,
+ * ignoring zeros.  Used for relative (per-view) heat normalization so that
+ * the full 0–4 scale is visible regardless of absolute clip volume.
+ */
+function computeHeatThresholds(counts: number[]): [number, number, number] {
+  const nonZero = counts.filter(v => v > 0).sort((a, b) => a - b);
+  const n = nonZero.length;
+  if (n === 0) return [1, 2, 3];
+  const at = (p: number) => nonZero[Math.floor((n - 1) * p)]!;
+  return [at(0.25), at(0.5), at(0.75)];
+}
+
+/** Assigns a heat level 0–4 using pre-computed quantile thresholds. */
+function heatLevelRelative(cnt: number, thresholds: [number, number, number]): 0 | 1 | 2 | 3 | 4 {
+  if (cnt === 0) return 0;
+  if (cnt <= thresholds[0]) return 1;
+  if (cnt <= thresholds[1]) return 2;
+  if (cnt <= thresholds[2]) return 3;
+  return 4;
+}
+
 // ── Date filter helpers ───────────────────────────────────────────────────
 
 function setYearFilter(y: number): void {
@@ -399,6 +421,17 @@ function liveDayCountsForYear(year: number): Record<string, number> {
     if (day.startsWith(`${year}-`)) {
       counts[day] = (counts[day] ?? 0) + 1;
     }
+  }
+  return counts;
+}
+
+/** YYYY → count for live clips, keyed by year (local time). */
+function liveYearCounts(): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const c of state.liveClips) {
+    if (state.gameFilter && c.game_id !== state.gameFilter) continue;
+    const yr = utcTimestampToLocalDate(c.created_at, state.tzOffset).slice(0, 4);
+    counts[yr] = (counts[yr] ?? 0) + 1;
   }
   return counts;
 }
@@ -505,6 +538,22 @@ function monthFullyInRange(year: number, month: number): boolean {
 }
 
 /**
+ * True when the calendar year overlaps the active filter range at all.
+ * Used to highlight year-strip pills that touch the selection.
+ * Open ends are clamped to the loaded data bounds.
+ */
+function yearOverlapsRange(year: number): boolean {
+  const { from, to } = effectiveRangeBounds();
+  if (!from && !to) return false;
+  const yStart = `${year}-01-01`;
+  const yEnd   = `${year + 1}-01-01`;
+  if (from && to) return from < yEnd && to > yStart;
+  if (from)       return yEnd  > from;
+  if (to)         return yStart < to;
+  return false;
+}
+
+/**
  * True when the calendar month (0-based) overlaps the active filter range at all.
  * Used to highlight year-strip pills that touch the selection.
  * Open ends are clamped to the loaded data bounds.
@@ -573,6 +622,23 @@ async function queryYearMonthTotals(year: number): Promise<{ month: string; cnt:
      GROUP BY month`,
     params,
   )) as { month: string; cnt: number }[];
+}
+
+async function queryAllYearTotals(): Promise<{ year: string; cnt: number }[]> {
+  if (!state.calMinDate || !state.calMaxDate) return [];
+  const mod  = tzToSqlModifier(state.tzOffset);
+  const from = localDateToUtcBound(`${state.calMinDate.slice(0, 4)}-01-01`, state.tzOffset);
+  const to   = localDateToUtcBound(`${Number(state.calMaxDate.slice(0, 4)) + 1}-01-01`, state.tzOffset);
+  const gameClause = state.gameFilter ? ' AND game_id = ?' : '';
+  const params: (string | number)[] = [mod, from, to];
+  if (state.gameFilter) params.push(state.gameFilter);
+  return (await q(
+    `SELECT strftime('%Y', created_at, ?) AS year, COUNT(*) AS cnt
+     FROM clips
+     WHERE created_at >= ? AND created_at < ?${gameClause}
+     GROUP BY year`,
+    params,
+  )) as { year: string; cnt: number }[];
 }
 
 // ── Main calendar dispatcher ──────────────────────────────────────────────
@@ -665,13 +731,68 @@ function renderNavControls(): void {
 
 // ── Year view ─────────────────────────────────────────────────────────────
 
+async function renderAllYearsStrip(): Promise<void> {
+  const strip = document.getElementById('cal-all-years-strip')!;
+  strip.innerHTML = '';
+
+  if (!state.calMinDate || !state.calMaxDate) return;
+
+  const totals  = await queryAllYearTotals();
+  const yearMap = Object.fromEntries(totals.map(r => [r.year, r.cnt]));
+
+  // Merge live clip counts.
+  for (const [yr, cnt] of Object.entries(liveYearCounts())) {
+    yearMap[yr] = ((yearMap[yr] as number | undefined) ?? 0) + cnt;
+  }
+
+  const minYear = Number(state.calMinDate.slice(0, 4));
+  const maxYear = Number(state.calMaxDate.slice(0, 4));
+
+  const allYearCounts = Array.from(
+    { length: maxYear - minYear + 1 },
+    (_, i) => (yearMap[String(minYear + i)] as number | undefined) ?? 0,
+  );
+  const yearThresholds = computeHeatThresholds(allYearCounts);
+
+  for (let y = minYear; y <= maxYear; y++) {
+    const cnt   = (yearMap[String(y)] as number | undefined) ?? 0;
+    const level = heatLevelRelative(cnt, yearThresholds);
+    const el = document.createElement('div');
+    const classes = ['strip-year'];
+    if (y === state.calYear)  classes.push('active');
+    if (yearOverlapsRange(y)) classes.push('in-range');
+    el.className = classes.join(' ');
+    el.textContent = String(y);
+    el.title = t().monthTooltip(String(y), cnt);
+    el.style.background = `var(--cal-${level})`;
+    el.dataset.heat = String(level);
+
+    el.addEventListener('click', () => {
+      state.setCalYear(y);
+      state.setCalMonth(null);
+      state.setCalDay(null);
+      state.setCalWeek(null);
+      setYearFilter(y);
+      void renderCalendar();
+      state.setCurrentPage(1);
+      callRender();
+    });
+    if (_supportsHover) {
+      el.addEventListener('mouseenter', () => showPreviewForYear(y));
+      el.addEventListener('mouseleave', revertToDefault);
+    }
+    strip.appendChild(el);
+  }
+}
+
 async function renderYearView(): Promise<void> {
-  document.getElementById('cal-year-view')!.style.display  = 'grid';
-  document.getElementById('cal-month-view')!.style.display = 'none';
+  document.getElementById('cal-all-years-strip')!.style.display = '';
+  document.getElementById('cal-year-view')!.style.display        = 'grid';
+  document.getElementById('cal-month-view')!.style.display       = 'none';
   renderBreadcrumb();
 
-  const yearData = await queryYearDays(state.calYear);
-  const dayMap   = Object.fromEntries(yearData.map(r => [r.day, r.cnt]));
+  const [yearData] = await Promise.all([queryYearDays(state.calYear), renderAllYearsStrip()]);
+  const dayMap = Object.fromEntries(yearData.map(r => [r.day, r.cnt]));
 
   // Merge live clip counts (live clips are always newer than the DB cutoff,
   // so they appear at the end and never overlap archived days).
@@ -683,6 +804,13 @@ async function renderYearView(): Promise<void> {
   for (const [key, cnt] of Object.entries(dayMap)) {
     monthTotals[parseInt(key.slice(5, 7), 10) - 1]! += cnt as number;
   }
+
+  const dayCountsArr  = Object.values(dayMap) as number[];
+  const nonZeroDays   = dayCountsArr.filter(v => v > 0);
+  const avgDay        = nonZeroDays.length > 0
+    ? nonZeroDays.reduce((a, b) => a + b, 0) / nonZeroDays.length
+    : 0;
+  const dayThresholds = avgDay > 15 ? computeHeatThresholds(dayCountsArr) : null;
 
   const container = document.getElementById('cal-year-view')!;
   container.innerHTML = '';
@@ -716,7 +844,8 @@ async function renderYearView(): Promise<void> {
       const cnt  = (dayMap[key] as number | undefined) ?? 0;
       const cell = document.createElement('div');
       cell.className = 'mini-day';
-      cell.style.background = heatColor(cnt);
+      const miniDayLevel = dayThresholds ? heatLevelRelative(cnt, dayThresholds) : heatLevel(cnt);
+      cell.style.background = `var(--cal-${miniDayLevel})`;
       if (isInRange(key)) {
         const dayOfWeek = (firstDow + day - 1) % 7; // 0=Sun, 6=Sat
         if (isFullMonth) {
@@ -753,8 +882,9 @@ async function renderYearView(): Promise<void> {
 // ── Month view ────────────────────────────────────────────────────────────
 
 async function renderMonthView(): Promise<void> {
-  document.getElementById('cal-year-view')!.style.display  = 'none';
-  document.getElementById('cal-month-view')!.style.display = 'block';
+  document.getElementById('cal-all-years-strip')!.style.display = 'none';
+  document.getElementById('cal-year-view')!.style.display        = 'none';
+  document.getElementById('cal-month-view')!.style.display       = 'block';
   renderBreadcrumb();
   await Promise.all([renderYearStrip(), renderMonthGrid()]);
 }
@@ -771,9 +901,16 @@ async function renderYearStrip(): Promise<void> {
   const strip = document.getElementById('cal-year-strip')!;
   strip.innerHTML = '';
 
+  const allMonthCounts = Array.from(
+    { length: 12 },
+    (_, m) => (monthMap[`${state.calYear}-${String(m + 1).padStart(2, '0')}`] as number | undefined) ?? 0,
+  );
+  const monthThresholds = computeHeatThresholds(allMonthCounts);
+
   for (let m = 0; m < 12; m++) {
-    const key = `${state.calYear}-${String(m + 1).padStart(2, '0')}`;
-    const cnt = (monthMap[key] as number | undefined) ?? 0;
+    const key   = `${state.calYear}-${String(m + 1).padStart(2, '0')}`;
+    const cnt   = (monthMap[key] as number | undefined) ?? 0;
+    const level = heatLevelRelative(cnt, monthThresholds);
 
     const el = document.createElement('div');
     const classes = ['strip-month'];
@@ -782,8 +919,8 @@ async function renderYearStrip(): Promise<void> {
     el.className = classes.join(' ');
     el.textContent = t().monthShort[m]!;
     el.title = t().monthTooltip(t().monthLong[m]!, cnt);
-    el.style.background = heatColor(cnt);
-    el.dataset.heat = String(heatLevel(cnt));
+    el.style.background = `var(--cal-${level})`;
+    el.dataset.heat = String(level);
 
     el.addEventListener('click', () => {
       state.setCalMonth(m);
@@ -815,6 +952,13 @@ async function renderMonthGrid(): Promise<void> {
   const firstDow   = firstDayOfMonth(state.calYear, state.calMonth!);
   const today      = todayStrInOffset(state.tzOffset);
   const totalSlots = Math.ceil((firstDow + totalDays) / 7) * 7;
+
+  const dayCountsArr  = Object.values(dayMap) as number[];
+  const nonZeroDays   = dayCountsArr.filter(v => v > 0);
+  const avgDay        = nonZeroDays.length > 0
+    ? nonZeroDays.reduce((a, b) => a + b, 0) / nonZeroDays.length
+    : 0;
+  const dayThresholds = avgDay > 15 ? computeHeatThresholds(dayCountsArr) : null;
 
   const container = document.getElementById('cal-month-grid')!;
   container.innerHTML = '';
@@ -873,8 +1017,9 @@ async function renderMonthGrid(): Promise<void> {
       if (dateKey === today)         classes.push('today');
       if (dateKey === state.calDay)  classes.push('selected');
       cell.className = classes.join(' ');
-      cell.style.background = heatColor(cnt);
-      cell.dataset.heat = String(heatLevel(cnt));
+      const dayLevel = dayThresholds ? heatLevelRelative(cnt, dayThresholds) : heatLevel(cnt);
+      cell.style.background = `var(--cal-${dayLevel})`;
+      cell.dataset.heat = String(dayLevel);
 
       // Perimeter border + tint for in-range cells.
       // dayOfWeek derived from firstDow so we avoid a Date allocation per cell.
@@ -913,7 +1058,7 @@ function renderBreadcrumb(): void {
   const parts: string[] = [];
 
   if (state.calMonth === null) {
-    parts.push(`<span class="crumb-current">${state.calYear}</span>`);
+    parts.push(`<span class="crumb" data-action="year-self">${state.calYear}</span>`);
   } else {
     parts.push(`<span class="crumb" data-action="year">${state.calYear}</span>`);
   }
@@ -921,7 +1066,7 @@ function renderBreadcrumb(): void {
   if (state.calMonth !== null) {
     parts.push(`<span class="sep">›</span>`);
     if (state.calDay === null && state.calWeek === null) {
-      parts.push(`<span class="crumb-current">${t().monthLong[state.calMonth]!}</span>`);
+      parts.push(`<span class="crumb" data-action="month-self">${t().monthLong[state.calMonth]!}</span>`);
     } else {
       parts.push(`<span class="crumb" data-action="month">${t().monthLong[state.calMonth]!}</span>`);
     }
@@ -953,6 +1098,18 @@ function renderBreadcrumb(): void {
     yearCrumb?.addEventListener('mouseleave', revertToDefault);
   }
 
+  bc.querySelector('[data-action="year-self"]')?.addEventListener('click', () => {
+    setYearFilter(state.calYear);
+    void renderCalendar();
+    state.setCurrentPage(1);
+    callRender();
+  });
+  if (_supportsHover) {
+    const yearSelfCrumb = bc.querySelector<HTMLElement>('[data-action="year-self"]');
+    yearSelfCrumb?.addEventListener('mouseenter', () => showPreviewForYear(state.calYear));
+    yearSelfCrumb?.addEventListener('mouseleave', revertToDefault);
+  }
+
   bc.querySelector('[data-action="month"]')?.addEventListener('click', () => {
     state.setCalDay(null);
     state.setCalWeek(null);
@@ -965,6 +1122,18 @@ function renderBreadcrumb(): void {
     const monthCrumb = bc.querySelector<HTMLElement>('[data-action="month"]');
     monthCrumb?.addEventListener('mouseenter', () => showPreviewForMonth(state.calYear, state.calMonth!));
     monthCrumb?.addEventListener('mouseleave', revertToDefault);
+  }
+
+  bc.querySelector('[data-action="month-self"]')?.addEventListener('click', () => {
+    setMonthFilter(state.calYear, state.calMonth!);
+    void renderCalendar();
+    state.setCurrentPage(1);
+    callRender();
+  });
+  if (_supportsHover) {
+    const monthSelfCrumb = bc.querySelector<HTMLElement>('[data-action="month-self"]');
+    monthSelfCrumb?.addEventListener('mouseenter', () => showPreviewForMonth(state.calYear, state.calMonth!));
+    monthSelfCrumb?.addEventListener('mouseleave', revertToDefault);
   }
 }
 
