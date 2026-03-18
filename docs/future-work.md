@@ -5,6 +5,7 @@ Deferred items with rationale. See the relevant source files for implementation 
 ---
 
 ## Small issues
+- strange mouse cursor issue: mousing over the rows in list view from different directions, the cursor sometimes stays default instead of becoming "pointer".
 - remember list vs grid view? or change default to list view?
 - template repo: fork + change settings to deploy an archive for a streamer
 - featured clips
