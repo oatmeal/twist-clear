@@ -34,7 +34,9 @@ CREATE TABLE IF NOT EXISTS clips (
     thumbnail_url  TEXT,
     url            TEXT,
     language       TEXT,
-    vod_offset     INTEGER
+    vod_offset     INTEGER,
+    video_id       TEXT,
+    is_featured    INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS clips_broadcaster_created ON clips(broadcaster_id, created_at DESC);
@@ -48,6 +50,8 @@ CREATE INDEX IF NOT EXISTS clips_game_created        ON clips(game_id, created_a
 # the OperationalError raised when a column already exists is swallowed.
 _MIGRATIONS = [
     ("name_ja", "ALTER TABLE games ADD COLUMN name_ja TEXT"),
+    ("video_id", "ALTER TABLE clips ADD COLUMN video_id TEXT"),
+    ("is_featured", "ALTER TABLE clips ADD COLUMN is_featured INTEGER"),
 ]
 
 
@@ -157,16 +161,20 @@ def upsert_clips(conn: sqlite3.Connection, clips: list[dict]) -> int:
         INSERT INTO clips (
             id, broadcaster_id, creator_id, creator_name, title,
             game_id, view_count, created_at, duration,
-            thumbnail_url, url, language, vod_offset
+            thumbnail_url, url, language, vod_offset,
+            video_id, is_featured
         )
         VALUES (
             :id, :broadcaster_id, :creator_id, :creator_name, :title,
             :game_id, :view_count, :created_at, :duration,
-            :thumbnail_url, :url, :language, :vod_offset
+            :thumbnail_url, :url, :language, :vod_offset,
+            :video_id, :is_featured
         )
         ON CONFLICT(id) DO UPDATE SET
-            view_count = excluded.view_count,
-            title      = excluded.title
+            view_count  = excluded.view_count,
+            title       = excluded.title,
+            video_id    = COALESCE(excluded.video_id, clips.video_id),
+            is_featured = COALESCE(excluded.is_featured, clips.is_featured)
         """,
         clips,
     )

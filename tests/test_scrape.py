@@ -26,6 +26,8 @@ def make_api_clip(
         "url": f"https://clips.twitch.tv/{clip_id}",
         "language": "en",
         "vod_offset": None,
+        "video_id": None,
+        "is_featured": False,
     }
 
 

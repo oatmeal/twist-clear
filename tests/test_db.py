@@ -25,6 +25,8 @@ def make_clip(clip_id="clip1", broadcaster_id="123", created_at="2024-01-01T00:0
         "url": f"https://clips.twitch.tv/{clip_id}",
         "language": "en",
         "vod_offset": None,
+        "video_id": None,
+        "is_featured": None,
     }
 
 

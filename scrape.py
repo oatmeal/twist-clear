@@ -62,6 +62,7 @@ def load_config(path: str) -> dict:
 
 
 def normalize_clip(clip: dict) -> dict:
+    is_featured = clip.get("is_featured")
     return {
         "id": clip["id"],
         "broadcaster_id": clip["broadcaster_id"],
@@ -76,6 +77,8 @@ def normalize_clip(clip: dict) -> dict:
         "url": clip.get("url"),
         "language": clip.get("language"),
         "vod_offset": clip.get("vod_offset"),
+        "video_id": clip.get("video_id") or None,
+        "is_featured": int(is_featured) if is_featured is not None else None,
     }
 
 
