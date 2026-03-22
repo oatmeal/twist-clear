@@ -52,6 +52,11 @@ _MIGRATIONS = [
     ("name_ja", "ALTER TABLE games ADD COLUMN name_ja TEXT"),
     ("video_id", "ALTER TABLE clips ADD COLUMN video_id TEXT"),
     ("is_featured", "ALTER TABLE clips ADD COLUMN is_featured INTEGER"),
+    ("backfill_progress_at", "ALTER TABLE streamers ADD COLUMN backfill_progress_at TEXT"),
+    (
+        "backfill_complete",
+        "ALTER TABLE streamers ADD COLUMN backfill_complete INTEGER NOT NULL DEFAULT 0",
+    ),
 ]
 
 
@@ -239,6 +244,28 @@ def get_streamers(conn: sqlite3.Connection) -> list[sqlite3.Row]:
 def get_known_game_ids(conn: sqlite3.Connection) -> set[str]:
     rows = conn.execute("SELECT id FROM games").fetchall()
     return {row["id"] for row in rows}
+
+
+def save_backfill_progress(conn: sqlite3.Connection, broadcaster_id: str, progress_at: str) -> None:
+    conn.execute(
+        "UPDATE streamers SET backfill_progress_at = ? WHERE id = ?",
+        (progress_at, broadcaster_id),
+    )
+    conn.commit()
+
+
+def mark_backfill_complete(conn: sqlite3.Connection, broadcaster_id: str) -> None:
+    conn.execute(
+        "UPDATE streamers SET backfill_complete = 1 WHERE id = ?",
+        (broadcaster_id,),
+    )
+    conn.commit()
+
+
+def reset_backfill_state(conn: sqlite3.Connection) -> None:
+    """Reset backfill progress for all streamers so backfill restarts from scratch."""
+    conn.execute("UPDATE streamers SET backfill_complete = 0, backfill_progress_at = NULL")
+    conn.commit()
 
 
 def reset_fetch_state(conn: sqlite3.Connection) -> None:

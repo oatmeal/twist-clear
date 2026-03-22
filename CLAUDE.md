@@ -169,6 +169,9 @@ output for actual results or errors.
 uv run python scrape.py fetch                   # full historical scrape (resume from checkpoint)
 uv run python scrape.py fetch --force           # reset checkpoints, rescan everything
 uv run python scrape.py update                  # incremental update
+uv run python scrape.py backfill                 # 0-clip coverage via bisection (finds suppressed clips)
+uv run python scrape.py backfill --force         # restart backfill from the beginning
+uv run python scrape.py backfill --min-window 1  # bisect down to 1-minute windows (default: 10)
 uv run python scrape.py enrich-names            # backfill Japanese game names via IGDB + Twitch web (skip existing)
 uv run python scrape.py enrich-names --force    # re-fetch all, including already-enriched
 

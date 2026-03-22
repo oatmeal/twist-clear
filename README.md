@@ -41,7 +41,7 @@ on:
         description: 'Scraping mode'
         required: false
         type: choice
-        options: [fetch, update, skip]
+        options: [fetch, update, backfill, skip]
         default: fetch
 
 permissions:
@@ -166,6 +166,15 @@ uv run python scrape.py update
 
 Both commands upsert clips, so re-running is always safe and `view_count` values stay current.
 
+**Thorough backfill** — uses bisection to verify every time range has been covered by at least one query returning 0 clips, catching clips hidden by Twitch API suppression or bucket quantization:
+
+```sh
+uv run python scrape.py backfill
+uv run python scrape.py backfill --min-window 1   # bisect down to 1-minute windows
+```
+
+This works on both fresh databases and existing ones (as a follow-up to `fetch`). Progress is tracked separately and resumable. See [How backfill works](#how-backfill-works) below.
+
 **Backfill Japanese game names** — resolves Japanese names for every game in the database via IGDB, falling back to Twitch's own web directory pages for non-game categories (e.g. "Just Chatting" → "雑談", "Special Events" → "スペシャルイベント"). Run this once after the initial fetch, and again after any `update` that adds new games:
 
 ```sh
@@ -184,7 +193,11 @@ The GitHub Pages workflow runs `enrich-names` automatically after each scrape, s
 
 `fetch` also accepts `--force` to reset all fetch-state checkpoints and rescan the full clip history (view counts are refreshed). Without `--force`, `fetch` resumes from where it last left off.
 
+`backfill` accepts `--force` to restart from the beginning, and `--min-window MINUTES` to control the minimum bisection granularity (default: 10).
+
 **How fetch works:** `fetch` uses adaptive time windows starting from the channel's account creation date. Each window makes one API call (up to 100 clips). If a full page comes back the window is halved; on success it doubles again up to a maximum of 30 days, so long quiet stretches are covered efficiently. Pagination cursors are never saved — each window is a fully stateless, self-contained request.
+
+**How backfill works:** The Twitch Clips API can hide clips due to `started_at` bucket quantization (10-minute boundaries) and same-video near-duplicate suppression. `backfill` addresses this by sweeping the full timeline with a bisection strategy: it starts with 30-day windows and recursively splits any window that returns clips into two halves (aligned to 10-minute boundaries), continuing until every time range is covered by a query that returned 0 clips — proving no clips are hiding there. In testing, this found ~13% more clips than `fetch` alone, all with low view counts that were displaced by tied-view competitors in wider query windows.
 
 ### Browser viewer
 
@@ -242,6 +255,8 @@ Key columns on `streamers`:
 | `fetch_progress_at` | Latest completed window end; allows fetch to resume after interruption |
 | `full_history_fetched` | Set to 1 once fetch completes; gates the update command |
 | `newest_clip_at` | Most recent clip timestamp; used as the update watermark |
+| `backfill_progress_at` | Latest completed backfill window end; allows backfill to resume |
+| `backfill_complete` | Set to 1 once backfill finishes the full timeline |
 
 Useful queries:
 

@@ -19,6 +19,10 @@ on:
           - update: restore cached DB then run scrape.py update (incremental,
             only new clips). Falls back to a full fetch if no cache exists. Best
             for frequent intra-day runs alongside a daily fetch run.
+          - backfill: restore cached DB, run scrape.py update (incremental),
+            then run scrape.py backfill to verify 0-clip coverage via bisection.
+            Finds clips hidden by API suppression or bucket quantization.
+            Falls back to a full fetch + backfill if no cache exists.
           - skip: restore cached DB and skip scraping entirely. Redeploys the
             site without touching the scraper. Useful for style or config changes.
             Fails with a clear error if no cached DB is available.
@@ -243,6 +247,9 @@ jobs:
             uv run python scrape.py fetch --force
           else
             uv run python scrape.py update
+          fi
+          if [ "$SCRAPE_MODE" = "backfill" ]; then
+            uv run python scrape.py backfill
           fi
         env:
           SCRAPE_MODE: ${{ inputs.scrape_mode }}

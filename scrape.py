@@ -2,8 +2,9 @@
 """Twitch clip metadata scraper.
 
 Usage:
-    python scrape.py fetch    # full historical scrape for all configured streamers
-    python scrape.py update   # incremental update (new clips only)
+    python scrape.py fetch      # full historical scrape for all configured streamers
+    python scrape.py update     # incremental update (new clips only)
+    python scrape.py backfill   # 0-clip coverage via bisection (finds suppressed clips)
 """
 
 import argparse
@@ -26,8 +27,11 @@ from lib.db import (
     get_streamers,
     get_unenriched_games,
     init_db,
+    mark_backfill_complete,
     mark_full_history_fetched,
+    reset_backfill_state,
     reset_fetch_state,
+    save_backfill_progress,
     save_fetch_progress,
     update_game_ja_names,
     update_watermark,
@@ -45,6 +49,10 @@ _TWITCH_EPOCH = datetime(2011, 6, 1, tzinfo=UTC)
 _MIN_WINDOW = timedelta(seconds=1)
 _INITIAL_WINDOW = timedelta(days=1)
 _MAX_WINDOW = timedelta(days=30)
+
+# Backfill defaults.
+_BACKFILL_INITIAL_WINDOW = timedelta(days=30)
+_BACKFILL_DEFAULT_MIN_WINDOW = timedelta(minutes=10)
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +212,122 @@ def fetch_history(
 
 
 # ---------------------------------------------------------------------------
+# Backfill — 0-clip coverage via bisection
+# ---------------------------------------------------------------------------
+
+
+def _align_10min(dt: datetime) -> datetime:
+    """Round down to the nearest 10-minute boundary."""
+    return dt.replace(minute=dt.minute // 10 * 10, second=0, microsecond=0)
+
+
+class _BackfillStats:
+    """Mutable counters shared across the recursive bisection tree."""
+
+    def __init__(self) -> None:
+        self.clips_found = 0
+        self.api_calls = 0
+        self.zero_windows = 0
+
+
+def _bisect_coverage(
+    api: TwitchAPI,
+    igdb: IGDBClient,
+    conn,
+    broadcaster_id: str,
+    from_dt: datetime,
+    to_dt: datetime,
+    min_window: timedelta,
+    stats: _BackfillStats,
+) -> None:
+    """Recursively bisect [from_dt, to_dt) to achieve 0-clip coverage.
+
+    At each level we query the API.  If the response is empty (0 clips),
+    the range is proven clear and we stop.  Otherwise we store any clips
+    found and — if the window is wider than *min_window* — bisect into two
+    halves and recurse.
+    """
+    if from_dt >= to_dt:
+        return
+
+    clips_raw, has_more = api.get_clips_window(
+        broadcaster_id,
+        started_at=from_dt.isoformat(timespec="seconds"),
+        ended_at=to_dt.isoformat(timespec="seconds"),
+    )
+    stats.api_calls += 1
+
+    if not clips_raw and not has_more:
+        stats.zero_windows += 1
+        return
+
+    # Store clips from this query (upsert handles dedup).
+    if clips_raw:
+        clips = [normalize_clip(c) for c in clips_raw]
+        resolve_new_games(api, igdb, conn, clips)
+        upsert_clips(conn, clips)
+        stats.clips_found += len(clips)
+
+    # At minimum window — can't bisect further.
+    window = to_dt - from_dt
+    if window <= min_window:
+        return
+
+    # Bisect — split at an aligned 10-minute boundary.
+    mid = _align_10min(from_dt + window / 2)
+    # Guard against degenerate splits.
+    if mid <= from_dt:
+        mid = from_dt + min_window
+    if mid >= to_dt:
+        return
+
+    _bisect_coverage(api, igdb, conn, broadcaster_id, from_dt, mid, min_window, stats)
+    _bisect_coverage(api, igdb, conn, broadcaster_id, mid, to_dt, min_window, stats)
+
+
+def backfill_range(
+    api: TwitchAPI,
+    igdb: IGDBClient,
+    conn,
+    broadcaster_id: str,
+    from_dt: datetime,
+    to_dt: datetime,
+    min_window: timedelta,
+) -> _BackfillStats:
+    """Sweep [from_dt, to_dt) in large windows, bisecting each as needed.
+
+    Progress is saved after each top-level window completes so the job can
+    be resumed if interrupted.
+    """
+    stats = _BackfillStats()
+    current = from_dt
+    step = _BACKFILL_INITIAL_WINDOW
+
+    while current < to_dt:
+        window_end = min(current + step, to_dt)
+
+        _bisect_coverage(
+            api, igdb, conn, broadcaster_id, current, window_end, min_window, stats
+        )
+
+        save_backfill_progress(conn, broadcaster_id, window_end.isoformat(timespec="seconds"))
+        current = window_end
+
+        print(
+            f"  {current.date()}  calls={stats.api_calls}  clips={stats.clips_found}"
+            f"  zero={stats.zero_windows}",
+            end="\r",
+            flush=True,
+        )
+
+    print(
+        f"  Done — {stats.api_calls} API calls, {stats.clips_found} clips,"
+        f" {stats.zero_windows} zero-windows.          "
+    )
+    return stats
+
+
+# ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
 
@@ -311,6 +435,84 @@ def cmd_update(api: TwitchAPI, igdb: IGDBClient, conn) -> None:
             print("  No new clips.")
 
 
+def cmd_backfill(
+    api: TwitchAPI,
+    igdb: IGDBClient,
+    conn,
+    config: dict,
+    *,
+    force: bool = False,
+    min_window_minutes: int = 10,
+) -> None:
+    """0-clip coverage backfill for all configured streamers.
+
+    Bisects the full timeline to ensure every time range is covered by at
+    least one API query that returned 0 clips (proving no suppressed clips
+    are hiding there).  Any clips found along the way are upserted.
+
+    Works both on a fresh database (as a thorough alternative to ``fetch``)
+    and on an existing one (to find suppressed clips missed by wide-window
+    fetching).
+    """
+    if force:
+        print("--force: resetting backfill state for all streamers...")
+        reset_backfill_state(conn)
+
+    min_window = timedelta(minutes=min_window_minutes)
+    logins = [s["login"] for s in config.get("streamers", [])]
+    if not logins:
+        sys.exit("No streamers configured. Add [[streamers]] entries to config.toml.")
+
+    print(f"Resolving {len(logins)} streamer(s)...")
+    users = api.get_users(logins)
+
+    found_logins = {u["login"].lower() for u in users}
+    for login in logins:
+        if login.lower() not in found_logins:
+            print(f"  Warning: streamer '{login}' not found on Twitch.", file=sys.stderr)
+
+    for user in users:
+        upsert_streamer(
+            conn,
+            {
+                "id": user["id"],
+                "login": user["login"],
+                "display_name": user["display_name"],
+                "account_created_at": user.get("created_at"),
+            },
+        )
+
+        row = get_streamer(conn, user["id"])
+
+        if row["backfill_complete"]:
+            print(f"\n{user['display_name']} — backfill already complete, skipping.")
+            continue
+
+        # Determine start point.
+        if row["backfill_progress_at"]:
+            from_dt = datetime.fromisoformat(row["backfill_progress_at"])
+            progress = row["backfill_progress_at"][:10]
+            print(f"\n{user['display_name']} — resuming backfill from {progress}")
+        elif row["account_created_at"]:
+            from_dt = datetime.fromisoformat(row["account_created_at"])
+            print(
+                f"\n{user['display_name']} — starting backfill from account creation "
+                f"({row['account_created_at'][:10]})"
+            )
+        else:
+            from_dt = _TWITCH_EPOCH
+            print(
+                f"\n{user['display_name']} — no account date, starting backfill from "
+                f"{_TWITCH_EPOCH.date()}"
+            )
+
+        to_dt = datetime.now(UTC)
+        print(f"  min window: {_fmt_window(min_window)}")
+
+        backfill_range(api, igdb, conn, user["id"], from_dt, to_dt, min_window)
+        mark_backfill_complete(conn, user["id"])
+
+
 def cmd_enrich_names(igdb: IGDBClient, conn, *, force: bool = False) -> None:
     """Backfill Japanese names for games currently in the database.
 
@@ -365,6 +567,22 @@ def main() -> None:
         help="Reset all fetch state first, re-scanning full history and refreshing view counts",
     )
     sub.add_parser("update", help="Incremental update — fetch only new clips")
+    backfill_sub = sub.add_parser(
+        "backfill",
+        help="0-clip coverage backfill — bisect timeline to find suppressed clips",
+    )
+    backfill_sub.add_argument(
+        "--force",
+        action="store_true",
+        help="Reset backfill state first, restarting from the beginning",
+    )
+    backfill_sub.add_argument(
+        "--min-window",
+        type=int,
+        default=10,
+        metavar="MINUTES",
+        help="Minimum bisection window in minutes (default: 10)",
+    )
     enrich_sub = sub.add_parser(
         "enrich-names",
         help="Backfill Japanese game names for games in the database",
@@ -394,6 +612,15 @@ def main() -> None:
         cmd_fetch(api, igdb, conn, config, force=getattr(args, "force", False))
     elif args.cmd == "update":
         cmd_update(api, igdb, conn)
+    elif args.cmd == "backfill":
+        cmd_backfill(
+            api,
+            igdb,
+            conn,
+            config,
+            force=getattr(args, "force", False),
+            min_window_minutes=getattr(args, "min_window", 10),
+        )
     elif args.cmd == "enrich-names":
         cmd_enrich_names(igdb, conn, force=getattr(args, "force", False))
 

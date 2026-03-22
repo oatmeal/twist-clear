@@ -67,7 +67,7 @@ on:
         description: 'Scraping mode'
         required: false
         type: choice
-        options: [fetch, update, skip]
+        options: [fetch, update, backfill, skip]
         default: fetch
 
 permissions:
@@ -153,7 +153,7 @@ on:
         description: 'Scraping mode'
         required: false
         type: choice
-        options: [fetch, update, skip]
+        options: [fetch, update, backfill, skip]
         default: fetch
 
 permissions:
@@ -234,7 +234,7 @@ with:
 | Input | Required | Default | Description |
 |---|---|---|---|
 | `streamers` | Yes | — | Comma-separated Twitch channel logins |
-| `scrape_mode` | No | `fetch` | `fetch` — full rescan via `scrape.py fetch --force`, refreshes all view counts; `update` — restore cached DB then run `scrape.py update` (incremental, only new clips; falls back to full fetch if no cache exists); `skip` — restore cached DB and skip scraping (fails if no cache). After scraping, `scrape.py enrich-names` is run automatically to populate Japanese game names for any newly-seen games (skips already-enriched entries, so it's fast in `update` mode). |
+| `scrape_mode` | No | `fetch` | `fetch` — full rescan via `scrape.py fetch --force`, refreshes all view counts; `update` — restore cached DB then run `scrape.py update` (incremental, only new clips; falls back to full fetch if no cache exists); `backfill` — restore cached DB, run incremental update, then run `scrape.py backfill` to verify 0-clip coverage via bisection (finds clips hidden by API suppression or bucket quantization; falls back to full fetch + backfill if no cache exists); `skip` — restore cached DB and skip scraping (fails if no cache). After scraping, `scrape.py enrich-names` is run automatically to populate Japanese game names for any newly-seen games (skips already-enriched entries, so it's fast in `update` mode). |
 | `scraper_ref` | No | `master` | Branch, tag, or SHA of `twist-clear` to use |
 | `code_repo` | No | `oatmeal/twist-clear` | Override if using a fork or copy under a different account |
 
