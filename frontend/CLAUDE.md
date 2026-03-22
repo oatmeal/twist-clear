@@ -34,6 +34,7 @@ src/
     format.ts     # escHtml, fmtDuration, fmtViews, fmtDateTime
     hash.ts       # Pure serializeHash() / deserializeHash() — URL hash state
     i18n.ts       # English & Japanese translations; t(), detectLang(), setLang()
+    liveCoverage.ts # Pure bisectCoverage() / fetchWithCoverage() — 0-clip coverage via bisection
     liveFilter.ts # Pure filterLiveClips() — filters live clips against UI state
     pkce.ts         # OAuth crypto helpers (randomBase64url, sha256Base64url)
     query.ts        # Pure buildWhere() — builds SQL WHERE clause from filter state
@@ -214,8 +215,9 @@ npm run test:watch   # re-run on change
 ```
 
 Tests cover: `buildWhere` combinations, `serializeHash`/`deserializeHash`
-round-trips, date utilities, format helpers, live clip filtering, OAuth crypto
-helpers, `extractClipSlug` URL parsing, and `clipCardHtml`/`clipListRowHtml`
-HTML structure, XSS escaping, game name language switching, and live-clip class.
+round-trips, date utilities, format helpers, live clip filtering, live coverage
+bisection (suppression discovery, deduplication), OAuth crypto helpers,
+`extractClipSlug` URL parsing, and `clipCardHtml`/`clipListRowHtml` HTML
+structure, XSS escaping, game name language switching, and live-clip class.
 The render pipeline and DOM interactions are not unit-tested (they require a
 live DB and browser environment).

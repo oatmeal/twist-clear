@@ -434,7 +434,7 @@ async function fetchLiveClips(): Promise<void> {
   // midnight UTC when the string has no time component.
   const sinceDate = ensureRfc3339(_dbCutoffDate);
 
-  const clips = await twitch.fetchNewClips(_broadcasterId, sinceDate, token);
+  const clips = await twitch.fetchNewClipsWithCoverage(_broadcasterId, sinceDate, token);
 
   if (clips.length > 0) {
     const gameIds   = clips.map(c => c.game_id);
