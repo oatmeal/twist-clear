@@ -224,10 +224,15 @@ def _align_10min(dt: datetime) -> datetime:
 class _BackfillStats:
     """Mutable counters shared across the recursive bisection tree."""
 
-    def __init__(self) -> None:
+    def __init__(self, max_calls: int | None = None) -> None:
         self.clips_found = 0
         self.api_calls = 0
         self.zero_windows = 0
+        self.max_calls = max_calls
+
+    @property
+    def budget_exhausted(self) -> bool:
+        return self.max_calls is not None and self.api_calls >= self.max_calls
 
 
 def _bisect_coverage(
@@ -246,8 +251,16 @@ def _bisect_coverage(
     the range is proven clear and we stop.  Otherwise we store any clips
     found and — if the window is wider than *min_window* — bisect into two
     halves and recurse.
+
+    Note: even when the API returns fewer than 100 clips with no pagination
+    cursor, some clips may be "suppressed" (hidden by others with the same
+    view count).  The only reliable proof that a range is fully covered is
+    querying a small-enough window and getting 0 results back.
     """
     if from_dt >= to_dt:
+        return
+
+    if stats.budget_exhausted:
         return
 
     clips_raw, has_more = api.get_clips_window(
@@ -293,22 +306,28 @@ def backfill_range(
     from_dt: datetime,
     to_dt: datetime,
     min_window: timedelta,
+    max_calls: int | None = None,
 ) -> _BackfillStats:
     """Sweep [from_dt, to_dt) in large windows, bisecting each as needed.
 
     Progress is saved after each top-level window completes so the job can
-    be resumed if interrupted.
+    be resumed if interrupted.  If *max_calls* is set, the sweep stops early
+    once the budget is exhausted (progress is still saved, so the next run
+    resumes from where this one left off).
     """
-    stats = _BackfillStats()
+    stats = _BackfillStats(max_calls=max_calls)
     current = from_dt
     step = _BACKFILL_INITIAL_WINDOW
 
     while current < to_dt:
         window_end = min(current + step, to_dt)
 
-        _bisect_coverage(
-            api, igdb, conn, broadcaster_id, current, window_end, min_window, stats
-        )
+        _bisect_coverage(api, igdb, conn, broadcaster_id, current, window_end, min_window, stats)
+
+        # Only save progress for fully completed windows — if the budget ran
+        # out mid-bisection, this window will be re-done from scratch next run.
+        if stats.budget_exhausted:
+            break
 
         save_backfill_progress(conn, broadcaster_id, window_end.isoformat(timespec="seconds"))
         current = window_end
@@ -320,10 +339,17 @@ def backfill_range(
             flush=True,
         )
 
-    print(
-        f"  Done — {stats.api_calls} API calls, {stats.clips_found} clips,"
-        f" {stats.zero_windows} zero-windows.          "
-    )
+    if stats.budget_exhausted:
+        print(
+            f"\n  Stopped — API call budget ({max_calls}) reached after"
+            f" {stats.clips_found} clips, {stats.zero_windows} zero-windows."
+            f"  Resume with another run.          "
+        )
+    else:
+        print(
+            f"  Done — {stats.api_calls} API calls, {stats.clips_found} clips,"
+            f" {stats.zero_windows} zero-windows.          "
+        )
     return stats
 
 
@@ -443,6 +469,7 @@ def cmd_backfill(
     *,
     force: bool = False,
     min_window_minutes: int = 10,
+    max_calls: int | None = None,
 ) -> None:
     """0-clip coverage backfill for all configured streamers.
 
@@ -509,8 +536,9 @@ def cmd_backfill(
         to_dt = datetime.now(UTC)
         print(f"  min window: {_fmt_window(min_window)}")
 
-        backfill_range(api, igdb, conn, user["id"], from_dt, to_dt, min_window)
-        mark_backfill_complete(conn, user["id"])
+        result = backfill_range(api, igdb, conn, user["id"], from_dt, to_dt, min_window, max_calls)
+        if not result.budget_exhausted:
+            mark_backfill_complete(conn, user["id"])
 
 
 def cmd_enrich_names(igdb: IGDBClient, conn, *, force: bool = False) -> None:
@@ -583,6 +611,13 @@ def main() -> None:
         metavar="MINUTES",
         help="Minimum bisection window in minutes (default: 10)",
     )
+    backfill_sub.add_argument(
+        "--max-calls",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Stop after N API calls (progress is saved; resume with another run)",
+    )
     enrich_sub = sub.add_parser(
         "enrich-names",
         help="Backfill Japanese game names for games in the database",
@@ -620,6 +655,7 @@ def main() -> None:
             config,
             force=getattr(args, "force", False),
             min_window_minutes=getattr(args, "min_window", 10),
+            max_calls=getattr(args, "max_calls", None),
         )
     elif args.cmd == "enrich-names":
         cmd_enrich_names(igdb, conn, force=getattr(args, "force", False))

@@ -29,6 +29,15 @@ on:
         required: false
         type: string
         default: fetch
+      backfill_max_calls:
+        description: >
+          Maximum number of Twitch API calls the backfill step may make.
+          Only applies when scrape_mode is "backfill". When the budget is
+          reached, progress is saved and the next run resumes where this
+          one left off. 0 or empty means unlimited.
+        required: false
+        type: number
+        default: 0
       scraper_ref:
         description: >
           Branch, tag, or SHA of twist-clear to check out.
@@ -249,10 +258,15 @@ jobs:
             uv run python scrape.py update
           fi
           if [ "$SCRAPE_MODE" = "backfill" ]; then
-            uv run python scrape.py backfill
+            BACKFILL_ARGS=""
+            if [ -n "$BACKFILL_MAX_CALLS" ] && [ "$BACKFILL_MAX_CALLS" -gt 0 ] 2>/dev/null; then
+              BACKFILL_ARGS="--max-calls $BACKFILL_MAX_CALLS"
+            fi
+            uv run python scrape.py backfill $BACKFILL_ARGS
           fi
         env:
           SCRAPE_MODE: ${{ inputs.scrape_mode }}
+          BACKFILL_MAX_CALLS: ${{ inputs.backfill_max_calls }}
           CACHE_MATCHED_KEY: ${{ steps.restore-cache.outputs.cache-matched-key }}
 
       - name: Verify database available

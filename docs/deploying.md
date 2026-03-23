@@ -81,6 +81,7 @@ jobs:
     with:
       streamers: "streamer1,streamer2"
       scrape_mode: ${{ github.event.inputs.mode || 'fetch' }}
+      backfill_max_calls: 100000  # cap backfill runs to ~3.5 h (well under the 6 h Actions limit)
     secrets:
       TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
       TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
@@ -167,6 +168,7 @@ jobs:
     with:
       streamers: "streamer1,streamer2"
       scrape_mode: ${{ github.event.schedule == '0 6 * * *' && 'fetch' || github.event.inputs.mode || 'update' }}
+      backfill_max_calls: 100000  # cap backfill runs to ~3.5 h (well under the 6 h Actions limit)
     secrets:
       TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
       TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
@@ -180,6 +182,8 @@ The expression resolves to:
 | Daily schedule (`0 6 * * *`) | `fetch` | Full rescan, view counts refreshed |
 | Hourly schedule (any other cron) | `update` | Incremental, ~seconds |
 | Manual dispatch | whichever option you selected | — |
+
+When you trigger a manual backfill run, `backfill_max_calls` caps the API calls so a single run stays well within the 6-hour GitHub Actions limit. Progress is saved to the database cache, so subsequent backfill runs resume where the previous one left off.
 
 To redeploy after a styling change without waiting for the scraper, trigger a manual run and select **skip**.
 
@@ -235,6 +239,7 @@ with:
 |---|---|---|---|
 | `streamers` | Yes | — | Comma-separated Twitch channel logins |
 | `scrape_mode` | No | `fetch` | `fetch` — full rescan via `scrape.py fetch --force`, refreshes all view counts; `update` — restore cached DB then run `scrape.py update` (incremental, only new clips; falls back to full fetch if no cache exists); `backfill` — restore cached DB, run incremental update, then run `scrape.py backfill` to verify 0-clip coverage via bisection (finds clips hidden by API suppression or bucket quantization; falls back to full fetch + backfill if no cache exists); `skip` — restore cached DB and skip scraping (fails if no cache). After scraping, `scrape.py enrich-names` is run automatically to populate Japanese game names for any newly-seen games (skips already-enriched entries, so it's fast in `update` mode). |
+| `backfill_max_calls` | No | `0` (unlimited) | Maximum Twitch API calls the backfill step may make. Only applies when `scrape_mode` is `backfill`. When the budget is reached, progress is saved and the next run resumes where it left off. |
 | `scraper_ref` | No | `master` | Branch, tag, or SHA of `twist-clear` to use |
 | `code_repo` | No | `oatmeal/twist-clear` | Override if using a fork or copy under a different account |
 
