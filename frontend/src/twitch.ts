@@ -120,11 +120,12 @@ export async function fetchNewClipsWithCoverage(
   broadcasterId: string,
   sinceDate:     string,
   token:         string,
+  onProgress?:   (clips: LiveClip[]) => void,
 ): Promise<LiveClip[]> {
   const fetchWindow: FetchWindow = (startedAt, endedAt) =>
     fetchClipsWindow(broadcasterId, startedAt, endedAt, token);
 
-  return fetchWithCoverage(fetchWindow, sinceDate);
+  return fetchWithCoverage(fetchWindow, sinceDate, 10, onProgress);
 }
 
 /**

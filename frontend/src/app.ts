@@ -434,12 +434,42 @@ async function fetchLiveClips(): Promise<void> {
   // midnight UTC when the string has no time component.
   const sinceDate = ensureRfc3339(_dbCutoffDate);
 
-  const clips = await twitch.fetchNewClipsWithCoverage(_broadcasterId, sinceDate, token);
+  // Resolve game names incrementally as clips are discovered, caching
+  // already-resolved IDs to avoid redundant API calls.
+  const resolvedGameIds = new Set<string>();
 
+  const onProgress = (clips: LiveClip[]): void => {
+    state.setLiveClips(clips);
+    updateLiveClipBounds();
+    void render();
+    if (state.currentView === 'calendar') void renderCalendar();
+
+    // Resolve game names for newly discovered game IDs in the background.
+    const newGameIds = [...new Set(clips.map(c => c.game_id).filter(Boolean))]
+      .filter(id => !resolvedGameIds.has(id));
+    if (newGameIds.length > 0) {
+      for (const id of newGameIds) resolvedGameIds.add(id);
+      void twitch.fetchGameNames(newGameIds, token).then(gameNames => {
+        for (const c of clips) {
+          if (gameNames[c.game_id]) c.game_name = gameNames[c.game_id]!;
+        }
+        void render();
+      });
+    }
+  };
+
+  const clips = await twitch.fetchNewClipsWithCoverage(_broadcasterId, sinceDate, token, onProgress);
+
+  // Final pass: resolve any remaining game names and do a final render.
   if (clips.length > 0) {
-    const gameIds   = clips.map(c => c.game_id);
-    const gameNames = await twitch.fetchGameNames(gameIds, token);
-    for (const c of clips) c.game_name = gameNames[c.game_id] ?? '';
+    const unresolvedIds = [...new Set(clips.map(c => c.game_id).filter(Boolean))]
+      .filter(id => !resolvedGameIds.has(id));
+    if (unresolvedIds.length > 0) {
+      const gameNames = await twitch.fetchGameNames(unresolvedIds, token);
+      for (const c of clips) {
+        if (gameNames[c.game_id]) c.game_name = gameNames[c.game_id]!;
+      }
+    }
   }
 
   state.setLiveFetching(false);

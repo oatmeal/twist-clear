@@ -36,6 +36,7 @@ export async function bisectCoverage(
   minWindowMs: number,
   results:     LiveClip[],
   seen:        Set<string>,
+  onProgress?: (results: LiveClip[]) => void,
 ): Promise<void> {
   if (from >= to) return;
 
@@ -43,12 +44,15 @@ export async function bisectCoverage(
 
   if (clips.length === 0 && !hasMore) return;
 
+  let added = 0;
   for (const c of clips) {
     if (!seen.has(c.id)) {
       seen.add(c.id);
       results.push(c);
+      added++;
     }
   }
+  if (added > 0) onProgress?.(results);
 
   const windowMs = to.getTime() - from.getTime();
   if (windowMs <= minWindowMs) return;
@@ -58,8 +62,8 @@ export async function bisectCoverage(
   if (mid <= from) mid = new Date(from.getTime() + minWindowMs);
   if (mid >= to) return;
 
-  await bisectCoverage(fetchWindow, from, mid, minWindowMs, results, seen);
-  await bisectCoverage(fetchWindow, mid, to, minWindowMs, results, seen);
+  await bisectCoverage(fetchWindow, from, mid, minWindowMs, results, seen, onProgress);
+  await bisectCoverage(fetchWindow, mid, to, minWindowMs, results, seen, onProgress);
 }
 
 /**
@@ -74,13 +78,14 @@ export async function fetchWithCoverage(
   fetchWindow:      FetchWindow,
   sinceDate:        string,
   minWindowMinutes: number = 10,
+  onProgress?:      (results: LiveClip[]) => void,
 ): Promise<LiveClip[]> {
   const from = new Date(sinceDate);
   const to   = new Date();
   const results: LiveClip[] = [];
   const seen = new Set<string>();
 
-  await bisectCoverage(fetchWindow, from, to, minWindowMinutes * 60_000, results, seen);
+  await bisectCoverage(fetchWindow, from, to, minWindowMinutes * 60_000, results, seen, onProgress);
 
   return results;
 }
