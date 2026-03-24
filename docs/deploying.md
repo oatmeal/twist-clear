@@ -227,6 +227,50 @@ with:
 
 ---
 
+## Scrape step flow
+
+The diagram below shows exactly which scraper commands run for each combination of `scrape_mode` and the two additive options (`backfill_max_calls`, `refresh_views_days`). Cache restore is skipped entirely for `fetch` mode — it always starts from a clean database.
+
+```mermaid
+flowchart TD
+    START([Run workflow]) --> MODE{scrape_mode?}
+
+    MODE -->|skip| S_RESTORE[Restore DB cache]
+    S_RESTORE --> S_CHECK{Cache found?}
+    S_CHECK -->|No| S_FAIL[❌ Fail: no cached DB]
+    S_CHECK -->|Yes| BUILD
+
+    MODE -->|fetch| F_SCRAPE[fetch --force]
+    F_SCRAPE --> F_ENRICH[enrich-names]
+    F_ENRICH --> BUILD
+
+    MODE -->|update or backfill| U_RESTORE[Restore DB cache]
+    U_RESTORE --> U_CACHE{Cache found?}
+    U_CACHE -->|Yes| U_UPDATE[update]
+    U_CACHE -->|No| U_FALLBACK[fetch --force\nfallback]
+    U_UPDATE --> BF_CHECK{backfill mode?}
+    U_FALLBACK --> BF_CHECK
+    BF_CHECK -->|Yes| BACKFILL[backfill\n--max-calls N]
+    BACKFILL --> RV_CHECK
+    BF_CHECK -->|No| RV_CHECK{refresh_views_days ≥ 0?}
+    RV_CHECK -->|Yes, = 0| REFRESH_ALL[refresh-views\nall clips]
+    RV_CHECK -->|Yes, > 0| REFRESH_N[refresh-views\n--days N]
+    RV_CHECK -->|No| ENRICH
+    REFRESH_ALL --> ENRICH[enrich-names]
+    REFRESH_N --> ENRICH
+    ENRICH --> BUILD([Build & deploy])
+```
+
+Key points:
+
+- **`fetch`** always does a full rescan from scratch — view counts are refreshed for every clip, so `refresh_views_days` is ignored.
+- **`update` and `backfill`** fall back to `fetch --force` if no cached DB exists (e.g. on the very first run).
+- **`backfill`** runs *after* `update`, so new clips are captured first and the bisection pass covers the full timeline.
+- **`refresh-views`** runs after `backfill` (when applicable) but before `enrich-names`. It is always skipped for `fetch` mode and when `refresh_views_days` is negative (the default).
+- **`enrich-names`** runs after every scrape except `skip`, and is fast in `update` mode because it skips already-enriched games.
+
+---
+
 ## Inputs reference
 
 > **This section is the canonical reference for all `deploy.yml` workflow
@@ -240,6 +284,7 @@ with:
 | `streamers` | Yes | — | Comma-separated Twitch channel logins |
 | `scrape_mode` | No | `fetch` | `fetch` — full rescan via `scrape.py fetch --force`, refreshes all view counts; `update` — restore cached DB then run `scrape.py update` (incremental, only new clips; falls back to full fetch if no cache exists); `backfill` — restore cached DB, run incremental update, then run `scrape.py backfill` to verify 0-clip coverage via bisection (finds clips hidden by API suppression or bucket quantization; falls back to full fetch + backfill if no cache exists); `skip` — restore cached DB and skip scraping (fails if no cache). After scraping, `scrape.py enrich-names` is run automatically to populate Japanese game names for any newly-seen games (skips already-enriched entries, so it's fast in `update` mode). |
 | `backfill_max_calls` | No | `0` (unlimited) | Maximum Twitch API calls the backfill step may make. Only applies when `scrape_mode` is `backfill`. When the budget is reached, progress is saved and the next run resumes where it left off. |
+| `refresh_views_days` | No | `-1` (disabled) | Refresh view counts for existing clips by re-fetching them by ID via `scrape.py refresh-views`. Skipped when `scrape_mode` is `fetch` (which already refreshes all view counts during its full rescan). Negative means disabled. `0` refreshes all clips. Positive N refreshes only clips created in the last N days. |
 | `scraper_ref` | No | `master` | Branch, tag, or SHA of `twist-clear` to use |
 | `code_repo` | No | `oatmeal/twist-clear` | Override if using a fork or copy under a different account |
 

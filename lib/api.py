@@ -135,6 +135,15 @@ class TwitchAPI:
                 break
             params["after"] = cursor
 
+    def get_clips_by_ids(self, clip_ids: list[str]) -> list[dict]:
+        """Fetch current metadata for specific clip IDs (max 100 per API call)."""
+        results: list[dict] = []
+        for i in range(0, len(clip_ids), 100):
+            batch = clip_ids[i : i + 100]
+            data = self._get("clips", {"id": batch})
+            results.extend(data.get("data", []))
+        return results
+
     def get_games(self, game_ids: list[str]) -> list[dict]:
         """Batch-resolve game IDs to game objects (max 100 per request)."""
         results: list[dict] = []

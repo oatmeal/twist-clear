@@ -38,6 +38,16 @@ on:
         required: false
         type: number
         default: 0
+      refresh_views_days:
+        description: >
+          Refresh view counts for existing clips by re-fetching them by ID
+          via scrape.py refresh-views. Skipped when scrape_mode is "fetch"
+          (which already refreshes all view counts during its full rescan).
+          Negative means disabled (default: -1). 0 refreshes all clips.
+          Positive N refreshes only clips created in the last N days.
+        required: false
+        type: number
+        default: -1
       scraper_ref:
         description: >
           Branch, tag, or SHA of twist-clear to check out.
@@ -264,9 +274,17 @@ jobs:
             fi
             uv run python scrape.py backfill $BACKFILL_ARGS
           fi
+          if [ -n "$REFRESH_VIEWS_DAYS" ] && [ "$REFRESH_VIEWS_DAYS" -ge 0 ] 2>/dev/null && [ "$SCRAPE_MODE" != "fetch" ]; then
+            REFRESH_ARGS=""
+            if [ "$REFRESH_VIEWS_DAYS" -gt 0 ]; then
+              REFRESH_ARGS="--days $REFRESH_VIEWS_DAYS"
+            fi
+            uv run python scrape.py refresh-views $REFRESH_ARGS
+          fi
         env:
           SCRAPE_MODE: ${{ inputs.scrape_mode }}
           BACKFILL_MAX_CALLS: ${{ inputs.backfill_max_calls }}
+          REFRESH_VIEWS_DAYS: ${{ inputs.refresh_views_days }}
           CACHE_MATCHED_KEY: ${{ steps.restore-cache.outputs.cache-matched-key }}
 
       - name: Verify database available

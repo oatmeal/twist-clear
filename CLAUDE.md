@@ -173,6 +173,8 @@ uv run python scrape.py backfill                 # 0-clip coverage via bisection
 uv run python scrape.py backfill --force         # restart backfill from the beginning
 uv run python scrape.py backfill --min-window 1  # bisect down to 1-minute windows (default: 10)
 uv run python scrape.py backfill --max-calls 50000  # stop after N API calls (resume next run)
+uv run python scrape.py refresh-views --days 90  # refresh view counts for clips from the last 90 days
+uv run python scrape.py refresh-views            # refresh view counts for all clips
 uv run python scrape.py enrich-names            # backfill Japanese game names via IGDB + Twitch web (skip existing)
 uv run python scrape.py enrich-names --force    # re-fetch all, including already-enriched
 

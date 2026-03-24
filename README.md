@@ -184,6 +184,13 @@ uv run python scrape.py enrich-names --force  # re-fetch all, including already-
 
 The GitHub Pages workflow runs `enrich-names` automatically after each scrape, so this is only needed for local use.
 
+**Refresh view counts** — re-fetches existing clips by ID to update their view counts without re-scraping by time window. Use `--days N` to limit the refresh to recently-created clips (the clips most likely to have gained views since the last run):
+
+```sh
+uv run python scrape.py refresh-views --days 90   # clips from the last 90 days
+uv run python scrape.py refresh-views             # all clips (can be slow for large archives)
+```
+
 **Options:**
 
 ```

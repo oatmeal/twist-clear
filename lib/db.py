@@ -284,6 +284,33 @@ def get_streamers(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     return conn.execute("SELECT * FROM streamers").fetchall()
 
 
+def get_clip_ids_for_refresh(
+    conn: sqlite3.Connection,
+    broadcaster_id: str,
+    since: str | None = None,
+) -> list[str]:
+    """Return clip IDs for a broadcaster, newest first.
+
+    If *since* is given (an ISO timestamp), only clips with ``created_at >=
+    since`` are returned, limiting the refresh to a recent window.
+    """
+    if since:
+        rows = conn.execute(
+            """
+            SELECT id FROM clips
+            WHERE broadcaster_id = ? AND created_at >= ?
+            ORDER BY created_at DESC
+            """,
+            (broadcaster_id, since),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT id FROM clips WHERE broadcaster_id = ? ORDER BY created_at DESC",
+            (broadcaster_id,),
+        ).fetchall()
+    return [row["id"] for row in rows]
+
+
 def get_known_game_ids(conn: sqlite3.Connection) -> set[str]:
     rows = conn.execute("SELECT id FROM games").fetchall()
     return {row["id"] for row in rows}

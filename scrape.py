@@ -22,6 +22,7 @@ except ImportError:
 from lib.api import TwitchAPI
 from lib.db import (
     get_all_games,
+    get_clip_ids_for_refresh,
     get_known_game_ids,
     get_streamer,
     get_streamers,
@@ -553,6 +554,47 @@ def cmd_backfill(
             mark_backfill_complete(conn, user["id"], to_dt.isoformat(timespec="seconds"))
 
 
+def cmd_refresh_views(api: TwitchAPI, conn, *, days: int = 0) -> None:
+    """Refresh view counts for clips already in the database.
+
+    Fetches clips by ID in batches of 100 using the Helix clips endpoint, which
+    updates view_count (and title) for every matched clip via upsert.
+
+    Pass ``--days N`` to limit the refresh to clips created within the last N
+    days — useful for keeping counts current without re-fetching the entire
+    archive on every run.  The default (0) refreshes all clips.
+    """
+    streamers = get_streamers(conn)
+    if not streamers:
+        sys.exit("No streamers in database. Run 'fetch' first.")
+
+    cutoff: str | None = None
+    if days > 0:
+        cutoff = (datetime.now(UTC) - timedelta(days=days)).isoformat(timespec="seconds")
+
+    for streamer in streamers:
+        clip_ids = get_clip_ids_for_refresh(conn, streamer["id"], since=cutoff)
+        if not clip_ids:
+            label = f"last {days} days" if days > 0 else "all time"
+            print(f"\n{streamer['display_name']} — no clips ({label}).")
+            continue
+
+        label = f"last {days} days" if days > 0 else "all time"
+        print(f"\n{streamer['display_name']} — {len(clip_ids)} clip(s) ({label})")
+
+        total = 0
+        for i in range(0, len(clip_ids), 100):
+            batch = clip_ids[i : i + 100]
+            clips_raw = api.get_clips_by_ids(batch)
+            if clips_raw:
+                clips = [normalize_clip(c) for c in clips_raw]
+                upsert_clips(conn, clips)
+                total += len(clips)
+            print(f"  {total}/{len(clip_ids)} refreshed...", end="\r", flush=True)
+
+        print(f"  {total} clip(s) refreshed.           ")
+
+
 def cmd_enrich_names(igdb: IGDBClient, conn, *, force: bool = False) -> None:
     """Backfill Japanese names for games currently in the database.
 
@@ -630,6 +672,17 @@ def main() -> None:
         metavar="N",
         help="Stop after N API calls (progress is saved; resume with another run)",
     )
+    refresh_sub = sub.add_parser(
+        "refresh-views",
+        help="Refresh view counts for clips already in the database",
+    )
+    refresh_sub.add_argument(
+        "--days",
+        type=int,
+        default=0,
+        metavar="N",
+        help="Only refresh clips created in the last N days (default: 0 = all clips)",
+    )
     enrich_sub = sub.add_parser(
         "enrich-names",
         help="Backfill Japanese game names for games in the database",
@@ -669,6 +722,8 @@ def main() -> None:
             min_window_minutes=getattr(args, "min_window", 10),
             max_calls=getattr(args, "max_calls", None),
         )
+    elif args.cmd == "refresh-views":
+        cmd_refresh_views(api, conn, days=getattr(args, "days", 0))
     elif args.cmd == "enrich-names":
         cmd_enrich_names(igdb, conn, force=getattr(args, "force", False))
 
