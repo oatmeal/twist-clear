@@ -73,8 +73,14 @@ class TestBisectCoverage:
         stats = _BackfillStats()
         dt = datetime(2024, 1, 1, tzinfo=UTC)
         _bisect_coverage(
-            mock_api, mock_igdb, conn, "123", dt, dt,
-            timedelta(minutes=10), stats,
+            mock_api,
+            mock_igdb,
+            conn,
+            "123",
+            dt,
+            dt,
+            timedelta(minutes=10),
+            stats,
         )
         assert stats.api_calls == 0
         mock_api.get_clips_window.assert_not_called()
@@ -84,39 +90,41 @@ class TestBisectCoverage:
         mock_api.get_clips_window.return_value = ([], False)
         stats = _BackfillStats()
         _bisect_coverage(
-            mock_api, mock_igdb, conn, "123",
+            mock_api,
+            mock_igdb,
+            conn,
+            "123",
             datetime(2024, 1, 1, tzinfo=UTC),
             datetime(2024, 2, 1, tzinfo=UTC),
-            timedelta(minutes=10), stats,
+            timedelta(minutes=10),
+            stats,
         )
         assert stats.api_calls == 1
         assert stats.zero_windows == 1
 
-    def test_clips_at_min_window_stored_without_bisect(
-        self, conn, mock_api, mock_igdb
-    ):
+    def test_clips_at_min_window_stored_without_bisect(self, conn, mock_api, mock_igdb):
         """At minimum window, clips are stored but no further bisection."""
         clip = make_api_clip("c1", created_at="2024-01-01T10:05:00Z")
         mock_api.get_clips_window.return_value = ([clip], False)
         stats = _BackfillStats()
 
         _bisect_coverage(
-            mock_api, mock_igdb, conn, "123",
+            mock_api,
+            mock_igdb,
+            conn,
+            "123",
             datetime(2024, 1, 1, 10, 0, tzinfo=UTC),
             datetime(2024, 1, 1, 10, 10, tzinfo=UTC),
-            timedelta(minutes=10), stats,
+            timedelta(minutes=10),
+            stats,
         )
 
         assert stats.api_calls == 1
         assert stats.clips_found == 1
-        row = conn.execute(
-            "SELECT id FROM clips WHERE id = 'c1'"
-        ).fetchone()
+        row = conn.execute("SELECT id FROM clips WHERE id = 'c1'").fetchone()
         assert row is not None
 
-    def test_bisects_when_clips_found_in_wide_window(
-        self, conn, mock_api, mock_igdb
-    ):
+    def test_bisects_when_clips_found_in_wide_window(self, conn, mock_api, mock_igdb):
         """A wide window with clips triggers bisection into sub-windows."""
         clip = make_api_clip("c1", created_at="2024-01-01T10:05:00Z")
 
@@ -132,10 +140,14 @@ class TestBisectCoverage:
         stats = _BackfillStats()
 
         _bisect_coverage(
-            mock_api, mock_igdb, conn, "123",
+            mock_api,
+            mock_igdb,
+            conn,
+            "123",
             datetime(2024, 1, 1, 10, 0, tzinfo=UTC),
             datetime(2024, 1, 1, 11, 0, tzinfo=UTC),
-            timedelta(minutes=10), stats,
+            timedelta(minutes=10),
+            stats,
         )
 
         # Must have made more than 1 call (the parent + children).
@@ -143,9 +155,7 @@ class TestBisectCoverage:
         # Empty sub-windows should be counted.
         assert stats.zero_windows > 0
 
-    def test_suppressed_clip_discovered_via_bisection(
-        self, conn, mock_api, mock_igdb
-    ):
+    def test_suppressed_clip_discovered_via_bisection(self, conn, mock_api, mock_igdb):
         """The core scenario: a clip suppressed in wide queries appears in
         narrow queries when its suppressor is no longer in the same window.
 
@@ -156,10 +166,14 @@ class TestBisectCoverage:
         eventually creates a [10:20, 10:30] window where B appears alone.
         """
         clip_a = make_api_clip(
-            "clipA", created_at="2024-01-01T10:05:00Z", view_count=3,
+            "clipA",
+            created_at="2024-01-01T10:05:00Z",
+            view_count=3,
         )
         clip_b = make_api_clip(
-            "clipB", created_at="2024-01-01T10:25:00Z", view_count=3,
+            "clipB",
+            created_at="2024-01-01T10:25:00Z",
+            view_count=3,
         )
 
         def fake_window_with_suppression(broadcaster_id, started_at, ended_at):
@@ -184,22 +198,24 @@ class TestBisectCoverage:
         stats = _BackfillStats()
 
         _bisect_coverage(
-            mock_api, mock_igdb, conn, "123",
+            mock_api,
+            mock_igdb,
+            conn,
+            "123",
             datetime(2024, 1, 1, 10, 0, tzinfo=UTC),
             datetime(2024, 1, 1, 10, 30, tzinfo=UTC),
-            timedelta(minutes=10), stats,
+            timedelta(minutes=10),
+            stats,
         )
 
         # Both clips must be in the DB.
-        ids = {
-            row["id"]
-            for row in conn.execute("SELECT id FROM clips").fetchall()
-        }
+        ids = {row["id"] for row in conn.execute("SELECT id FROM clips").fetchall()}
         assert "clipA" in ids
         assert "clipB" in ids
 
     def test_overflow_triggers_bisection(self, conn, mock_api, mock_igdb):
         """has_more=True (>100 clips) also triggers bisection."""
+
         def fake_overflow(broadcaster_id, started_at, ended_at):
             start = datetime.fromisoformat(started_at)
             end = datetime.fromisoformat(ended_at)
@@ -212,10 +228,14 @@ class TestBisectCoverage:
         stats = _BackfillStats()
 
         _bisect_coverage(
-            mock_api, mock_igdb, conn, "123",
+            mock_api,
+            mock_igdb,
+            conn,
+            "123",
             datetime(2024, 1, 1, 10, 0, tzinfo=UTC),
             datetime(2024, 1, 1, 11, 0, tzinfo=UTC),
-            timedelta(minutes=10), stats,
+            timedelta(minutes=10),
+            stats,
         )
 
         # The 1-hour window should be bisected into sub-windows.
@@ -228,26 +248,28 @@ class TestBisectCoverage:
 
 
 class TestBackfillRange:
-    def test_progress_saved_after_each_top_level_window(
-        self, conn, mock_api, mock_igdb
-    ):
+    def test_progress_saved_after_each_top_level_window(self, conn, mock_api, mock_igdb):
         mock_api.get_clips_window.return_value = ([], False)
 
         backfill_range(
-            mock_api, mock_igdb, conn, "123",
+            mock_api,
+            mock_igdb,
+            conn,
+            "123",
             datetime(2024, 1, 1, tzinfo=UTC),
             datetime(2024, 2, 1, tzinfo=UTC),
             timedelta(minutes=10),
         )
 
-        row = conn.execute(
-            "SELECT backfill_progress_at FROM streamers WHERE id = '123'"
-        ).fetchone()
+        row = conn.execute("SELECT backfill_progress_at FROM streamers WHERE id = '123'").fetchone()
         assert row["backfill_progress_at"] == "2024-02-01T00:00:00+00:00"
 
     def test_empty_range_no_api_calls(self, conn, mock_api, mock_igdb):
         stats = backfill_range(
-            mock_api, mock_igdb, conn, "123",
+            mock_api,
+            mock_igdb,
+            conn,
+            "123",
             datetime(2024, 1, 1, tzinfo=UTC),
             datetime(2024, 1, 1, tzinfo=UTC),
             timedelta(minutes=10),
@@ -260,7 +282,10 @@ class TestBackfillRange:
         mock_api.get_clips_window.return_value = ([], False)
 
         stats = backfill_range(
-            mock_api, mock_igdb, conn, "123",
+            mock_api,
+            mock_igdb,
+            conn,
+            "123",
             datetime(2024, 1, 1, tzinfo=UTC),
             datetime(2024, 3, 1, tzinfo=UTC),
             timedelta(minutes=10),
@@ -269,17 +294,19 @@ class TestBackfillRange:
         # Each top-level 30-day window is a single API call (all empty).
         assert stats.api_calls == 2
 
-    def test_suppressed_clip_found_across_full_range(
-        self, conn, mock_api, mock_igdb
-    ):
+    def test_suppressed_clip_found_across_full_range(self, conn, mock_api, mock_igdb):
         """End-to-end: suppressed clip B is discovered when backfilling a
         multi-day range that contains both clips.
         """
         clip_a = make_api_clip(
-            "clipA", created_at="2024-01-15T10:05:00Z", view_count=3,
+            "clipA",
+            created_at="2024-01-15T10:05:00Z",
+            view_count=3,
         )
         clip_b = make_api_clip(
-            "clipB", created_at="2024-01-15T10:25:00Z", view_count=3,
+            "clipB",
+            created_at="2024-01-15T10:25:00Z",
+            view_count=3,
         )
 
         def fake_window(broadcaster_id, started_at, ended_at):
@@ -302,16 +329,16 @@ class TestBackfillRange:
         mock_api.get_clips_window.side_effect = fake_window
 
         stats = backfill_range(
-            mock_api, mock_igdb, conn, "123",
+            mock_api,
+            mock_igdb,
+            conn,
+            "123",
             datetime(2024, 1, 1, tzinfo=UTC),
             datetime(2024, 2, 1, tzinfo=UTC),
             timedelta(minutes=10),
         )
 
-        ids = {
-            row["id"]
-            for row in conn.execute("SELECT id FROM clips").fetchall()
-        }
+        ids = {row["id"] for row in conn.execute("SELECT id FROM clips").fetchall()}
         assert "clipA" in ids
         assert "clipB" in ids
         assert stats.clips_found > 0
@@ -331,7 +358,10 @@ class TestBackfillRange:
         mock_api.get_clips_window.side_effect = fake_window
 
         stats_10m = backfill_range(
-            mock_api, mock_igdb, conn, "123",
+            mock_api,
+            mock_igdb,
+            conn,
+            "123",
             datetime(2024, 1, 1, 10, 0, tzinfo=UTC),
             datetime(2024, 1, 1, 11, 0, tzinfo=UTC),
             timedelta(minutes=10),
@@ -339,7 +369,10 @@ class TestBackfillRange:
 
         mock_api.get_clips_window.side_effect = fake_window
         stats_1m = backfill_range(
-            mock_api, mock_igdb, conn, "123",
+            mock_api,
+            mock_igdb,
+            conn,
+            "123",
             datetime(2024, 1, 1, 10, 0, tzinfo=UTC),
             datetime(2024, 1, 1, 11, 0, tzinfo=UTC),
             timedelta(minutes=1),

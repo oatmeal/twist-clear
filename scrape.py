@@ -527,9 +527,7 @@ def cmd_backfill(
             else:
                 # Previous run completed; sweep only the new time range.
                 from_dt = datetime.fromisoformat(row["backfill_complete_at"])
-                print(
-                    f"\n{user['display_name']} — incremental backfill from {from_dt.date()}"
-                )
+                print(f"\n{user['display_name']} — incremental backfill from {from_dt.date()}")
         elif row["backfill_progress_at"]:
             from_dt = datetime.fromisoformat(row["backfill_progress_at"])
             print(f"\n{user['display_name']} — resuming backfill from {from_dt.date()}")

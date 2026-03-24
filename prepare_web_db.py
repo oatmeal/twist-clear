@@ -85,9 +85,7 @@ def prepare(src_path: str, dst_path: str) -> None:
         "INSERT OR IGNORE INTO games (id, name, name_ja)"
         " VALUES ('__none__', 'No Category', 'カテゴリなし')"
     )
-    dst_conn.execute(
-        "UPDATE clips SET game_id = '__none__' WHERE game_id IS NULL"
-    )
+    dst_conn.execute("UPDATE clips SET game_id = '__none__' WHERE game_id IS NULL")
     print("  done.")
 
     # ── 5. Create FTS5 trigram table ──────────────────────────────────────
