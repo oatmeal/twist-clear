@@ -388,7 +388,7 @@ def cmd_fetch(api: TwitchAPI, igdb: IGDBClient, conn, config: dict, force: bool 
 
         row = get_streamer(conn, user["id"])
 
-        if row["full_history_fetched"]:
+        if row["full_history_fetched_at"]:
             print(f"\n{user['display_name']} — already complete, skipping.")
             continue
 
@@ -511,20 +511,32 @@ def cmd_backfill(
 
         row = get_streamer(conn, user["id"])
 
-        if row["backfill_complete"]:
-            print(f"\n{user['display_name']} — backfill already complete, skipping.")
-            continue
-
         # Determine start point.
-        if row["backfill_progress_at"]:
+        if row["backfill_complete_at"]:
+            if (
+                row["backfill_progress_at"]
+                and row["backfill_progress_at"] > row["backfill_complete_at"]
+            ):
+                # An incremental run was interrupted mid-way — resume it.
+                from_dt = datetime.fromisoformat(row["backfill_progress_at"])
+                print(
+                    f"\n{user['display_name']} — resuming incremental backfill"
+                    f" from {from_dt.date()}"
+                )
+            else:
+                # Previous run completed; sweep only the new time range.
+                from_dt = datetime.fromisoformat(row["backfill_complete_at"])
+                print(
+                    f"\n{user['display_name']} — incremental backfill from {from_dt.date()}"
+                )
+        elif row["backfill_progress_at"]:
             from_dt = datetime.fromisoformat(row["backfill_progress_at"])
-            progress = row["backfill_progress_at"][:10]
-            print(f"\n{user['display_name']} — resuming backfill from {progress}")
+            print(f"\n{user['display_name']} — resuming backfill from {from_dt.date()}")
         elif row["account_created_at"]:
             from_dt = datetime.fromisoformat(row["account_created_at"])
             print(
                 f"\n{user['display_name']} — starting backfill from account creation "
-                f"({row['account_created_at'][:10]})"
+                f"({from_dt.date()})"
             )
         else:
             from_dt = _TWITCH_EPOCH
@@ -538,7 +550,7 @@ def cmd_backfill(
 
         result = backfill_range(api, igdb, conn, user["id"], from_dt, to_dt, min_window, max_calls)
         if not result.budget_exhausted:
-            mark_backfill_complete(conn, user["id"])
+            mark_backfill_complete(conn, user["id"], to_dt.isoformat(timespec="seconds"))
 
 
 def cmd_enrich_names(igdb: IGDBClient, conn, *, force: bool = False) -> None:

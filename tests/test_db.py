@@ -119,6 +119,7 @@ class TestMarkFullHistoryFetched:
         mark_full_history_fetched(conn, "123", "2024-12-01T00:00:00Z", "2024-12-15T00:00:00Z")
         row = conn.execute("SELECT * FROM streamers WHERE id = '123'").fetchone()
         assert row["full_history_fetched"] == 1
+        assert row["full_history_fetched_at"] == "2024-12-15T00:00:00Z"
         assert row["newest_clip_at"] == "2024-12-01T00:00:00Z"
         assert row["first_scraped_at"] == "2024-12-15T00:00:00Z"
         assert row["last_scraped_at"] == "2024-12-15T00:00:00Z"

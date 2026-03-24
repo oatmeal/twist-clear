@@ -3,15 +3,17 @@ from pathlib import Path
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS streamers (
-    id                   TEXT PRIMARY KEY,
-    login                TEXT NOT NULL UNIQUE,
-    display_name         TEXT NOT NULL,
-    account_created_at   TEXT,
-    first_scraped_at     TEXT,
-    last_scraped_at      TEXT,
-    newest_clip_at       TEXT,
-    fetch_progress_at    TEXT,
-    full_history_fetched INTEGER NOT NULL DEFAULT 0
+    id                    TEXT PRIMARY KEY,
+    login                 TEXT NOT NULL UNIQUE,
+    display_name          TEXT NOT NULL,
+    account_created_at    TEXT,
+    first_scraped_at      TEXT,
+    last_scraped_at       TEXT,
+    newest_clip_at        TEXT,
+    fetch_progress_at     TEXT,
+    full_history_fetched  INTEGER NOT NULL DEFAULT 0,
+    full_history_fetched_at TEXT,
+    backfill_complete_at  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS games (
@@ -57,6 +59,14 @@ _MIGRATIONS = [
         "backfill_complete",
         "ALTER TABLE streamers ADD COLUMN backfill_complete INTEGER NOT NULL DEFAULT 0",
     ),
+    (
+        "full_history_fetched_at",
+        "ALTER TABLE streamers ADD COLUMN full_history_fetched_at TEXT",
+    ),
+    (
+        "backfill_complete_at",
+        "ALTER TABLE streamers ADD COLUMN backfill_complete_at TEXT",
+    ),
 ]
 
 
@@ -68,6 +78,7 @@ def init_db(path: str) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(SCHEMA)
     _run_migrations(conn)
+    _run_data_migrations(conn)
     return conn
 
 
@@ -80,6 +91,37 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         except sqlite3.OperationalError:
             # Column already exists — safe to ignore.
             pass
+
+
+def _run_data_migrations(conn: sqlite3.Connection) -> None:
+    """Populate new timestamp columns from legacy boolean columns for existing DBs.
+
+    These UPDATEs are idempotent — they only touch rows where the new column
+    is still NULL but the old boolean was already set.
+    """
+    # full_history_fetched (INTEGER) → full_history_fetched_at (TEXT)
+    # Use last_scraped_at as best-effort timestamp; fall back to account_created_at
+    # or Twitch's epoch so the value is always a parseable ISO timestamp.
+    conn.execute(
+        """
+        UPDATE streamers
+        SET full_history_fetched_at = COALESCE(last_scraped_at, account_created_at, '2011-06-01T00:00:00+00:00')
+        WHERE full_history_fetched = 1 AND full_history_fetched_at IS NULL
+        """
+    )
+    # backfill_complete (INTEGER) → backfill_complete_at (TEXT)
+    # Use backfill_progress_at (the last window boundary written) as the
+    # completion timestamp.  Fall back to account_created_at or Twitch's epoch
+    # so the next incremental run restarts from the beginning rather than
+    # crashing on an unparseable value.
+    conn.execute(
+        """
+        UPDATE streamers
+        SET backfill_complete_at = COALESCE(backfill_progress_at, account_created_at, '2011-06-01T00:00:00+00:00')
+        WHERE backfill_complete = 1 AND backfill_complete_at IS NULL
+        """
+    )
+    conn.commit()
 
 
 def upsert_streamer(conn: sqlite3.Connection, streamer: dict) -> None:
@@ -204,13 +246,14 @@ def mark_full_history_fetched(
     conn.execute(
         """
         UPDATE streamers SET
-            full_history_fetched = 1,
-            newest_clip_at       = ?,
-            first_scraped_at     = COALESCE(first_scraped_at, ?),
-            last_scraped_at      = ?
+            full_history_fetched    = 1,
+            full_history_fetched_at = ?,
+            newest_clip_at          = ?,
+            first_scraped_at        = COALESCE(first_scraped_at, ?),
+            last_scraped_at         = ?
         WHERE id = ?
         """,
-        (newest_clip_at, now, now, broadcaster_id),
+        (now, newest_clip_at, now, now, broadcaster_id),
     )
     conn.commit()
 
@@ -254,17 +297,32 @@ def save_backfill_progress(conn: sqlite3.Connection, broadcaster_id: str, progre
     conn.commit()
 
 
-def mark_backfill_complete(conn: sqlite3.Connection, broadcaster_id: str) -> None:
+def mark_backfill_complete(
+    conn: sqlite3.Connection, broadcaster_id: str, completed_through: str
+) -> None:
+    """Mark backfill as complete up through *completed_through* (an ISO timestamp).
+
+    Clears backfill_progress_at so that the next run starts a fresh incremental
+    sweep from completed_through rather than resuming a mid-run cursor.
+    """
     conn.execute(
-        "UPDATE streamers SET backfill_complete = 1 WHERE id = ?",
-        (broadcaster_id,),
+        """
+        UPDATE streamers SET
+            backfill_complete    = 1,
+            backfill_complete_at = ?,
+            backfill_progress_at = NULL
+        WHERE id = ?
+        """,
+        (completed_through, broadcaster_id),
     )
     conn.commit()
 
 
 def reset_backfill_state(conn: sqlite3.Connection) -> None:
     """Reset backfill progress for all streamers so backfill restarts from scratch."""
-    conn.execute("UPDATE streamers SET backfill_complete = 0, backfill_progress_at = NULL")
+    conn.execute(
+        "UPDATE streamers SET backfill_complete = 0, backfill_complete_at = NULL, backfill_progress_at = NULL"
+    )
     conn.commit()
 
 
@@ -275,5 +333,7 @@ def reset_fetch_state(conn: sqlite3.Connection) -> None:
     Existing clip data is preserved; clips will be upserted on the next fetch
     run, updating their view counts.
     """
-    conn.execute("UPDATE streamers SET full_history_fetched = 0, fetch_progress_at = NULL")
+    conn.execute(
+        "UPDATE streamers SET full_history_fetched = 0, full_history_fetched_at = NULL, fetch_progress_at = NULL"
+    )
     conn.commit()
