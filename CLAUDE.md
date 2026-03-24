@@ -16,6 +16,10 @@ don't wait to be asked:
   `deploy.yml` inputs (names, defaults, descriptions) — keep it in sync with
   the workflow file whenever inputs are added, removed, or changed.
 
+## Before committing
+
+Always ensure tests and lint commands pass. (See below for specifics.)
+
 ---
 
 ## What this repo is
