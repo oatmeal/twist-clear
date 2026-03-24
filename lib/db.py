@@ -105,7 +105,8 @@ def _run_data_migrations(conn: sqlite3.Connection) -> None:
     conn.execute(
         """
         UPDATE streamers
-        SET full_history_fetched_at = COALESCE(last_scraped_at, account_created_at, '2011-06-01T00:00:00+00:00')
+        SET full_history_fetched_at = COALESCE(last_scraped_at, account_created_at,
+            '2011-06-01T00:00:00+00:00')
         WHERE full_history_fetched = 1 AND full_history_fetched_at IS NULL
         """
     )
@@ -117,7 +118,8 @@ def _run_data_migrations(conn: sqlite3.Connection) -> None:
     conn.execute(
         """
         UPDATE streamers
-        SET backfill_complete_at = COALESCE(backfill_progress_at, account_created_at, '2011-06-01T00:00:00+00:00')
+        SET backfill_complete_at = COALESCE(backfill_progress_at, account_created_at,
+            '2011-06-01T00:00:00+00:00')
         WHERE backfill_complete = 1 AND backfill_complete_at IS NULL
         """
     )
@@ -348,7 +350,8 @@ def mark_backfill_complete(
 def reset_backfill_state(conn: sqlite3.Connection) -> None:
     """Reset backfill progress for all streamers so backfill restarts from scratch."""
     conn.execute(
-        "UPDATE streamers SET backfill_complete = 0, backfill_complete_at = NULL, backfill_progress_at = NULL"
+        "UPDATE streamers"
+        " SET backfill_complete = 0, backfill_complete_at = NULL, backfill_progress_at = NULL"
     )
     conn.commit()
 
@@ -361,6 +364,7 @@ def reset_fetch_state(conn: sqlite3.Connection) -> None:
     run, updating their view counts.
     """
     conn.execute(
-        "UPDATE streamers SET full_history_fetched = 0, full_history_fetched_at = NULL, fetch_progress_at = NULL"
+        "UPDATE streamers"
+        " SET full_history_fetched = 0, full_history_fetched_at = NULL, fetch_progress_at = NULL"
     )
     conn.commit()
