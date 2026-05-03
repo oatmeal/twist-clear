@@ -530,9 +530,9 @@ select:focus { border-color: var(--accent); }
 /* Left accent bar ties the expanded row to the embed row below it */
 .clip-row.expanded td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 
-/* Live clip row: subtle accent tint */
-.clip-row.live-clip { background: color-mix(in srgb, var(--accent) 6%, transparent); }
-.clip-row.live-clip:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+/* Live clip row: accent tint */
+.clip-row.live-clip { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.clip-row.live-clip:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
 
 .clip-col-views { color: var(--accent-h); font-weight: 600; white-space: nowrap; }
 
@@ -661,11 +661,15 @@ select:focus { border-color: var(--accent); }
 }
 #tz-select { font-size: 12px; width: 100%; }
 
-/* Accent border on live clip cards to distinguish them from archive clips */
+/* Accent border + tinted background on live clip cards to distinguish them from archive clips */
 .clip-card.live-clip {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
 }
-.clip-card.live-clip:hover { border-color: var(--accent); }
+.clip-card.live-clip:hover {
+  background: color-mix(in srgb, var(--accent) 21%, var(--surface));
+  border-color: var(--accent);
+}
 
 /* ── Main area ── */
 main { padding: 24px; }
