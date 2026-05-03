@@ -118,6 +118,30 @@ approach is correct for all other nights and is an accepted trade-off.
 
 ---
 
+## Live clips: surgical DOM insertion to avoid full re-renders
+
+Currently, each time new clips are discovered during bisection, `onProgress`
+calls `render()` which replaces the entire clip grid via `innerHTML`. A guard
+was added so the render is skipped when a card or row is expanded, but page
+content can still shift for users on page > 1 as live clips are prepended.
+
+A surgical approach would instead prepend new clip card/row elements directly
+to the DOM, skipping the full re-render entirely. Benefits:
+
+- No content shift for users on page > 1 (new clips land above the fold)
+- Scroll position preserved naturally via browser scroll anchoring
+- Safe even when an embed is open, since existing DOM nodes are untouched
+
+Scope: only straightforward for **date-desc** sort (all new live clips land at
+the top). Date-asc would append at the bottom. View-count sort interleaves clips
+throughout the grid and would need a different strategy (e.g. notify-and-defer).
+
+Deferred: the current guard (skip render when expanded) addresses the most
+disruptive case. Surgical insertion requires constructing DOM nodes rather than
+HTML strings and careful handling of the embed row and pagination boundary logic.
+
+---
+
 ## Live clips: write-back to the local database
 
 A "save to archive" button could persist in-memory live clips back to the local

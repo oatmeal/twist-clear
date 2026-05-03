@@ -210,6 +210,11 @@ header .streamer-tag {
 .banner-dismiss:hover { color: var(--text); }
 
 /* ── Controls bar ── */
+#sticky-bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
 #controls {
   display: none;
   padding: 12px 24px;
@@ -218,9 +223,6 @@ header .streamer-tag {
   flex-wrap: wrap;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
-  z-index: 10;
 }
 
 .search-wrapper {
@@ -717,6 +719,32 @@ main { padding: 24px; }
   line-height: 1.6;
   grid-column: 1 / -1;
 }
+
+/* ── Live clips pending banner ── */
+#live-clips-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--muted);
+}
+#live-clips-banner-text { flex: 1; }
+.live-clips-show-btn {
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  padding: 4px 12px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s;
+}
+.live-clips-show-btn:hover { background: var(--accent-h); }
 
 /* ── Clip grid ── */
 #clips-grid {

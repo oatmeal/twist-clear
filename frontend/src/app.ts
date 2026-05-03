@@ -148,6 +148,16 @@ const _gameNameJa = new Map<string, string>();
 // MAX(created_at) from clips — used as started_at for the Twitch live-clip
 // API call and as the deduplication boundary in filterLiveClips.
 let _dbCutoffDate:  string | null = null;
+// Dev-only override: set localStorage key 'tc_dev_cutoff' to an ISO date string
+// earlier than the real cutoff to simulate a stale archive (clips after this date
+// are hidden from the DB query and fetched live from the Twitch API instead).
+let _devCutoff: string | null = null;
+// True when live clips arrived during a fetch but render was deferred (card
+// expanded or user on page > 1). Cleared when a render fires on page 1.
+let _liveRenderPending = false;
+// Number of live clips in state at the time of the last render. Used to
+// determine whether unrendered clips exist before showing the banner.
+let _renderedLiveClipCount = 0;
 // MAX(last_scraped_at) from streamers — shown in the login banner because it
 // reflects when the scraper last ran (always >= _dbCutoffDate), giving a more
 // accurate "archive current as of" time than the newest clip timestamp.
@@ -413,6 +423,20 @@ async function updateGameFilter(liveGameCounts: Map<string, LiveGameEntry>, live
 
 // ── Live clips ────────────────────────────────────────────────────────────
 
+function updateLiveBanner(): void {
+  const banner     = document.getElementById('live-clips-banner') as HTMLElement | null;
+  const bannerText = document.getElementById('live-clips-banner-text');
+  if (!banner) return;
+  const count = _filteredLiveClips().length;
+  const hasUnrendered = state.liveClips.length > _renderedLiveClipCount;
+  if (_liveRenderPending && count > 0 && hasUnrendered) {
+    if (bannerText) bannerText.textContent = t().newClipsBanner(count);
+    banner.style.display = 'flex';
+  } else {
+    banner.style.display = 'none';
+  }
+}
+
 /** Fetch clips newer than the DB cutoff and store in state. */
 async function fetchLiveClips(): Promise<void> {
   if (!_broadcasterId || !_dbCutoffDate) return;
@@ -441,8 +465,13 @@ async function fetchLiveClips(): Promise<void> {
   const onProgress = (clips: LiveClip[]): void => {
     state.setLiveClips(clips);
     updateLiveClipBounds();
-    void render();
-    if (state.currentView === 'calendar') void renderCalendar();
+    if (!getExpandedCard() && !getExpandedRow() && state.currentPage === 1) {
+      void render();
+      if (state.currentView === 'calendar') void renderCalendar();
+    } else if (state.liveClips.length > _renderedLiveClipCount) {
+      _liveRenderPending = true;
+      updateLiveBanner();
+    }
 
     // Resolve game names for newly discovered game IDs in the background.
     const newGameIds = [...new Set(clips.map(c => c.game_id).filter(Boolean))]
@@ -453,7 +482,9 @@ async function fetchLiveClips(): Promise<void> {
         for (const c of clips) {
           if (gameNames[c.game_id]) c.game_name = gameNames[c.game_id]!;
         }
-        void render();
+        if (!_liveRenderPending && !getExpandedCard() && !getExpandedRow() && state.currentPage === 1) {
+          void render();
+        }
       });
     }
   };
@@ -481,8 +512,13 @@ async function fetchLiveClips(): Promise<void> {
   }
   state.setLiveClips(clips);
   updateLiveClipBounds();
-  void render();
-  if (state.currentView === 'calendar') void renderCalendar();
+  if (!getExpandedCard() && !getExpandedRow() && state.currentPage === 1) {
+    void render();
+    if (state.currentView === 'calendar') void renderCalendar();
+  } else if (state.liveClips.length > _renderedLiveClipCount) {
+    _liveRenderPending = true;
+    updateLiveBanner();
+  }
 }
 
 /** Filter live clips against current filter state. */
@@ -553,6 +589,11 @@ export async function render(): Promise<void> {
   _renderController?.abort();
   const ctrl = new AbortController();
   _renderController = ctrl;
+  _renderedLiveClipCount = state.liveClips.length;
+  if (_liveRenderPending && state.currentPage === 1) {
+    _liveRenderPending = false;
+  }
+  updateLiveBanner();
   // Adjacent-page boundary titles — computed below during the prefetch phase
   // and passed to embed.ts so nav buttons can show a title hint.
   let prevPageLastTitle: string | null = null;
@@ -620,6 +661,7 @@ export async function render(): Promise<void> {
       calDateTo: state.calDateTo,
       useFts: state.useFts,
       tzOffset: state.tzOffset,
+      devCutoff: _devCutoff,
     });
 
     // Fast path: avoid a full COUNT(*) scan when precomputed totals are available.
@@ -986,6 +1028,8 @@ function applyTranslations(): void {
   }
   const dismissBtn = document.getElementById('btn-dismiss-banner');
   if (dismissBtn) dismissBtn.setAttribute('aria-label', tr.dismissBanner);
+  const showLiveBtn = document.getElementById('btn-show-live-clips');
+  if (showLiveBtn) showLiveBtn.textContent = tr.showNewClips;
 
   // Settings panel — timezone label
   const tzLabelEl = document.getElementById('tz-label-text');
@@ -1281,6 +1325,13 @@ function bindEvents(): void {
     void render();
   });
 
+  document.getElementById('btn-show-live-clips')?.addEventListener('click', () => {
+    _liveRenderPending = false;
+    updateLiveBanner();
+    state.setCurrentPage(1);
+    void render();
+  });
+
   document.getElementById('btn-dismiss-banner')?.addEventListener('click', () => {
     localStorage.setItem('tc_banner_dismissed', '1');
     document.getElementById('login-banner')!.style.display = 'none';
@@ -1434,6 +1485,11 @@ export async function init(): Promise<void> {
     // The clips_created_at index makes this a single B-tree leaf read.
     const cutoffRows = await q('SELECT MAX(created_at) AS max_date FROM clips');
     _dbCutoffDate = (cutoffRows[0]?.['max_date'] as string | undefined) ?? null;
+    const devCutoffRaw = localStorage.getItem('tc_dev_cutoff');
+    if (devCutoffRaw && _dbCutoffDate && devCutoffRaw < _dbCutoffDate) {
+      _devCutoff = devCutoffRaw;
+      _dbCutoffDate = devCutoffRaw;
+    }
     state.setDbCutoffDate(_dbCutoffDate);
 
     // Get the scrape timestamp for the login banner. last_scraped_at is when
@@ -1453,7 +1509,13 @@ export async function init(): Promise<void> {
     // called in applyTranslations() above, but need to update after _dbScrapeDate and
     // _dbCutoffDate are available
     updateHelpLoginDesc();
-    initEmbed(render);
+    initEmbed(render, () => {
+      if (_liveRenderPending && state.currentPage === 1) {
+        _liveRenderPending = false;
+        updateLiveBanner();
+        void render();
+      }
+    });
     await initCalendar(render); // must await: queries clip date range for nav bounds
 
     // Fetch live clips in the background; render() is called again when done.

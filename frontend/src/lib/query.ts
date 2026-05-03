@@ -22,6 +22,7 @@ export interface BuildWhereOpts {
   calDateTo: string | null;
   useFts: boolean;
   tzOffset: number;
+  devCutoff?: string | null;
 }
 
 export function buildWhere(opts: BuildWhereOpts): WhereClause {
@@ -70,6 +71,11 @@ export function buildWhere(opts: BuildWhereOpts): WhereClause {
   } else if (opts.calDateTo !== null) {
     parts.push('c.created_at < :dateTo');
     params[':dateTo']   = localDateToUtcBound(opts.calDateTo, opts.tzOffset);
+  }
+
+  if (opts.devCutoff) {
+    parts.push('c.created_at <= :devCutoff');
+    params[':devCutoff'] = opts.devCutoff;
   }
 
   return {

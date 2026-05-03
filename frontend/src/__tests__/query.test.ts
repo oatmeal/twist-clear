@@ -202,3 +202,31 @@ describe('buildWhere filter interactions', () => {
     expect(params[':dateTo']).toBe('2024-06-16T05:00:00.000Z');
   });
 });
+
+describe('buildWhere devCutoff', () => {
+  it('adds created_at upper bound when devCutoff is set', () => {
+    const { where, params } = buildWhere({ ...base, devCutoff: '2024-06-01T00:00:00Z' });
+    expect(where).toContain('created_at <= :devCutoff');
+    expect(params[':devCutoff']).toBe('2024-06-01T00:00:00Z');
+  });
+
+  it('omits the clause when devCutoff is null', () => {
+    const { where, params } = buildWhere({ ...base, devCutoff: null });
+    expect(where).toBe('');
+    expect(params).not.toHaveProperty(':devCutoff');
+  });
+
+  it('omits the clause when devCutoff is omitted', () => {
+    const { where, params } = buildWhere(base);
+    expect(where).not.toContain('devCutoff');
+    expect(params).not.toHaveProperty(':devCutoff');
+  });
+
+  it('combines with a game filter', () => {
+    const { where, params } = buildWhere({ ...base, gameFilter: '123', devCutoff: '2024-06-01T00:00:00Z' });
+    expect(where).toContain('game_id');
+    expect(where).toContain('created_at <= :devCutoff');
+    expect(params[':game']).toBe('123');
+    expect(params[':devCutoff']).toBe('2024-06-01T00:00:00Z');
+  });
+});

@@ -105,6 +105,9 @@ export interface Translations {
   dayOfWeek: readonly string[];
   // Calendar search notice
   calSearchNotice: string;   // shown when a title search is active (counts don't reflect it)
+  // Live clips pending banner
+  newClipsBanner: (n: number) => string;
+  showNewClips: string;
 }
 
 const en: Translations = {
@@ -201,6 +204,8 @@ const en: Translations = {
               'July', 'August', 'September', 'October', 'November', 'December'],
   dayOfWeek: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
   calSearchNotice: 'Calendar clip counts do not reflect the active title search',
+  newClipsBanner: (n) => `${n} new clip${n !== 1 ? 's' : ''} available`,
+  showNewClips: 'Show',
 };
 
 const ja: Translations = {
@@ -301,6 +306,8 @@ const ja: Translations = {
   monthLong: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'],
   dayOfWeek: ['日', '月', '火', '水', '木', '金', '土'],
   calSearchNotice: 'カレンダーのクリップ数はタイトル検索を反映していません',
+  newClipsBanner: (n) => `新着クリップ${n}件`,
+  showNewClips: '表示',
 };
 
 const DICTS: Record<Lang, Translations> = { en, ja };

@@ -15,9 +15,11 @@ import * as state from './state';
 
 // Injected by initEmbed() to avoid a circular import with app.ts.
 let _render: (() => Promise<void>) | null = null;
+let _onCloseRender: (() => void) | null = null;
 
-export function initEmbed(render: () => Promise<void>): void {
+export function initEmbed(render: () => Promise<void>, onCloseRender?: () => void): void {
   _render = render;
+  _onCloseRender = onCloseRender ?? null;
 }
 
 // ── Module state ──────────────────────────────────────────────────────────
@@ -26,6 +28,9 @@ const _thumbCache = new WeakMap<HTMLElement, HTMLElement>();
 let _expandedCard: HTMLElement | null = null;
 // List-view expand state: the expanded <tr> row and the embed <tr> inserted after it.
 let _expandedRow: HTMLElement | null = null;
+// Set while expandCard/expandRow is in progress so collapseCard/collapseRow
+// knows it's a card swap, not a standalone close, and skips the post-collapse render.
+let _expanding = false;
 let _insertedEmbedRow: HTMLElement | null = null;
 // Titles of the last clip on the previous page / first clip on the next page.
 // Set by app.ts render() after the adjacent-page prefetch; read here by
@@ -102,10 +107,15 @@ export function collapseCard(card: HTMLElement): void {
   card.classList.remove('expanded');
   document.removeEventListener('click', _onDocClickOutside);
   _expandedCard = null;
+  if (!_expanding) _onCloseRender?.();
 }
 
 export function expandCard(card: HTMLElement, skipScroll = false): void {
-  if (_expandedCard && _expandedCard !== card) collapseCard(_expandedCard);
+  if (_expandedCard && _expandedCard !== card) {
+    _expanding = true;
+    collapseCard(_expandedCard);
+    _expanding = false;
+  }
 
   const clipUrl = card.dataset['clipUrl'] ?? '';
   const slug = extractClipSlug(clipUrl);
@@ -179,10 +189,15 @@ export function collapseRow(row: HTMLElement): void {
   row.classList.remove('expanded');
   document.removeEventListener('click', _onDocClickOutside);
   _expandedRow = null;
+  if (!_expanding) _onCloseRender?.();
 }
 
 export function expandRow(row: HTMLElement, skipScroll = false): void {
-  if (_expandedRow && _expandedRow !== row) collapseRow(_expandedRow);
+  if (_expandedRow && _expandedRow !== row) {
+    _expanding = true;
+    collapseRow(_expandedRow);
+    _expanding = false;
+  }
 
   const clipUrl = row.dataset['clipUrl'] ?? '';
   const slug = extractClipSlug(clipUrl);
