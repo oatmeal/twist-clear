@@ -76,8 +76,14 @@ export let liveFetching: boolean = false;
 // Used by calendar.ts to exclude the one boundary clip that is in state.liveClips
 // but is already archived in the DB.
 export let dbCutoffDate: string | null = null;
+// ISO 8601 cutoff for "live" highlighting. DB clips newer than this timestamp
+// are styled as live even if already scraped. Set from VITE_LIVE_AFTER at
+// build time (works without login) or auto-detected via the Twitch API after
+// login. null = disabled (only API-fetched clips are highlighted as live).
+export let liveAfterTimestamp: string | null = null;
 
 export function setLiveClips(v: LiveClip[]): void { liveClips = v; }
 export function setTwitchUsername(v: string | null): void { twitchUsername = v; }
 export function setLiveFetching(v: boolean): void { liveFetching = v; }
 export function setDbCutoffDate(v: string | null): void { dbCutoffDate = v; }
+export function setLiveAfterTimestamp(v: string | null): void { liveAfterTimestamp = v; }

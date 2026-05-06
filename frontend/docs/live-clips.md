@@ -1,5 +1,28 @@
 # Live clips (`twitch.ts`, `lib/liveFilter.ts`)
 
+## Live-after cutoff (`liveAfterTimestamp`)
+
+DB clips whose `created_at` exceeds `state.liveAfterTimestamp` are rendered
+with `isLive: true` even though they are already in the archive. This lets
+clips from the current/most-recent stream be highlighted without waiting for
+login or a Twitch API fetch.
+
+The cutoff is resolved in priority order:
+
+1. **Build-time override** (`VITE_LIVE_AFTER` env var, set via the `live_after`
+   workflow input): applied immediately during `init()` before the first
+   render, so highlighting is visible without login.
+2. **Auto-detection** (runs at login time, only when `VITE_LIVE_AFTER` is
+   empty): `twitch.fetchLiveAfterTimestamp()` queries `/helix/streams` then
+   `/helix/videos`. In both the live and offline cases it returns the end time
+   (`created_at + duration`) of the most recent *completed* VOD, so clips
+   from the current or most-recent stream are highlighted and nothing is
+   highlighted between streams. When live, the ongoing VOD appears first in
+   the videos list and is skipped; the second result is the last finished one.
+   Returns `null` if unavailable (no completed VOD, API error).
+3. **Fallback**: `liveAfterTimestamp` stays `null` and only Twitch-API-fetched
+   clips (newer than `dbCutoffDate`) are highlighted — the original behaviour.
+
 ## Fetching
 
 `twitch.ts` fetches clips from the Helix API newer than the DB's most recent

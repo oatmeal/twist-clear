@@ -138,6 +138,10 @@ function updateLayoutButtons(): void {
 
 // ── DB query helpers ──────────────────────────────────────────────────────
 
+// Build-time override for the live-clip cutoff timestamp (VITE_LIVE_AFTER).
+// Empty string means "not configured"; auto-detection via Twitch API is used instead.
+const _VITE_LIVE_AFTER: string = (import.meta.env as Record<string, string>)['VITE_LIVE_AFTER'] ?? '';
+
 // Broadcaster ID and DB metadata — set once during init, never change.
 let _broadcasterId: string | null = null;
 // game_id → name / name_ja lookups populated by updateGameFilter(); used to
@@ -443,6 +447,15 @@ async function fetchLiveClips(): Promise<void> {
 
   const token = await auth.getValidToken();
   if (!token) { auth.logout(); syncAuthUI(); return; }
+
+  // Auto-detect the live-after cutoff from the Twitch API when no build-time
+  // override is configured. Re-renders immediately so DB-live clips are
+  // highlighted before the (slower) clip bisection fetch completes.
+  if (!_VITE_LIVE_AFTER) {
+    const ts = await twitch.fetchLiveAfterTimestamp(_broadcasterId, token);
+    state.setLiveAfterTimestamp(ts);
+    void render();
+  }
 
   const refreshBtnEl = document.getElementById('btn-refresh-live') as HTMLButtonElement | null;
   state.setLiveFetching(true);
@@ -873,6 +886,10 @@ export async function render(): Promise<void> {
         isLive,
       });
 
+      const isDbLive = (row: Record<string, unknown>): boolean =>
+        state.liveAfterTimestamp !== null &&
+        String(row['created_at'] ?? '') > state.liveAfterTimestamp;
+
       if (mergingViewCount && vcPage !== null) {
         for (const item of interleavePage(dbClips, vcPage.liveOnPage, pageStart, state.PAGE_SIZE)) {
           if (item.kind === 'live') {
@@ -885,7 +902,7 @@ export async function render(): Promise<void> {
               isLive: true,
             });
           } else {
-            clipItems.push(toItem(item.row, false));
+            clipItems.push(toItem(item.row, isDbLive(item.row)));
           }
         }
       } else {
@@ -895,7 +912,7 @@ export async function render(): Promise<void> {
           game_name: c.game_name, game_name_ja: _gameNameJa.get(c.game_id ?? '') ?? '',
           creator_name: c.creator_name, created_at: c.created_at, isLive: true,
         }));
-        const dbItems = dbClips.map(c => toItem(c, false));
+        const dbItems = dbClips.map(c => toItem(c, isDbLive(c)));
         // date_desc: live (newest) first; date_asc: DB (oldest) first, live appended.
         clipItems.push(...(mergingAsc ? [...dbItems, ...liveItems] : [...liveItems, ...dbItems]));
       }
@@ -1491,6 +1508,9 @@ export async function init(): Promise<void> {
       _dbCutoffDate = devCutoffRaw;
     }
     state.setDbCutoffDate(_dbCutoffDate);
+
+    // Apply build-time live_after override immediately (works without login).
+    if (_VITE_LIVE_AFTER) state.setLiveAfterTimestamp(_VITE_LIVE_AFTER);
 
     // Get the scrape timestamp for the login banner. last_scraped_at is when
     // the scraper last ran, which is always >= MAX(created_at) and more

@@ -128,6 +128,58 @@ export async function fetchNewClipsWithCoverage(
   return fetchWithCoverage(fetchWindow, sinceDate, 10, onProgress);
 }
 
+/** Parse a Twitch VOD duration string (e.g. "1h2m3s", "45m", "30s") into seconds. */
+export function parseTwitchDuration(d: string): number {
+  const h = /(\d+)h/.exec(d)?.[1] ?? '0';
+  const m = /(\d+)m/.exec(d)?.[1] ?? '0';
+  const s = /(\d+)s/.exec(d)?.[1] ?? '0';
+  return parseInt(h) * 3600 + parseInt(m) * 60 + parseInt(s);
+}
+
+/**
+ * Compute the ISO 8601 timestamp to use as the "live after" cutoff.
+ *
+ * Returns the end time of the most recent *completed* stream (created_at +
+ * duration of the last finished VOD), so clips from the current session are
+ * highlighted whether the stream is live or has just ended.
+ *
+ * When a stream is live its VOD appears first in the /helix/videos archive
+ * list, so we fetch one extra and skip index 0. Returns null if the Twitch
+ * API is unavailable or no completed VOD exists (caller falls back to current
+ * behaviour).
+ */
+export async function fetchLiveAfterTimestamp(
+  broadcasterId: string,
+  token:         string,
+): Promise<string | null> {
+  const streamRes = await fetch(
+    `https://api.twitch.tv/helix/streams?user_id=${broadcasterId}`,
+    { headers: authHeaders(token) },
+  );
+  if (!streamRes.ok) return null;
+
+  const streamBody = await streamRes.json() as { data: Array<unknown> };
+  const isLive = streamBody.data.length > 0;
+
+  // When live, the ongoing VOD is at index 0 — fetch one extra to reach the
+  // most recent completed VOD at index 1.
+  const first = isLive ? 2 : 1;
+  const videoRes = await fetch(
+    `https://api.twitch.tv/helix/videos?user_id=${broadcasterId}&type=archive&first=${first}`,
+    { headers: authHeaders(token) },
+  );
+  if (!videoRes.ok) return null;
+
+  const videoBody = await videoRes.json() as {
+    data: Array<{ created_at: string; duration: string }>;
+  };
+  const vod = videoBody.data[isLive ? 1 : 0];
+  if (!vod) return null;
+
+  const endMs = new Date(vod.created_at).getTime() + parseTwitchDuration(vod.duration) * 1000;
+  return new Date(endMs).toISOString();
+}
+
 /**
  * Batch-fetch game names for a set of game IDs (max 100 per API call).
  * Returns a map of game ID → name. Unknown IDs are omitted.

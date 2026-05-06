@@ -142,6 +142,28 @@ HTML strings and careful handling of the embed row and pagination boundary logic
 
 ---
 
+## Live clips: video_id-based stream session detection
+
+The current "live" cutoff is either a build-time `VITE_LIVE_AFTER` timestamp or
+one computed at login time from the Twitch streams/videos API. A more robust
+approach would use `video_id` — the VOD ID stored on each clip — to group clips
+by stream session regardless of timing.
+
+Key complications:
+
+- `video_id` is nullable: Twitch deletes it from the clip record when the
+  corresponding VOD is removed. Streamers who do not archive VODs, or who delete
+  them after a retention period, will have many clips with `video_id = NULL`.
+- Grouping by `video_id` requires storing it at scrape time (scraper change) and
+  adding it to the DB schema / `prepare_web_db.py` output.
+- Detecting "which session is most recent" requires comparing `video_id` values
+  across clips, which adds logic to both the frontend query and the render path.
+
+Deferred: the timestamp-based approach (stream API + VOD end time) covers the
+common case reliably without schema changes.
+
+---
+
 ## Live clips: write-back to the local database
 
 A "save to archive" button could persist in-memory live clips back to the local

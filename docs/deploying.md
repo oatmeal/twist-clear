@@ -69,6 +69,10 @@ on:
         type: choice
         options: [fetch, update, backfill, skip]
         default: fetch
+      live_after:
+        description: 'Highlight clips after this ISO 8601 timestamp as live (e.g. 2025-05-06T18:00:00Z). Leave blank to auto-detect.'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -82,6 +86,7 @@ jobs:
       streamers: "streamer1,streamer2"
       scrape_mode: ${{ github.event.inputs.mode || 'fetch' }}
       backfill_max_calls: 100000  # cap backfill runs to ~3.5 h (well under the 6 h Actions limit)
+      live_after: ${{ inputs.live_after }}
     secrets:
       TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
       TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
@@ -109,19 +114,11 @@ https://YOUR_GITHUB_USERNAME.github.io/my-clips/
 
 ---
 
-## Keeping view counts current
-
-With the default `scrape_mode: fetch`, each run does a full historical rescan via `scrape.py fetch --force`, re-fetching all clip metadata including current view counts. View counts are fully refreshed on every deployment. No extra configuration is needed.
-
-If the scrape is ever interrupted mid-run, the next run picks up where it left off (the progress checkpoint is written to the database after each time window).
-
----
-
 ## Customisation
 
-### Refresh on a different schedule
+### Scheduling and view counts
 
-Edit the `cron` expression in your viewer repo's workflow. Some examples:
+Edit the `cron` expression in your viewer repo's workflow to control when the archive updates:
 
 ```yaml
 - cron: '0 6 * * *'     # daily at 06:00 UTC (default)
@@ -129,15 +126,7 @@ Edit the `cron` expression in your viewer repo's workflow. Some examples:
 - cron: '0 0,12 * * *'  # twice a day
 ```
 
-### Pin to a specific version of the scraper
-
-Change `@master` to a tag or commit SHA:
-
-```yaml
-uses: oatmeal/twist-clear/.github/workflows/deploy.yml@v1.2.3
-```
-
-### Frequent intra-day updates with a daily full rescan
+With the default `scrape_mode: fetch`, each run does a full historical rescan via `scrape.py fetch --force`, re-fetching all clip metadata including current view counts. View counts are fully refreshed on every deployment.
 
 For an archive that updates throughout the day while still refreshing view counts once daily, use two schedules and pass `scrape_mode` based on which cron fired:
 
@@ -156,6 +145,10 @@ on:
         type: choice
         options: [fetch, update, backfill, skip]
         default: fetch
+      live_after:
+        description: 'Highlight clips after this ISO 8601 timestamp as live (e.g. 2025-05-06T18:00:00Z). Leave blank to auto-detect.'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -169,6 +162,7 @@ jobs:
       streamers: "streamer1,streamer2"
       scrape_mode: ${{ github.event.schedule == '0 6 * * *' && 'fetch' || github.event.inputs.mode || 'update' }}
       backfill_max_calls: 100000  # cap backfill runs to ~3.5 h (well under the 6 h Actions limit)
+      live_after: ${{ inputs.live_after }}
     secrets:
       TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
       TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
@@ -186,6 +180,28 @@ The expression resolves to:
 When you trigger a manual backfill run, `backfill_max_calls` caps the API calls so a single run stays well within the 6-hour GitHub Actions limit. Progress is saved to the database cache, so subsequent backfill runs resume where the previous one left off.
 
 To redeploy after a styling change without waiting for the scraper, trigger a manual run and select **skip**.
+
+### Live clip highlighting
+
+When a viewer logs in with Twitch, the frontend auto-detects which clips are from the current or most-recent stream and highlights them. It does this by fetching the end time of the last *completed* VOD from the Twitch API (`created_at + duration`), then styling any clip created after that threshold as "live" — whether the stream is currently running or has just ended. Nothing is highlighted between streams. Falls back to the existing behaviour (API-fetched clips only) if VOD data is unavailable.
+
+The `live_after` input lets you override this with a fixed timestamp, baked into the build. This works without login: DB clips after the timestamp are highlighted for all visitors. A static value in a scheduled workflow goes stale after each stream, so the most natural pattern is a manual `workflow_dispatch` trigger where the deployer enters the timestamp at run time — as shown in the examples above.
+
+A `workflow_run` trigger from a stream-detection or scrape workflow can also pass a computed timestamp programmatically.
+
+### Branding & appearance
+
+Several inputs control how the site presents itself. Set them under `with:` in your viewer workflow:
+
+| What to change | Input | Example |
+|---|---|---|
+| Browser tab title | `site_title` | `'My Stream Archive'` |
+| Page `<h1>` (can include HTML) | `site_heading` | `'My Archive <img src="icon.png" height="20" alt="">'` |
+| Subtitle below the heading | `site_description` | `'All the best clips'` |
+| Social preview text | `og_description` | `'Clips from my Twitch channel.'` |
+| Accent colour | `accent_color` | `'#e91e8c'` |
+
+For a full list of colour inputs and theming guidance, see [docs/theming.md](theming.md) and the [Inputs reference](#inputs-reference) below.
 
 ### Site assets (icons, images, custom files)
 
@@ -214,6 +230,14 @@ with:
 A leading `/` would resolve to the root of `github.io` rather than the subpath your site lives at, so always omit it.
 
 If `site-assets/` does not exist the step is silently skipped — no input or configuration needed.
+
+### Pin to a specific version of the scraper
+
+Change `@master` to a tag or commit SHA:
+
+```yaml
+uses: oatmeal/twist-clear/.github/workflows/deploy.yml@v1.2.3
+```
 
 ### Using a fork or copy of the code under a different account
 
@@ -287,6 +311,12 @@ Key points:
 | `refresh_views_days` | No | `-1` (disabled) | Refresh view counts for existing clips by re-fetching them by ID via `scrape.py refresh-views`. Skipped when `scrape_mode` is `fetch` (which already refreshes all view counts during its full rescan). Negative means disabled. `0` refreshes all clips. Positive N refreshes only clips created in the last N days. |
 | `scraper_ref` | No | `master` | Branch, tag, or SHA of `twist-clear` to use |
 | `code_repo` | No | `oatmeal/twist-clear` | Override if using a fork or copy under a different account |
+
+### Live clip highlighting
+
+| Input | Required | Default | Description |
+|---|---|---|---|
+| `live_after` | No | *(auto-detected)* | ISO 8601 timestamp. DB clips created after this time are styled as live even if already scraped. When omitted, the threshold is auto-detected from the Twitch API after login. See [Live clip highlighting](#live-clip-highlighting) above. |
 
 ### Branding / metadata
 

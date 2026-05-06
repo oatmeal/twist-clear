@@ -158,6 +158,22 @@ on:
         required: false
         type: string
         default: ''
+      live_after:
+        description: >
+          ISO 8601 timestamp override for "live" clip highlighting. DB clips
+          created after this time are styled as live (highlighted) even if already
+          scraped into the archive. When omitted, the timestamp is auto-detected
+          from the Twitch API after the viewer logs in: the end time of the most
+          recent completed VOD (created_at + duration), so clips from the current
+          or most-recent stream are highlighted and nothing is highlighted between
+          streams.
+
+          A static value in a scheduled workflow goes stale after each stream,
+          so this input is most useful when set dynamically via workflow_dispatch
+          or workflow_run triggers rather than hardcoded in a schedule.
+        required: false
+        type: string
+        default: ''
     secrets:
       TWITCH_CLIENT_ID:
         required: true
@@ -358,6 +374,7 @@ jobs:
           VITE_COLOR_TEXT:     ${{ inputs.color_text }}
           VITE_COLOR_MUTED:    ${{ inputs.color_muted }}
           VITE_COLOR_CAL_ACCENT: ${{ inputs.cal_accent_color }}
+          VITE_LIVE_AFTER:       ${{ inputs.live_after }}
 
       - name: Install Japanese fonts
         run: |
