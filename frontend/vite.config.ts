@@ -97,16 +97,18 @@ function dbRangePlugin(): Plugin {
 // is stripped. No other TOML escape processing is performed (sufficient for the
 // simple colour/URL/name values stored in config.toml).
 function readTomlString(toml: string, key: string): string | undefined {
+  // Strip full-line comments so commented-out keys don't match.
+  const src = toml.split('\n').filter(line => !/^\s*#/.test(line)).join('\n');
   let m: RegExpExecArray | null;
   // Multi-line basic string must be tried before basic to avoid """..."""
   // being partially matched by the single-quote pattern.
-  m = new RegExp(`${key}\\s*=\\s*"""([\\s\\S]*?)"""`).exec(toml);
+  m = new RegExp(`${key}\\s*=\\s*"""([\\s\\S]*?)"""`).exec(src);
   if (m) return m[1]!.replace(/^\n/, '');
-  m = new RegExp(`${key}\\s*=\\s*'''([\\s\\S]*?)'''`).exec(toml);
+  m = new RegExp(`${key}\\s*=\\s*'''([\\s\\S]*?)'''`).exec(src);
   if (m) return m[1]!.replace(/^\n/, '');
-  m = new RegExp(`${key}\\s*=\\s*"([^"]*)"`).exec(toml);
+  m = new RegExp(`${key}\\s*=\\s*"([^"]*)"`).exec(src);
   if (m) return m[1]!;
-  m = new RegExp(`${key}\\s*=\\s*'([^']*)'`).exec(toml);
+  m = new RegExp(`${key}\\s*=\\s*'([^']*)'`).exec(src);
   if (m) return m[1]!;
   return undefined;
 }
