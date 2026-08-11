@@ -204,7 +204,7 @@ jobs:
 
     steps:
       - name: Check out scraper + frontend code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           repository: ${{ inputs.code_repo || 'oatmeal/twist-clear' }}
           ref: ${{ inputs.scraper_ref }}
@@ -225,9 +225,9 @@ jobs:
         env:
           INPUT_SITE_URL: ${{ inputs.site_url }}
 
-      - uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098  # v7.3.1
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
 
-      - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238  # v6.2.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
         with:
           node-version: '20'
           cache: npm
@@ -267,7 +267,7 @@ jobs:
       - name: Restore database cache
         id: restore-cache
         if: ${{ inputs.scrape_mode != 'fetch' }}
-        uses: actions/cache/restore@cdf6c1fa76f9f475f3d7449005a359c84ca0f306  # v5.0.3
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: data/clips.db
           key: clips-db-${{ inputs.streamers }}-${{ github.run_id }}
@@ -315,7 +315,7 @@ jobs:
 
       - name: Save database cache
         if: ${{ inputs.scrape_mode != 'skip' }}
-        uses: actions/cache/save@cdf6c1fa76f9f475f3d7449005a359c84ca0f306  # v5.0.3
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: data/clips.db
           key: clips-db-${{ inputs.streamers }}-${{ github.run_id }}
@@ -324,7 +324,7 @@ jobs:
         run: npm --prefix frontend run prepare-db
 
       - name: Check out viewer repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           repository: ${{ github.repository }}
           ref: ${{ github.sha }}
@@ -396,10 +396,10 @@ jobs:
           VITE_SITE_URL: ${{ steps.site-url.outputs.url }}
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b  # v4.0.0
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9  # v5.0.0
         with:
           path: frontend/dist
 
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e  # v4.0.5
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128  # v5.0.0
