@@ -24,7 +24,8 @@ src/
   auth.ts       # Twitch OAuth 2.0 implicit grant (token storage, logout)
   calendar.ts   # Calendar view — year → month → day/week drill-down
   db.ts         # sql.js-httpvfs worker init; exports async q() query helper
-  embed.ts      # Clip embed expand/collapse, prev/next peek navigation (grid + list)
+  embed.ts      # Clip player open/close (grid: panel below the card's row; list:
+                #   embed row), prev/next peek navigation
   filterBar.ts  # Non-sticky filter bar + the tab that pins it back in when scrolled away
   state.ts      # All shared mutable state + explicit typed setters
   twitch.ts     # Helix API client for live clips (auto-paginates, resolves game names)
@@ -49,6 +50,9 @@ src/
 scripts/
   screenshot-og.ts  # Post-build: starts vite preview, screenshots at 1200×630,
                     #   writes frontend/dist/og-image.png for og:image
+  qa-browser.mjs    # Headless-browser helpers for ad-hoc visual QA scripts
+                    #   (launchBrowser, stubClipEmbeds, gotoApp) — usage in the
+                    #   root CLAUDE.md, "Headless browser for visual QA"
 ```
 
 ## Feature docs
@@ -218,7 +222,10 @@ npm run test:watch   # re-run on change
 Tests cover: `buildWhere` combinations, `serializeHash`/`deserializeHash`
 round-trips, date utilities, format helpers, live clip filtering, live coverage
 bisection (suppression discovery, deduplication), OAuth crypto helpers,
-`extractClipSlug` URL parsing, and `clipCardHtml`/`clipListRowHtml` HTML
-structure, XSS escaping, game name language switching, and live-clip class.
-The render pipeline and DOM interactions are not unit-tested (they require a
-live DB and browser environment).
+`extractClipSlug` URL parsing, `panelSlot` grid player placement, and
+`clipCardHtml`/`clipListRowHtml` HTML structure, XSS escaping, game name
+language switching, and live-clip class. The render pipeline and DOM
+interactions are not unit-tested (they require a live DB and browser
+environment); check them against the dev server with a headless-browser
+script — see `scripts/qa-browser.mjs` and "Headless browser for visual QA" in
+the root CLAUDE.md.

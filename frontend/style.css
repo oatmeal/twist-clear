@@ -805,70 +805,82 @@ main { padding: 24px; }
 }
 .clip-thumb img.broken { opacity: 0.2; }
 
-/* ── Expanded player (grid card + list embed row) ─────────────────────────
-   Both layouts hold [prev peek][player][next peek] — the grid card also has
-   its .clip-info — and are arranged by container width (#clips-grid is the
-   query container, so this tracks the space actually available):
-     < 1100px   player / info / [prev | next]   (list: no info row)
-     ≥ 1100px   [prev | player | next] / info — the peeks fill the gutters
-                beside the player, vertically centred on it, so they're in
-                view whenever the video is. Gutters never drop below 160px;
-                the player shrinks from its 854px max instead. */
+/* ── Player panel (grid) ──
+   The clicked card stays in place, outlined as now playing, and the player
+   opens in a full-width panel in the grid row below the card's row (placed by
+   placePanel() in embed.ts), with a notch pointing up at the card. On a
+   one-column grid the card drops its thumbnail (.single-col) — the player
+   directly below would repeat it — leaving its title and meta as a header. */
+.clip-card.playing,
+.clip-card.playing:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+  transform: none;
+}
+.clip-card.playing .clip-play-icon { opacity: 1; }
+.clip-card.playing.single-col .clip-thumb { display: none; }
+
+.clip-panel {
+  grid-column: 1 / -1;
+  position: relative;
+  padding: 12px;
+  background: var(--surface2);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+}
+/* Notch: a rotated square straddling the top border; its lower half is
+   covered by the panel's own background. --notch-x is the card's centre. */
+.clip-panel::before {
+  content: '';
+  position: absolute;
+  top: -7px;
+  left: var(--notch-x, 50%);
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  background: var(--surface2);
+  border-top: 1px solid var(--accent);
+  border-left: 1px solid var(--accent);
+  transform: rotate(45deg);
+}
+
+/* ── Player stage (grid panel + list embed row) ──
+   [prev peek][player][next peek], arranged by container width (#clips-grid
+   is the query container, so this tracks the space actually available):
+     < 1100px   player / [prev | next]
+     ≥ 1100px   [prev | player | next] — the peeks fill the gutters beside
+                the player, vertically centred on it, so they're in view
+                whenever the video is. Gutters never drop below 160px; the
+                player shrinks from its 854px max instead. */
 #clips-grid { container: clips / inline-size; }
 
-.clip-card.expanded,
-.clip-card.expanded:hover {
-  grid-column: 1 / -1;
-  border-color: var(--accent);
-  transform: none;
-  background: var(--surface2);
-  cursor: default;
-}
-.clip-card.expanded,
 .clip-stage {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   grid-template-areas:
     "embed embed"
-    "info  info"
     "prev  next";
   gap: 10px;
 }
-.clip-card.expanded { padding-bottom: 10px; }
-.clip-card.expanded .clip-embed-wrap,
 .clip-stage .clip-embed-wrap {
   grid-area: embed;
   width: 100%;
   max-width: 854px;
   justify-self: center;
 }
-.clip-card.expanded .clip-info { grid-area: info; padding-bottom: 0; }
-.clip-card.expanded .clip-prev-btn { grid-area: prev; margin-left: 10px; }
-.clip-card.expanded .clip-next-btn { grid-area: next; margin-right: 10px; }
 .clip-stage .clip-prev-btn { grid-area: prev; }
 .clip-stage .clip-next-btn { grid-area: next; }
-/* List view has no info block (the clicked row above is the info) */
-.clip-stage { grid-template-areas: "embed embed" "prev next"; }
 
 @container clips (min-width: 1100px) {
-  .clip-card.expanded,
   .clip-stage {
     grid-template-columns: minmax(160px, 1fr) minmax(0, 854px) minmax(160px, 1fr);
     grid-template-areas: "prev embed next";
     column-gap: 20px;
     align-items: center;
   }
-  .clip-card.expanded {
-    grid-template-areas:
-      "prev  embed next"
-      ".     info  .";
-    padding: 16px 16px 6px;
-  }
-  .clip-card.expanded .clip-info { padding: 2px 0 0; }
-  .clip-card.expanded .clip-prev-btn,
-  .clip-stage .clip-prev-btn { justify-self: end; margin: 0; }
-  .clip-card.expanded .clip-next-btn,
-  .clip-stage .clip-next-btn { justify-self: start; margin: 0; }
+  .clip-stage .clip-prev-btn { justify-self: end; }
+  .clip-stage .clip-next-btn { justify-self: start; }
+  .clip-panel { padding: 16px; }
 }
 
 /* ── Prev / next peek button ──

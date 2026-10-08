@@ -24,12 +24,18 @@ export function initEmbed(render: () => Promise<void>, onCloseRender?: () => voi
 
 // ── Module state ──────────────────────────────────────────────────────────
 
-const _thumbCache = new WeakMap<HTMLElement, HTMLElement>();
+// Grid-view expand state: the playing card (left in place, highlighted) and
+// the full-width player panel shown in the grid row below it.
 let _expandedCard: HTMLElement | null = null;
+let _panel: HTMLElement | null = null;
+// Re-places the panel when the grid's width (and so its column count) changes.
+let _panelObserver: ResizeObserver | null = null;
+let _panelGridWidth = 0;
 // List-view expand state: the expanded <tr> row and the embed <tr> inserted after it.
 let _expandedRow: HTMLElement | null = null;
-// Set while expandCard/expandRow is in progress so collapseCard/collapseRow
-// knows it's a card swap, not a standalone close, and skips the post-collapse render.
+// Set while expandRow is in progress so collapseRow knows it's a row swap,
+// not a standalone close, and skips the post-collapse render. (Switching grid
+// cards never collapses: expandCard just repoints the panel.)
 let _expanding = false;
 let _insertedEmbedRow: HTMLElement | null = null;
 
@@ -60,6 +66,9 @@ export function setPageBoundaryClips(prev: PeekClip | null, next: PeekClip | nul
 export function resetIfInGrid(): void {
   if (_expandedCard?.closest('#clips-grid')) {
     _expandedCard = null;
+    _panel = null; // will be destroyed by innerHTML replacement
+    _panelObserver?.disconnect();
+    _panelObserver = null;
     document.removeEventListener('click', _onDocClickOutside);
   }
   if (_expandedRow?.closest('#clips-grid')) {
@@ -150,19 +159,42 @@ function peekButtonHtml(dir: 'prev' | 'next', clip: PeekClip | null, disabled: b
     `</button>`;
 }
 
+/** [prev peek][player][next peek], laid out by .clip-stage in style.css. */
+function stageHtml(slug: string, n: ReturnType<typeof neighbours>): string {
+  return `<div class="clip-stage">` +
+    peekButtonHtml('prev', n.prev, n.prevDisabled) +
+    embedWrapHtml(slug) +
+    peekButtonHtml('next', n.next, n.nextDisabled) +
+    `</div>`;
+}
+
 /**
  * Scroll (if needed) so everything from the top of `top` to the bottom of
- * `bottom` is in view — or, when that span is taller than the viewport, so
- * `top` sits at the top. List view needs this because the clicked row and its
- * player live in separate <tr>s, so scrollIntoView on either alone can leave
- * the player or the peeks below the fold.
+ * `bottom` is in view. The clicked clip and its player are separate elements
+ * (list: two <tr>s; grid: the card and the panel a row below), so
+ * scrollIntoView on either alone can leave the player or peeks off-screen.
+ *
+ * When the span is taller than the viewport, `prefer` picks the end to keep:
+ * 'top' puts `top` at the top (list view: the row is the clip's title);
+ * 'bottom' shows all of `bottom` and as much of `top` as fits above it (grid
+ * view: the card's title sits at its bottom edge, above a thumbnail that just
+ * repeats the player).
  */
-function scrollSpanIntoView(top: HTMLElement, bottom: HTMLElement): void {
+function scrollSpanIntoView(top: HTMLElement, bottom: HTMLElement, prefer: 'top' | 'bottom' = 'top'): void {
   const MARGIN = 8;
   const t = top.getBoundingClientRect().top - MARGIN;
-  const b = bottom.getBoundingClientRect().bottom + MARGIN;
+  const bRect = bottom.getBoundingClientRect();
+  const b = bRect.bottom + MARGIN;
   const vh = window.innerHeight;
-  const delta = (b - t > vh || t < 0) ? t : (b > vh ? b - vh : 0);
+  let delta: number;
+  if (b - t <= vh) {
+    delta = t < 0 ? t : (b > vh ? b - vh : 0);
+  } else if (prefer === 'bottom') {
+    const bt = bRect.top - MARGIN;
+    delta = b - bt > vh ? bt : b - vh;
+  } else {
+    delta = t;
+  }
   if (delta !== 0) window.scrollBy({ top: delta, behavior: 'smooth' });
 }
 
@@ -174,8 +206,9 @@ function hideBrokenPeekImages(container: HTMLElement): void {
 
 function _onDocClickOutside(e: MouseEvent): void {
   const target = e.target as Node;
-  if (_expandedCard && !_expandedCard.contains(target)) {
-    collapseCard(_expandedCard);
+  if (_expandedCard) {
+    const inPanel = _panel !== null && _panel.contains(target);
+    if (!_expandedCard.contains(target) && !inPanel) collapseCard(_expandedCard);
   } else if (_expandedRow) {
     const inRow   = _expandedRow.contains(target);
     const inEmbed = _insertedEmbedRow !== null && _insertedEmbedRow.contains(target);
@@ -184,55 +217,135 @@ function _onDocClickOutside(e: MouseEvent): void {
 }
 
 // ── Grid card expand/collapse ─────────────────────────────────────────────
+//
+// Google Images style: the clicked card stays where it is, highlighted as
+// now playing, and the player opens in a full-width panel in the grid row
+// below the card's row — so no card is orphaned, and stepping to a neighbour
+// in the same row just swaps the panel's contents.
+
+/**
+ * Where the player panel goes for the card at `idx` (of `count`) in a
+ * `cols`-column grid: the 1-based grid line it starts on (the row below the
+ * card's) and the index of the card it follows in the DOM (the row's last).
+ */
+export function panelSlot(idx: number, cols: number, count: number): { gridRow: number; after: number } {
+  const row = Math.floor(idx / cols);
+  return { gridRow: row + 2, after: Math.min(count - 1, (row + 1) * cols - 1) };
+}
+
+function gridCards(grid: HTMLElement): HTMLElement[] {
+  return Array.from(grid.querySelectorAll<HTMLElement>(':scope > .clip-card'));
+}
+
+/**
+ * Where `el`'s layout box sits in the viewport, give or take a constant: only
+ * for before/after comparisons. It sees any scrolling the browser did in
+ * between (scroll anchoring, clamping) as well as `el`'s move, so correcting
+ * by the difference holds `el` still on screen. Unlike getBoundingClientRect
+ * it ignores transforms, i.e. a card's hover lift.
+ */
+function viewportTop(el: HTMLElement): number {
+  return el.offsetTop - window.scrollY; // offsetTop first: it forces the layout
+}
+
+/** The grid's column count (a grid container's computed track list has one size per track). */
+function gridColumnCount(grid: HTMLElement): number {
+  return getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length || 1;
+}
+
+/**
+ * Put the panel in the row below the playing card's and point its notch at
+ * the card. The row is set with an explicit grid-row, not implied by DOM
+ * order, so when a resize changes the column count the panel can move without
+ * being re-inserted — re-inserting it would reload the iframe and restart the
+ * clip. (Its DOM position, which sets the reading/tab order, is updated only
+ * when expandCard refills it.)
+ */
+function placePanel(): void {
+  const card = _expandedCard;
+  const panel = _panel;
+  const grid = card?.parentElement;
+  if (!card || !panel || !grid) return;
+  const cards = gridCards(grid);
+  const cols = gridColumnCount(grid);
+  panel.style.gridRow = String(panelSlot(cards.indexOf(card), cols, cards.length).gridRow);
+  // One column: the player sits right under the card, so its thumbnail would
+  // just repeat it — hide it and leave the title/meta as the player's header.
+  card.classList.toggle('single-col', cols === 1);
+  const c = card.getBoundingClientRect();
+  panel.style.setProperty('--notch-x', `${c.left + c.width / 2 - panel.getBoundingClientRect().left}px`);
+  _panelGridWidth = grid.clientWidth;
+}
 
 export function collapseCard(card: HTMLElement): void {
-  const savedThumb = _thumbCache.get(card);
-  const embedWrap = card.querySelector<HTMLElement>('.clip-embed-wrap');
-  if (embedWrap && savedThumb) embedWrap.replaceWith(savedThumb);
-  _thumbCache.delete(card);
-  card.querySelectorAll('.clip-peek').forEach(el => el.remove());
-  card.classList.remove('expanded');
+  card.classList.remove('playing', 'single-col');
+  card.removeAttribute('aria-current');
+  _panel?.remove();
+  _panel = null;
+  _panelObserver?.disconnect();
+  _panelObserver = null;
   document.removeEventListener('click', _onDocClickOutside);
   _expandedCard = null;
-  if (!_expanding) _onCloseRender?.();
+  _onCloseRender?.();
 }
 
 export function expandCard(card: HTMLElement, skipScroll = false): void {
-  if (_expandedCard && _expandedCard !== card) {
-    _expanding = true;
-    collapseCard(_expandedCard);
-    _expanding = false;
-  }
-
   const clipUrl = card.dataset['clipUrl'] ?? '';
   const slug = extractClipSlug(clipUrl);
   if (!slug) {
     window.open(clipUrl, '_blank', 'noopener,noreferrer');
     return;
   }
+  const grid = card.parentElement;
+  if (!grid) return;
 
-  const thumb = card.querySelector<HTMLElement>('.clip-thumb');
-  if (!thumb) return;
+  // Read layout up front: from the detach below until the panel is back in,
+  // nothing may force a layout. One would lay out a page a panel shorter
+  // and, near the bottom of the page, clamp the scroll position upwards.
+  const cardTopBefore = viewportTop(card);
+  const cards = gridCards(grid);
+  const idx = cards.indexOf(card);
+  const slot = panelSlot(idx, gridColumnCount(grid), cards.length);
 
-  _thumbCache.set(card, thumb);
+  if (_expandedCard) {
+    _expandedCard.classList.remove('playing', 'single-col');
+    _expandedCard.removeAttribute('aria-current');
+  }
+  if (!_panel) {
+    _panel = document.createElement('div');
+    _panel.className = 'clip-panel';
+    // The rAF defers the re-placement (which changes the grid's height) out of
+    // the observer callback, avoiding a ResizeObserver loop error.
+    _panelObserver = new ResizeObserver(() => {
+      if (grid.clientWidth !== _panelGridWidth) requestAnimationFrame(placePanel);
+    });
+    _panelObserver.observe(grid);
+  }
+  // Refill the panel while detached so the new iframe loads once, at its
+  // final position: after the last card of the playing card's row, which
+  // keeps the reading/tab order in step with the layout.
+  _panel.remove();
+  _panel.innerHTML = stageHtml(slug, neighbours(cards, idx));
+  hideBrokenPeekImages(_panel);
+  _panel.style.gridRow = String(slot.gridRow);
+  cards[slot.after]?.after(_panel);
 
-  // Replace the thumbnail with [prev peek][player][next peek]; the expanded
-  // card is a CSS grid that places these (and .clip-info) responsively.
-  const allCards = Array.from(card.parentElement?.querySelectorAll<HTMLElement>('.clip-card') ?? []);
-  const n = neighbours(allCards, allCards.indexOf(card));
-  const tmp = document.createElement('div');
-  tmp.innerHTML =
-    peekButtonHtml('prev', n.prev, n.prevDisabled) +
-    embedWrapHtml(slug) +
-    peekButtonHtml('next', n.next, n.nextDisabled);
-  hideBrokenPeekImages(tmp);
-  thumb.replaceWith(...Array.from(tmp.children));
-
-  card.classList.add('expanded');
+  card.classList.add('playing');
+  card.setAttribute('aria-current', 'true');
   _expandedCard = card;
-  if (!skipScroll) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  // Add click-outside listener on the next tick so the current click
-  // doesn't immediately trigger it and collapse the card.
+  placePanel();
+
+  if (!skipScroll) {
+    // Clicking a card below an open panel pulls that card up by the panel's
+    // height as the panel moves down past it; undo the jump, then scroll.
+    const jump = viewportTop(card) - cardTopBefore;
+    if (jump !== 0) window.scrollBy({ top: jump, behavior: 'instant' });
+    scrollSpanIntoView(card, _panel, 'bottom');
+  }
+  // (Re-)add the click-outside listener on the next tick so the current
+  // click — on this card, or on a peek the panel just replaced — doesn't
+  // reach it and collapse the panel.
+  document.removeEventListener('click', _onDocClickOutside);
   setTimeout(() => document.addEventListener('click', _onDocClickOutside), 0);
 }
 
@@ -263,7 +376,6 @@ export function expandRow(row: HTMLElement, skipScroll = false): void {
 
   const tbody = row.closest('tbody');
   const allRows = tbody ? Array.from(tbody.querySelectorAll<HTMLElement>('.clip-row')) : [];
-  const n = neighbours(allRows, allRows.indexOf(row));
 
   // Count only visible cells — hidden cells (display:none from responsive CSS) must be excluded.
   const colCount = Array.from(row.querySelectorAll('td'))
@@ -272,12 +384,7 @@ export function expandRow(row: HTMLElement, skipScroll = false): void {
   embedRow.className = 'clip-embed-row';
   const td = document.createElement('td');
   td.colSpan = colCount;
-  td.innerHTML =
-    `<div class="clip-stage">` +
-    peekButtonHtml('prev', n.prev, n.prevDisabled) +
-    embedWrapHtml(slug) +
-    peekButtonHtml('next', n.next, n.nextDisabled) +
-    `</div>`;
+  td.innerHTML = stageHtml(slug, neighbours(allRows, allRows.indexOf(row)));
   hideBrokenPeekImages(td);
   embedRow.appendChild(td);
 
@@ -292,17 +399,21 @@ export function expandRow(row: HTMLElement, skipScroll = false): void {
 // ── Navigation ────────────────────────────────────────────────────────────
 
 export async function navigateClip(direction: 'prev' | 'next'): Promise<void> {
-  if (!_expandedCard) return;
-  const allCards = Array.from(_expandedCard.parentElement?.querySelectorAll<HTMLElement>('.clip-card') ?? []);
+  if (!_expandedCard || !_panel) return;
+  const allCards = _expandedCard.parentElement ? gridCards(_expandedCard.parentElement) : [];
   const idx = allCards.indexOf(_expandedCard);
   const target = allCards[direction === 'prev' ? idx - 1 : idx + 1];
   if (target) {
-    // Capture the embed's current screen position before the DOM changes,
-    // then instantly correct scroll so it stays at the same vertical position.
-    const topBefore = _expandedCard.getBoundingClientRect().top;
+    // Keep the player where it is on screen. Within a row the panel doesn't
+    // move; stepping into the next/previous row it hops over a row of cards.
+    // Measure on screen, not in the page: near the bottom the browser's scroll
+    // anchoring also scrolls as the panel hops (it anchors on the row the
+    // panel passes), and this undoes that too.
+    const panel = _panel;
+    const topBefore = viewportTop(panel);
     expandCard(target, true);
-    const topAfter = target.getBoundingClientRect().top;
-    window.scrollBy({ top: topAfter - topBefore, behavior: 'instant' });
+    const shift = viewportTop(panel) - topBefore;
+    if (shift !== 0) window.scrollBy({ top: shift, behavior: 'instant' });
   } else {
     const totalPages = Math.ceil(state.totalClips / state.PAGE_SIZE);
     if (direction === 'next' && state.currentPage < totalPages) {

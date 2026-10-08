@@ -1277,8 +1277,8 @@ function bindEvents(): void {
   document.querySelector('main')!.addEventListener('click', e => {
     const target = e.target as HTMLElement;
     if (target.closest('.clip-close-btn')) {
-      const card = target.closest<HTMLElement>('.clip-card');
-      if (card) { collapseCard(card); return; }
+      const ec = getExpandedCard();
+      if (ec) { collapseCard(ec); return; }
       const er = getExpandedRow();
       if (er) { collapseRow(er); return; }
       return;
@@ -1307,10 +1307,11 @@ function bindEvents(): void {
       if (row === getExpandedRow()) collapseRow(row); else expandRow(row);
       return;
     }
-    // Grid-view card: expand embed on click anywhere except title link.
+    // Grid-view card: open the player panel below its row on click anywhere
+    // except the title link; clicking the playing card again closes it.
     const card = target.closest<HTMLElement>('.clip-card');
     if (card && !target.closest('a')) {
-      expandCard(card);
+      if (card === getExpandedCard()) collapseCard(card); else expandCard(card);
     }
   });
 
