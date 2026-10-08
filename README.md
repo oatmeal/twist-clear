@@ -215,6 +215,18 @@ cd frontend
 npm run dev   # → http://localhost:5173
 ```
 
+The dev server only answers to `localhost`. To open it from another device —
+say a phone through `tailscale serve 5173` — name the extra host (or hosts,
+comma-separated; `.ts.net` allows every subdomain, `true` allows any host):
+
+```sh
+ALLOWED_HOSTS=mybox.tailnet.ts.net npm run dev
+```
+
+`npm run preview` honours it too. Logging in with Twitch from that address
+also needs its URL (e.g. `https://mybox.tailnet.ts.net`) among the Twitch
+app's OAuth Redirect URLs.
+
 **Prepare the database for deployment:**
 
 ```sh
@@ -237,8 +249,8 @@ Requires `frontend/public/clips.db` — run `prepare-db` first. Serve `frontend/
 
 - Thumbnail grid and list view with clip title, view count, creator, game, and date
 - Search by title, filter by game, sort by views or date
-- Timeline of the whole archive under the filters: drag to pick a date range, drag the range to move it; the bars follow the search and game filters
-- Calendar view (year heat-map ↔ month grid): click a day or week, drag across days for a range, or filter to the month / year on screen
+- Timeline of the whole archive under the filters: drag to pick a date range, drag the range to move it, double-click (or double-tap) for a whole year or month; the bars follow the search and game filters
+- Calendar view (year heat-map ↔ month grid), opened by clicking the timeline or the Calendar tab under it: click a day or week, drag across days for a range, or filter to the month / year on screen
 - URL hash preserves all filter state — links are bookmarkable and shareable
 - Click a thumbnail to embed the clip inline; click outside or press Escape to close
 - Keyboard accessible: Tab to a thumbnail and press Enter or Space to play; ← / → step between clips

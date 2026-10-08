@@ -15,6 +15,7 @@ import {
   updateLiveClipBounds,
   primePreviewCache,
   setDefaultPreviewGames,
+  syncCalendarPanel,
 } from './calendar';
 import {
   initEmbed,
@@ -112,15 +113,9 @@ function applyStateHash(hashStr: string): void {
   syncDateInputs();
 
   const isCalendar = partial.currentView === 'calendar';
-  if (isCalendar) {
-    state.setCurrentView('calendar');
-    document.getElementById('btn-view-cal')!.classList.add('active');
-    void renderCalendar();
-  } else {
-    state.setCurrentView('grid');
-    document.getElementById('btn-view-cal')!.classList.remove('active');
-    document.getElementById('calendar-panel')!.style.display = 'none';
-  }
+  state.setCurrentView(isCalendar ? 'calendar' : 'grid');
+  syncCalendarPanel();
+  if (isCalendar) void renderCalendar();
 
   void render();
 }
@@ -1004,9 +999,8 @@ function applyTranslations(): void {
   (document.getElementById('date-to-input')   as HTMLInputElement).title = tr.dateTo;
   (document.getElementById('date-to-input')   as HTMLInputElement).lang  = lang;
 
-  const calBtn = document.getElementById('btn-view-cal') as HTMLButtonElement;
-  calBtn.title = tr.viewCalendar;
-  calBtn.setAttribute('aria-label', tr.viewCalendar);
+  document.getElementById('cal-tab-label')!.textContent = tr.viewCalendar;
+  document.getElementById('cal-collapse-label')!.textContent = tr.calHide;
   (document.getElementById('btn-clear-dates')    as HTMLButtonElement).setAttribute('aria-label', tr.clearDates);
 
   const btnGrid = document.getElementById('btn-view-grid') as HTMLButtonElement | null;
@@ -1587,8 +1581,7 @@ export async function init(): Promise<void> {
         (document.getElementById('search') as HTMLInputElement).value       = '';
         (document.getElementById('sort') as HTMLSelectElement).value        = 'date_desc';
         (document.getElementById('game-filter') as HTMLSelectElement).value = '';
-        document.getElementById('btn-view-cal')!.classList.remove('active');
-        document.getElementById('calendar-panel')!.style.display = 'none';
+        syncCalendarPanel();
         state.setLastStructuralHash(serializeHashExecptSearchQuery(getStateForHash()));
         void render();
       }

@@ -192,6 +192,17 @@ function readTomlString(toml: string, key: string): string | undefined {
 const siteUrl = process.env['VITE_SITE_URL'] ?? '';
 const viteBase = siteUrl ? new URL(siteUrl).pathname : '/';
 
+// Extra hostnames the dev and preview servers answer to, beyond localhost —
+// e.g. to open the site from a phone through `tailscale serve` or a tunnel:
+//   ALLOWED_HOSTS=mybox.tailnet.ts.net npm run dev
+// Comma-separated; a leading dot allows subdomains (.ts.net), and "true"
+// allows any host (disables Vite's DNS-rebinding check). Not VITE_-prefixed:
+// it's server config, and VITE_ variables are exposed to the page.
+const allowedHostsEnv = process.env['ALLOWED_HOSTS']?.trim() ?? '';
+const allowedHosts: string[] | true = allowedHostsEnv === 'true'
+  ? true
+  : allowedHostsEnv.split(',').map(h => h.trim()).filter(Boolean);
+
 export default defineConfig({
   root: '.',
   base: viteBase,
@@ -199,6 +210,7 @@ export default defineConfig({
   server: {
     port: parseInt(process.env['PORT'] ?? '5173', 10),
     host: 'localhost',
+    allowedHosts,
     fs: {
       // Allow resolving symlinks that point outside the package root (e.g. public/clips.db)
       allow: ['..'],
@@ -209,6 +221,7 @@ export default defineConfig({
     // Vite inherits server.port (behaviour varies across Vite versions).
     port: parseInt(process.env['PREVIEW_PORT'] ?? '4173', 10),
     host: 'localhost',
+    allowedHosts,
   },
   plugins: [dbRangePlugin()],
   optimizeDeps: {

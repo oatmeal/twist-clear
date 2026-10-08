@@ -8,7 +8,8 @@ export interface Translations {
   sortNewest: string;
   sortOldest: string;
   allGames: string;
-  viewCalendar: string;
+  viewCalendar: string;      // calendar tab under the filter bar
+  calHide: string;           // the calendar panel's bottom handle
   clearDates: string;
   dateFrom: string;
   dateTo: string;
@@ -122,9 +123,13 @@ export interface Translations {
   // Timeline overview (filter bar)
   timelineLabel: string;
   timelineSelection: string;                 // aria-label of the selection band
-  timelineHint: string;                      // second line of the hover tooltip
-  timelineBandHint: string;                  // …when hovering the selection band
-  timelineHandleHint: string;                // …when hovering a handle
+  // Hover tooltip's gesture → action rows: over empty space (period: what a
+  // double-click selects), over the selection band, over one of its handles.
+  timelineTip: (period: string) => [string, string][];
+  timelineBandTip: [string, string][];
+  timelineHandleTip: [string, string][];
+  timelineIntro: string;                     // how-to line under the timeline (hover devices)
+  timelineIntroTouch: string;                // …on touch devices
   calHintYear: string;                       // calendar footer hint, year view (hover devices)
   calHintMonth: string;                      // calendar footer hint, month view (hover devices)
   calHandle: string;                         // tooltip on the month view's selection-end handles
@@ -141,6 +146,7 @@ const en: Translations = {
   sortOldest: 'Oldest First',
   allGames: 'All Games',
   viewCalendar: 'Calendar',
+  calHide: 'Hide calendar',
   clearDates: 'Clear dates',
   dateFrom: 'From date',
   dateTo: 'End date',
@@ -180,7 +186,7 @@ const en: Translations = {
   searchHelpGroup: 'Grouping',
   searchHelpNote: 'Spaces are required around OR and |.',
   helpDate: 'Filtering by date',
-  helpDateDesc: 'Drag across the timeline below the filters to pick a range, then drag the highlighted range to move it or its edges to resize it. You can also type dates into the From / End date boxes. Click the timeline or the calendar icon to open the calendar: click a day or week number to select it, drag across days for a range (on a touchscreen, drag the knobs at the ends of a selection), or use “Filter to …” for the whole month or year on screen.',
+  helpDateDesc: 'Drag across the timeline below the filters to pick a range, then drag the highlighted range to move it or its edges to resize it. Double-click the timeline (double-tap on a touchscreen) to select the year or month there — whichever the calendar’s Year / Month switch shows. You can also type dates into the From / End date boxes. Click the timeline or the Calendar tab under it to open the calendar: click a day or week number to select it, drag across days for a range (on a touchscreen, drag the knobs at the ends of a selection), or use “Filter to …” for the whole month or year on screen. Close it with the tab or the “Hide calendar” handle at its bottom.',
   helpLogin: 'Logging in',
   helpLoginDescWithDate: (date) => `This site's clip data was last updated on ${date}. To view clips newer than this, log in with Twitch — your credentials are used to fetch the latest clips directly from Twitch's servers.`,
   helpLoginDescNoDate: "This site's clip data may not include the most recent clips. Log in with Twitch to fetch the latest clips directly from Twitch's servers.",
@@ -242,9 +248,11 @@ const en: Translations = {
   calOpenMonth: (m) => `Show ${m}`,
   timelineLabel: 'Clip timeline',
   timelineSelection: 'Selected dates',
-  timelineHint: 'Drag to select · click to show in calendar',
-  timelineBandHint: 'Drag to move · ← → to step',
-  timelineHandleHint: 'Drag to resize · ← → by a day',
+  timelineTip: (p) => [['Drag', 'select dates'], ['Click', 'show in calendar'], ['Double-click', `select ${p}`]],
+  timelineBandTip: [['Drag', 'move the range'], ['← →', 'previous / next period']],
+  timelineHandleTip: [['Drag', 'resize'], ['← →', 'move this end a day']],
+  timelineIntro: 'Drag across the timeline to filter by date · click to open the calendar · double-click to select a year or month',
+  timelineIntroTouch: 'Tap the timeline to open the calendar · double-tap to select a year or month, then drag its ends to adjust',
   calHintYear: 'Click a month to open it · drag across days to select a range',
   calHintMonth: 'Click a day to select it · drag or Shift-click for a range',
   calHandle: 'Drag to change the range',
@@ -260,6 +268,7 @@ const ja: Translations = {
   sortOldest: '古い順',
   allGames: 'すべてのゲーム',
   viewCalendar: 'カレンダー',
+  calHide: 'カレンダーを閉じる',
   clearDates: '日付フィルターをクリア',
   dateFrom: '開始日',
   dateTo: '終了日（当日含む）',
@@ -299,7 +308,7 @@ const ja: Translations = {
   searchHelpGroup: 'グループ化',
   searchHelpNote: 'OR・|・｜ の前後にはスペースが必要です。',
   helpDate: '日付で絞り込む',
-  helpDateDesc: 'フィルター下のタイムラインをドラッグして期間を選択できます。選択した範囲はドラッグで移動、端をドラッグで伸縮できます。開始日・終了日に直接入力することもできます。タイムラインかカレンダーアイコンをクリックするとカレンダーが開き、日や週番号のクリックで選択、日のドラッグ（タッチ操作では選択範囲の端のつまみをドラッグ）で期間を選択、「〜で絞り込む」で表示中の月・年を選択できます。',
+  helpDateDesc: 'フィルター下のタイムラインをドラッグして期間を選択できます。選択した範囲はドラッグで移動、端をドラッグで伸縮できます。タイムラインをダブルクリック（タッチ操作ではダブルタップ）すると、その位置の年または月（カレンダーの「年／月」の切り替えに合わせて）を選択できます。開始日・終了日に直接入力することもできます。タイムラインかその下の「カレンダー」タブをクリックするとカレンダーが開き、日や週番号のクリックで選択、日のドラッグ（タッチ操作では選択範囲の端のつまみをドラッグ）で期間を選択、「〜で絞り込む」で表示中の月・年を選択できます。カレンダーはタブか下端の「カレンダーを閉じる」で閉じられます。',
   helpLogin: 'ログイン',
   helpLoginDescWithDate: (date) => `このサイトのクリップデータは${date}時点のものです。それ以降の新着クリップを見るには、Twitchでログインしてください。ログインすると、Twitchのサーバーから新着クリップを直接読み込めます。`,
   helpLoginDescNoDate: 'このサイトのクリップデータには、新着クリップが含まれていない場合があります。Twitchでログインすると、Twitchのサーバーから新着クリップを直接読み込めます。',
@@ -365,9 +374,11 @@ const ja: Translations = {
   calOpenMonth: (m) => `${m}を表示`,
   timelineLabel: 'クリップのタイムライン',
   timelineSelection: '選択中の期間',
-  timelineHint: 'ドラッグで期間を選択・クリックでカレンダーに表示',
-  timelineBandHint: 'ドラッグで移動・← →で前後へ',
-  timelineHandleHint: 'ドラッグで伸縮・← →で1日ずつ',
+  timelineTip: (p) => [['ドラッグ', '期間を選択'], ['クリック', 'カレンダーに表示'], ['ダブルクリック', `${p}を選択`]],
+  timelineBandTip: [['ドラッグ', '範囲を移動'], ['← →', '前後の期間へ']],
+  timelineHandleTip: [['ドラッグ', '伸縮'], ['← →', 'この端を1日ずつ移動']],
+  timelineIntro: 'タイムラインをドラッグで期間を選択・クリックでカレンダーを表示・ダブルクリックで年／月を選択',
+  timelineIntroTouch: 'タイムラインをタップでカレンダーを表示・ダブルタップで年／月を選択し、両端のドラッグで調整',
   calHintYear: 'クリックで月を表示・日をドラッグで期間を選択',
   calHintMonth: 'クリックで日を選択・ドラッグかShift+クリックで期間を選択',
   calHandle: 'ドラッグで期間を変更',

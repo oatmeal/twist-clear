@@ -70,15 +70,26 @@ archive, `calMinDate`…`calMaxDate`.
     result count has just read.
 - **Calendar-view underline** (`rect.tl-view`): the year or month the calendar
   panel shows, while it's open.
+- **Discoverability**: the cursor is a crosshair over empty space and the bar
+  under the mouse is highlighted (`rect.tl-hover`). The hover tooltip names
+  the bar (period · clips) above gesture → action rows (`timelineTip` etc. in
+  `i18n.ts`); over empty space the double-click row names the exact period it
+  would select (`calendarPeriodAt()`). Until the timeline is first used to
+  select dates — a committed drag or a double-click — a how-to line under it
+  (`.tl-intro`, wording for mouse or touch) spells out the gestures without
+  hovering; its ✕ dismisses it too. Either way it stays hidden after that
+  (`localStorage` `tc_timeline_intro_done`).
 
 ### Interactions
 
 | Gesture | Mouse | Touch |
 |---|---|---|
 | Click / tap (no drag), anywhere incl. the band | Open the calendar (if closed) and move it to that date at its current zoom level — `showDateInCalendar()`; filter unchanged | same |
+| Double-click / double-tap (second press within 450 ms, 8 px / 24 px of the first) | The click has already shown that date; the second selects the year or month on screen there (the calendar's zoom level), like "Filter to …" — `selectDateInCalendar()` | same — the only way to *create* a range on the timeline by touch, then the handles adjust it |
 | Drag empty space | New selection, ends snapped outward to whole bars (`rangeFromDrag`) | ignored, so a stray swipe can't replace a selection |
 | Drag a handle | Resize, snapped to bar boundaries, never collapsing (`resizeRange`) | same (16 px hit zone) |
 | Drag the band | Slide by whole units of its own kind — days, weeks, calendar months, years, or its own length for custom ranges (`dragShift` → `shiftRange`) | same |
+| Escape during a drag | Cancel it; the selection stays as it was | — |
 | Keyboard | Band is a slider: ← → shift by one unit. Handles are sliders: ← → move that end a day, Shift = a week. Clicking the band / a handle focuses it (focus is set explicitly because `preventDefault()` on `pointerdown` cancels the browser's focus-on-press) | — |
 
 Narrow bands (under `NARROW_BAND_PX`, e.g. one month on a phone) are drawn as
@@ -92,7 +103,15 @@ filter change (it reveals the results when the bar is pinned).
 
 ## Calendar panel (`calendar.ts`)
 
-**Toggle** (`#btn-view-cal`): `switchView()` opens or closes the panel. On open,
+**Opening and closing**: the calendar tab (`#cal-tab`) hangs from the bottom
+of the filter bar, styled like the filter tab, right above where the panel
+opens; its chevron flips while the panel is open (`aria-expanded`). It and the
+handle hanging from the panel's bottom edge (`#cal-collapse`, "Hide calendar")
+call `switchView()`; `syncCalendarPanel()` reflects `state.currentView` in the
+panel and the tab. (There used to be a calendar icon button beside the date
+inputs, but the timeline row came between it and the panel.) Closing from the
+bottom handle keeps the results where they are on screen rather than pulling
+them up by the panel's height (`collapseFromBottom()`). On open,
 `deriveNavigationPosition()` picks a starting view from the filter (no filter →
 latest year; ≤ 62 days → month view of its start; longer → year view of its
 midpoint). Opening from a timeline click skips that and goes to the clicked

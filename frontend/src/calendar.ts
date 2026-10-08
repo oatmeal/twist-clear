@@ -502,11 +502,16 @@ function archiveBounds(): { minY: number; minM: number; maxY: number; maxM: numb
   return { minY, minM: minM - 1, maxY, maxM: maxM - 1 };
 }
 
+/** date, clamped to the archive's first and last days. */
+function clampToArchive(date: string): string {
+  if (state.calMinDate && date < state.calMinDate) return state.calMinDate;
+  if (state.calMaxDate && date > state.calMaxDate) return state.calMaxDate;
+  return date;
+}
+
 /** Move the view to the year / month containing date, keeping the zoom level. */
 function moveViewTo(date: string): void {
-  let d = date;
-  if (state.calMinDate && d < state.calMinDate) d = state.calMinDate;
-  if (state.calMaxDate && d > state.calMaxDate) d = state.calMaxDate;
+  const d = clampToArchive(date);
   state.setCalYear(Number(d.slice(0, 4)));
   if (state.calMonth !== null) state.setCalMonth(Number(d.slice(5, 7)) - 1);
 }
@@ -575,6 +580,31 @@ export function showDateInCalendar(date: string): void {
   moveViewTo(date);
   if (state.currentView === 'calendar') navigate();
   else openPanel();
+}
+
+/**
+ * [from, to) of the year or month (the calendar's zoom level) that
+ * selectDateInCalendar(date) selects.
+ */
+export function calendarPeriodAt(date: string): [string, string] {
+  const d = clampToArchive(date);
+  const y = Number(d.slice(0, 4));
+  return state.calMonth === null ? yearRange(y) : monthRange(y, Number(d.slice(5, 7)) - 1);
+}
+
+/**
+ * Show date's year or month in the calendar, opening the panel if it's
+ * closed, and select it (a double-click on the timeline). Like "Filter to …".
+ */
+export function selectDateInCalendar(date: string): void {
+  moveViewTo(date);
+  if (state.currentView !== 'calendar') {
+    state.setCurrentView('calendar');
+    syncCalendarPanel();
+  }
+  if (state.calMonth !== null) _lastMonth = state.calMonth;
+  const [from, to] = viewRange();
+  applyDateSelection(from, to); // renders the calendar too
 }
 
 export function syncDateInputs(): void {
@@ -1046,9 +1076,19 @@ function deriveNavigationPosition(): void {
   }
 }
 
+/**
+ * Show or hide the panel to match state.currentView, and sync the calendar
+ * tab. Doesn't render; renderCalendar() fills the panel.
+ */
+export function syncCalendarPanel(): void {
+  const open = state.currentView === 'calendar';
+  if (!open) document.getElementById('calendar-panel')!.style.display = 'none';
+  document.getElementById('cal-tab')!.setAttribute('aria-expanded', String(open));
+}
+
 function openPanel(): void {
   state.setCurrentView('calendar');
-  document.getElementById('btn-view-cal')!.classList.add('active');
+  syncCalendarPanel();
   if (state.calMonth !== null) _lastMonth = state.calMonth;
   void renderCalendar();
   callRender();
@@ -1057,13 +1097,26 @@ function openPanel(): void {
 export function switchView(view: 'grid' | 'calendar'): void {
   if (view === 'grid') {
     state.setCurrentView('grid');
-    document.getElementById('btn-view-cal')!.classList.remove('active');
-    document.getElementById('calendar-panel')!.style.display = 'none';
+    syncCalendarPanel();
     callRender();
   } else {
     deriveNavigationPosition();
     openPanel();
   }
+}
+
+/**
+ * Close the panel from its bottom handle. Closing from down there would
+ * otherwise pull the results up past the viewport, by the panel's height;
+ * instead they stay where they are on screen.
+ */
+function collapseFromBottom(): void {
+  const results = document.getElementById('clips-grid')!;
+  const before = results.getBoundingClientRect().top;
+  switchView('grid');
+  // Browsers with scroll anchoring may already have compensated; then this is 0.
+  window.scrollBy(0, results.getBoundingClientRect().top - before);
+  document.getElementById('cal-tab')!.focus({ preventScroll: true });
 }
 
 // ── Day cells: click, drag, shift-click ───────────────────────────────────
@@ -1303,9 +1356,10 @@ export async function initCalendar(onRender: () => Promise<void>): Promise<void>
     applyDateSelection(state.calDateFrom, toInput.value ? addDays(toInput.value, 1) : null);
   });
 
-  document.getElementById('btn-view-cal')!.addEventListener('click', () => {
+  document.getElementById('cal-tab')!.addEventListener('click', () => {
     switchView(state.currentView === 'calendar' ? 'grid' : 'calendar');
   });
+  document.getElementById('cal-collapse')!.addEventListener('click', collapseFromBottom);
 
   document.getElementById('btn-clear-dates')!.addEventListener('click', () => {
     applyDateSelection(null, null);

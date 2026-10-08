@@ -9,12 +9,14 @@
 //     week, month, year, or its length for custom ranges), and with a mouse,
 //     dragging across empty space selects a new range. Ends snap to bars.
 //   - The period the calendar panel shows is an underline below the bars.
-//     Clicking (or tapping) outside the band moves the calendar there.
+//     Clicking (or tapping) moves the calendar there, opening it; a double-
+//     click (or double-tap) also selects that year or month.
 //
 // Touch drags outside the band are ignored, so a stray swipe can't replace a
 // selection. Bars follow the game and search filters but never the date filter
 // (the band shows that); when a filter is active, the unfiltered totals are
-// drawn faintly behind on the same scale.
+// drawn faintly behind on the same scale. Until the timeline has been used to
+// select dates, a line under it says how.
 //
 // Geometry (binning, snapping, x ↔ date) is in lib/timeline.ts; selection
 // semantics (kinds, shifting, labels) in lib/dateRange.ts.
@@ -38,7 +40,13 @@ import {
   type BinUnit,
   type Scale,
 } from './lib/timeline';
-import { applyDateSelection, calendarViewPeriod, showDateInCalendar } from './calendar';
+import {
+  applyDateSelection,
+  calendarPeriodAt,
+  calendarViewPeriod,
+  selectDateInCalendar,
+  showDateInCalendar,
+} from './calendar';
 import { t, lang } from './lib/i18n';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -46,6 +54,7 @@ const PLOT_H = 34;            // bar area
 const AXIS_H = 16;            // year labels + calendar-view underline
 const HEIGHT = PLOT_H + AXIS_H;
 const DRAG_THRESHOLD = 4;     // px before a press counts as a drag
+const DOUBLE_CLICK_MS = 450;  // a second click this soon after is a double-click
 const MIN_BAND_PX = 6;        // keep a one-day selection visible
 const NARROW_BAND_PX = 12;    // below this the band is drawn solid, without handles
 
@@ -54,6 +63,7 @@ const NARROW_BAND_PX = 12;    // below this the band is drawn solid, without han
 let _root: HTMLElement | null = null;
 let _svg: SVGSVGElement | null = null;
 let _tip: HTMLElement | null = null;
+let _intro: HTMLElement | null = null;
 const _el: Record<string, SVGElement> = {};
 
 function svgEl<K extends keyof SVGElementTagNameMap>(
@@ -91,6 +101,11 @@ type Drag =
 let _drag: Drag | null = null;
 // The selection drawn while dragging; committed on release.
 let _preview: { from: string | null; to: string | null } | null = null;
+// The last press that didn't drag, to tell a double-click; date is where the
+// first click showed the calendar, which the double-click then selects.
+let _lastClick: { time: number; x: number; date: string } | null = null;
+
+const _supportsHover = window.matchMedia('(hover: hover)').matches;
 
 function selection(): { from: string | null; to: string | null } {
   return _preview ?? { from: state.calDateFrom, to: state.calDateTo };
@@ -178,6 +193,7 @@ function layout(): void {
     ? { start: _bins[0]!.start, end: _bins[_bins.length - 1]!.end, width }
     : null;
   _svg.setAttribute('viewBox', `0 0 ${width} ${HEIGHT}`);
+  showHover(undefined);
   drawBars();
   drawAxis();
   drawMarks();
@@ -303,14 +319,24 @@ function countIn(from: string | null, to: string | null): number {
   return n;
 }
 
-function showTip(x: number, text: string, hint = ''): void {
+/** Show text over x, with optional gesture → action rows below it. */
+function showTip(x: number, text: string, hints: [string, string][] = []): void {
   if (!_tip || !_scale) return;
-  _tip.replaceChildren(document.createTextNode(text));
-  if (hint) {
-    const h = document.createElement('div');
-    h.className = 'tl-tip-hint';
-    h.textContent = hint;
-    _tip.appendChild(h);
+  const title = document.createElement('div');
+  title.className = 'tl-tip-title';
+  title.textContent = text;
+  _tip.replaceChildren(title);
+  if (hints.length) {
+    const list = document.createElement('dl');
+    list.className = 'tl-tip-hints';
+    for (const [gesture, action] of hints) {
+      const dt = document.createElement('dt');
+      dt.textContent = gesture;
+      const dd = document.createElement('dd');
+      dd.textContent = action;
+      list.append(dt, dd);
+    }
+    _tip.appendChild(list);
   }
   _tip.hidden = false;
   // Centre on x, clamped inside the timeline.
@@ -322,9 +348,35 @@ function hideTip(): void {
   if (_tip) _tip.hidden = true;
 }
 
-function selectionTip(x: number, hint = ''): void {
+function selectionTip(x: number, hints: [string, string][] = []): void {
   const { from, to } = selection();
-  showTip(x, `${periodLabel(from, to, lang)} · ${t().clipCount(countIn(from, to))}`, hint);
+  showTip(x, `${periodLabel(from, to, lang)} · ${t().clipCount(countIn(from, to))}`, hints);
+}
+
+/** Highlight the bar under the pointer (mouse hover), or nothing. */
+function showHover(bin: Bin | undefined): void {
+  const el = _el['hover'];
+  if (!el) return;
+  if (!bin || !_scale) { el.setAttribute('display', 'none'); return; }
+  const x0 = dateToX(_scale, bin.start);
+  el.setAttribute('x', String(x0));
+  el.setAttribute('width', String(Math.max(1, dateToX(_scale, bin.end) - x0)));
+  el.removeAttribute('display');
+}
+
+// ── How-to line ────────────────────────────────────────────────────────────
+// Shown under the timeline until it has been used to select dates (or the
+// line is dismissed), so its gestures don't depend on finding the tooltip.
+
+const INTRO_KEY = 'tc_timeline_intro_done';
+
+function introSeen(): boolean {
+  try { return localStorage.getItem(INTRO_KEY) === '1'; } catch { return false; }
+}
+
+function introDone(): void {
+  if (_intro) _intro.hidden = true;
+  try { localStorage.setItem(INTRO_KEY, '1'); } catch { /* storage blocked: hide for this visit */ }
 }
 
 // ── Pointer handling ───────────────────────────────────────────────────────
@@ -361,7 +413,7 @@ function hitTest(x: number, touch: boolean): 'from' | 'to' | 'band' | null {
 function cursorFor(hit: ReturnType<typeof hitTest>): string {
   if (hit === 'from' || hit === 'to') return 'ew-resize';
   if (hit === 'band') return rangeKind(state.calDateFrom, state.calDateTo) === 'open' ? 'default' : 'grab';
-  return 'pointer';
+  return 'crosshair';
 }
 
 function onPointerDown(e: PointerEvent): void {
@@ -377,6 +429,7 @@ function onPointerDown(e: PointerEvent): void {
     const el = _el[hit === 'from' ? 'handleFrom' : hit === 'to' ? 'handleTo' : 'band']!;
     el.focus({ preventScroll: true });
   }
+  showHover(undefined);
   if (hit === 'from' || hit === 'to') {
     _drag = { mode: 'resize', edge: hit, from, to };
   } else if (hit === 'band' && from !== null && to !== null) {
@@ -397,10 +450,22 @@ function onPointerMove(e: PointerEvent): void {
     if (e.pointerType !== 'mouse') return;
     const hit = hitTest(x, false);
     _svg.style.cursor = cursorFor(hit);
-    if (hit) { selectionTip(x, hit === 'band' ? t().timelineBandHint : t().timelineHandleHint); return; }
+    if (hit) {
+      showHover(undefined);
+      selectionTip(x, hit === 'band' ? t().timelineBandTip : t().timelineHandleTip);
+      return;
+    }
     const day = xToDate(_scale, x);
     const bin = _bins.find(b => day >= b.start && day < b.end);
-    if (bin) showTip(x, `${periodLabel(bin.start, bin.end, lang)} · ${t().clipCount(bin.count)}`, t().timelineHint);
+    showHover(bin);
+    if (bin) {
+      const [pFrom, pTo] = calendarPeriodAt(day);
+      showTip(
+        x,
+        `${periodLabel(bin.start, bin.end, lang)} · ${t().clipCount(bin.count)}`,
+        t().timelineTip(periodLabel(pFrom, pTo, lang)),
+      );
+    }
     return;
   }
 
@@ -434,7 +499,8 @@ function onPointerMove(e: PointerEvent): void {
   selectionTip(x);
 }
 
-function endDrag(e: PointerEvent, commit: boolean): void {
+/** Finish a press: commit it on release (e), or cancel it (null). */
+function endDrag(e: PointerEvent | null, commit: boolean): void {
   if (!_svg || !_drag) return;
   const drag = _drag;
   const preview = _preview;
@@ -443,18 +509,32 @@ function endDrag(e: PointerEvent, commit: boolean): void {
   _svg.style.cursor = '';
   hideTip();
   drawMarks();
-  if (!commit || !_scale) return;
+  if (!e || !commit || !_scale) { _lastClick = null; return; }
 
   // A press that never became a drag — on empty space or on the band — is a
-  // click: show that date in the calendar.
+  // click: show that date in the calendar. A second click there soon after
+  // selects the year or month the calendar now shows.
   if ((drag.mode === 'pending' && !drag.moved) || (drag.mode === 'move' && !preview)) {
-    showDateInCalendar(xToDate(_scale, pointerX(e)));
+    const x = pointerX(e);
+    const last = _lastClick;
+    const tolerance = e.pointerType === 'touch' ? 24 : 8;
+    if (last && e.timeStamp - last.time <= DOUBLE_CLICK_MS && Math.abs(x - last.x) <= tolerance) {
+      _lastClick = null;
+      selectDateInCalendar(last.date);
+      introDone();
+    } else {
+      const date = xToDate(_scale, x);
+      _lastClick = { time: e.timeStamp, x, date };
+      showDateInCalendar(date);
+    }
     notifyFilterBar();
     return;
   }
+  _lastClick = null;
   if (drag.mode === 'pending') return;
   if (preview && (preview.from !== state.calDateFrom || preview.to !== state.calDateTo)) {
     applyDateSelection(preview.from, preview.to);
+    introDone();
     notifyFilterBar();
   }
 }
@@ -505,6 +585,10 @@ export function applyTimelineTranslations(): void {
   _el['band']!.setAttribute('aria-label', t().timelineSelection);
   _el['handleFrom']!.setAttribute('aria-label', t().dateFrom);
   _el['handleTo']!.setAttribute('aria-label', t().dateTo);
+  if (_intro) {
+    _intro.querySelector('.tl-intro-text')!.textContent = _supportsHover ? t().timelineIntro : t().timelineIntroTouch;
+    _intro.querySelector('.tl-intro-close')!.setAttribute('aria-label', t().dismissBanner);
+  }
 }
 
 /**
@@ -532,6 +616,7 @@ export function initTimeline(): void {
   _el['band'] = svgEl('rect', {
     class: 'tl-band', y: 0, height: PLOT_H, tabindex: 0, role: 'slider', display: 'none',
   });
+  _el['hover'] = svgEl('rect', { class: 'tl-hover', y: 0, height: PLOT_H, display: 'none' });
   _el['ghost'] = svgEl('path', { class: 'tl-ghost' });
   _el['bars'] = svgEl('path', { class: 'tl-bars' });
   _el['barsSel'] = svgEl('path', { class: 'tl-bars-sel', 'clip-path': 'url(#tl-sel-clip)' });
@@ -544,7 +629,7 @@ export function initTimeline(): void {
     class: 'tl-handle', y: 0, width: 4, height: PLOT_H, rx: 2, tabindex: 0, role: 'slider', display: 'none',
   });
   svg.append(
-    defs, _el['band'], _el['ghost'], _el['bars'], _el['barsSel'], _el['axis'],
+    defs, _el['band'], _el['hover'], _el['ghost'], _el['bars'], _el['barsSel'], _el['axis'],
     _el['view'], _el['handleFrom'], _el['handleTo'],
   );
 
@@ -552,7 +637,19 @@ export function initTimeline(): void {
   _tip.className = 'tl-tip';
   _tip.hidden = true;
 
-  _root.replaceChildren(svg, _tip);
+  _intro = document.createElement('p');
+  _intro.className = 'tl-intro';
+  _intro.hidden = introSeen();
+  const introText = document.createElement('span');
+  introText.className = 'tl-intro-text';
+  const introClose = document.createElement('button');
+  introClose.type = 'button';
+  introClose.className = 'tl-intro-close';
+  introClose.textContent = '\u2715';
+  introClose.addEventListener('click', introDone);
+  _intro.append(introText, introClose);
+
+  _root.replaceChildren(svg, _tip, _intro);
   _svg = svg;
   applyTimelineTranslations();
 
@@ -560,7 +657,13 @@ export function initTimeline(): void {
   svg.addEventListener('pointermove', onPointerMove);
   svg.addEventListener('pointerup', e => endDrag(e, true));
   svg.addEventListener('pointercancel', e => endDrag(e, false));
-  svg.addEventListener('pointerleave', () => { if (!_drag) hideTip(); });
+  svg.addEventListener('pointerleave', () => { if (!_drag) { hideTip(); showHover(undefined); } });
+  // Escape abandons a drag, leaving the selection as it was.
+  window.addEventListener('keydown', e => {
+    if (e.key !== 'Escape' || !_drag) return;
+    e.stopPropagation(); // don't also unpin the filter bar or close a clip
+    endDrag(null, false);
+  }, true);
   _el['band'].addEventListener('keydown', e => onBandKey(e as KeyboardEvent));
   _el['handleFrom'].addEventListener('keydown', e => onHandleKey('from', e as KeyboardEvent));
   _el['handleTo'].addEventListener('keydown', e => onHandleKey('to', e as KeyboardEvent));

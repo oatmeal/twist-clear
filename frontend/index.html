@@ -89,18 +89,15 @@
   <!-- Always-on row break: game-filter stays above the date/view row on all
        screen sizes. -->
   <div class="controls-break"></div>
-  <!-- Calendar toggle + date inputs: grouped so they stay on the same row and
-       only split from the grid/list switcher on the very narrowest screens. -->
-  <div class="date-filter-group">
-    <button id="btn-view-cal" class="view-btn" aria-label="カレンダー" title="カレンダー"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="3" width="13" height="11" rx="1.5"/><line x1="1.5" y1="7" x2="14.5" y2="7"/><line x1="5" y1="1.5" x2="5" y2="4.5"/><line x1="11" y1="1.5" x2="11" y2="4.5"/></svg></button>
-    <div class="date-range-filter">
-      <input type="date" id="date-from-input" title="開始日">
-      <span class="date-range-sep">–</span>
-      <input type="date" id="date-to-input" title="終了日（当日含む）">
-      <button id="btn-clear-dates" class="clear-dates-btn" aria-label="日付フィルターをクリア">&#x2715;</button>
-    </div>
+  <!-- Date inputs: one row; only split from the grid/list switcher on the
+       very narrowest screens. (The calendar opens from #cal-tab or the timeline.) -->
+  <div class="date-range-filter">
+    <input type="date" id="date-from-input" title="開始日">
+    <span class="date-range-sep">–</span>
+    <input type="date" id="date-to-input" title="終了日（当日含む）">
+    <button id="btn-clear-dates" class="clear-dates-btn" aria-label="日付フィルターをクリア">&#x2715;</button>
   </div>
-  <!-- Grid / list switcher: wraps below date-filter-group on very narrow
+  <!-- Grid / list switcher: wraps below the date inputs on very narrow
        screens, carrying result-count to the right on the same row. -->
   <div class="view-switcher">
     <button id="btn-view-grid" class="view-btn active" aria-label="グリッド表示" title="グリッド表示">⊞<span class="view-btn-label">グリッド</span></button>
@@ -130,6 +127,14 @@
 <div id="sticky-bar-sentinel"></div>
 
 <main>
+  <!-- Calendar tab: hangs from the bottom of the filter bar and opens / closes
+       the calendar panel below it, as clicking the timeline opens it. The
+       panel's bottom handle (#cal-collapse) closes it too. See calendar.ts. -->
+  <button id="cal-tab" class="cal-tab" type="button" aria-expanded="false" aria-controls="calendar-panel">
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="3" width="13" height="11" rx="1.5"/><line x1="1.5" y1="7" x2="14.5" y2="7"/><line x1="5" y1="1.5" x2="5" y2="4.5"/><line x1="11" y1="1.5" x2="11" y2="4.5"/></svg>
+    <span id="cal-tab-label">カレンダー</span>
+    <svg class="cal-tab-chevron" width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="2 4 6 8 10 4"/></svg>
+  </button>
   <div id="calendar-panel" style="display:none">
     <!-- View header: ‹ › and the Year / Month toggle only move the view; the
          "filter to" button selects the period on screen. See calendar.ts. -->
@@ -169,6 +174,12 @@
       <div id="cal-preview-label"></div>
       <div id="cal-preview-games"></div>
     </div>
+    <!-- Bottom handle: closes the panel from its far end (a year view is
+         taller than a phone screen). -->
+    <button id="cal-collapse" class="cal-collapse" type="button" aria-controls="calendar-panel">
+      <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="2 8 6 4 10 8"/></svg>
+      <span id="cal-collapse-label">カレンダーを閉じる</span>
+    </button>
   </div>
 
   <div id="loading">
@@ -258,7 +269,7 @@
 
   <section class="help-section">
     <h3 id="help-date-heading">日付で絞り込む</h3>
-    <p id="help-date-desc">フィルター下のタイムラインをドラッグして期間を選択できます。選択した範囲はドラッグで移動、端をドラッグで伸縮できます。開始日・終了日に直接入力することもできます。タイムラインかカレンダーアイコンをクリックするとカレンダーが開き、日や週番号のクリックで選択、日のドラッグ（タッチ操作では選択範囲の端のつまみをドラッグ）で期間を選択、「〜で絞り込む」で表示中の月・年を選択できます。</p>
+    <p id="help-date-desc">フィルター下のタイムラインをドラッグして期間を選択できます。選択した範囲はドラッグで移動、端をドラッグで伸縮できます。タイムラインをダブルクリック（タッチ操作ではダブルタップ）すると、その位置の年または月（カレンダーの「年／月」の切り替えに合わせて）を選択できます。開始日・終了日に直接入力することもできます。タイムラインかその下の「カレンダー」タブをクリックするとカレンダーが開き、日や週番号のクリックで選択、日のドラッグ（タッチ操作では選択範囲の端のつまみをドラッグ）で期間を選択、「〜で絞り込む」で表示中の月・年を選択できます。カレンダーはタブか下端の「カレンダーを閉じる」で閉じられます。</p>
   </section>
 
   <section class="help-section">

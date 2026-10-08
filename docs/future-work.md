@@ -28,12 +28,12 @@ filter bar always shows — and edits — the filter. Design and code walkthroug
   (previously clicking the month itself did), and whether stepping a
   selected day by keyboard on the timeline band is enough of a replacement for
   the old day ‹ › arrows.
-- **Touch selection handles: try them on a real phone.** The month view's
-  knobs (see "Selection handles" in `frontend/docs/calendar.md`) were only
-  tested with synthetic touch events in headless Chromium. Check the 14 px knob
-  is findable, whether the year view's mini-days need them too (they're
-  ≈ 20 px on a phone), and whether a range that ends in another month needs a
-  hint that its other end is off-screen.
+- **Double-click level when the calendar is closed.** A double-click selects
+  at the calendar's zoom level, which persists while the panel is closed, so
+  on a fresh visit it's a year. The tooltip names the period, but a touch user
+  only learns it from the result. If months turn out to be wanted more often,
+  consider defaulting the zoom to Month, or picking the level from where the
+  timeline is pressed (year labels → year, bars → month).
 - **Fold the date inputs into the timeline**, e.g. editable start / end labels
   on the band, now that the band shows the filter at all times.
 

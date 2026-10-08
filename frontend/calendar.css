@@ -22,11 +22,49 @@
 
 /* ── Calendar panel shell ── */
 #calendar-panel {
+  position: relative; /* for .cal-collapse */
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 20px;
-  margin-bottom: 24px;
+  margin-bottom: 48px; /* room for .cal-collapse */
+}
+
+/* ── Calendar tab and bottom handle ──
+   Styled like the filter tab (.filter-tab in style.css). The tab hangs from
+   the filter bar's bottom edge, in main's top padding, and opens / closes
+   the panel below it; its chevron flips while the panel is open. The bottom
+   handle hangs from the panel's bottom edge and closes it. */
+.cal-tab,
+.cal-collapse {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  padding: 4px 14px 5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.3;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+.cal-tab:hover,
+.cal-collapse:hover { color: var(--text); border-color: var(--accent); }
+.cal-tab { margin: -24px auto 10px; } /* -24px: main's top padding */
+.cal-tab[aria-expanded="true"] { color: var(--text); }
+.cal-tab-chevron { transition: transform 0.15s ease; }
+.cal-tab[aria-expanded="true"] .cal-tab-chevron { transform: rotate(180deg); }
+.cal-collapse {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 #cal-header {
@@ -321,6 +359,7 @@
   #cal-year-view { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 600px) {
+  .cal-tab { margin-top: -12px; } /* main's top padding on phones */
   #cal-year-view { grid-template-columns: repeat(2, 1fr); }
   .month-day-cell { min-height: 40px; }
   .day-count { display: none; }

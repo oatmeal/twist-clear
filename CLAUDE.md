@@ -250,6 +250,8 @@ uv run ruff format .             # format
 cd frontend
 npm install
 npm run dev          # Vite dev server → http://localhost:5173
+ALLOWED_HOSTS=mybox.tailnet.ts.net npm run dev   # also answer to that host (e.g. a phone
+                     #   via `tailscale serve`); comma-separated, `true` = any host
 npm test             # Vitest unit tests
 npm run test:watch   # Vitest in watch mode
 node node_modules/.bin/tsc --noEmit   # type-check (npx not on PATH in Bash tool)

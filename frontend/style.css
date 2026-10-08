@@ -455,15 +455,6 @@ select:focus { border-color: var(--accent); }
 .controls-break    { flex: 0 0 100%; height: 0; }
 .controls-break-md { flex: 0 0 0;    height: 0; }
 
-/* ── Date filter group (calendar toggle + date inputs) ──────────────────────
-   One flex item so calendar button and date pickers always share a row; only
-   splits from the grid/list switcher when the viewport is very narrow. */
-.date-filter-group {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
 /* ── Date range filter ── */
 .date-range-filter {
   display: flex;
@@ -498,7 +489,8 @@ select:focus { border-color: var(--accent); }
 /* ── Timeline overview (src/timeline.ts) ──────────────────────────────────
    Full-width last row of the controls. Bars use the heat-map colour; with a
    date filter the bars outside it dim and the band behind them is tinted.
-   The underline below the bars marks the period the calendar shows. */
+   The underline below the bars marks the period the calendar shows. The
+   crosshair cursor and the hovered bar's highlight say "select here". */
 .timeline {
   flex: 1 1 100%;
   position: relative;
@@ -508,12 +500,13 @@ select:focus { border-color: var(--accent); }
   display: block;
   width: 100%;
   overflow: visible;
-  cursor: pointer;
+  cursor: crosshair;
   /* Vertical swipes scroll the page; horizontal drags reach the timeline. */
   touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
 }
+.tl-hover     { fill: color-mix(in srgb, var(--text) 12%, transparent); }
 .tl-ghost     { fill: var(--muted); opacity: 0.18; }
 .tl-bars      { fill: var(--cal-accent); }
 .tl-svg.has-sel .tl-bars { opacity: 0.3; }
@@ -537,15 +530,49 @@ select:focus { border-color: var(--accent); }
   background: var(--surface2);
   color: var(--text);
   font-size: 12px;
+  line-height: 1.45;
   white-space: nowrap;
   pointer-events: none;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
-.tl-tip-hint { color: var(--muted); font-size: 11px; }
+.tl-tip-title { font-weight: 600; }
+/* Gesture → action rows, e.g. "Drag  select dates". */
+.tl-tip-hints {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 1px 10px;
+  margin: 4px 0 0;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+.tl-tip-hints dt { color: var(--accent-h); font-weight: 600; }
+.tl-tip-hints dd { margin: 0; }
+/* How-to line under the timeline, until it's first used (src/timeline.ts). */
+.tl-intro {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.tl-intro[hidden] { display: none; }
+.tl-intro-close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 4px;
+}
+.tl-intro-close:hover { color: var(--text); }
 
 /* ── View switcher ── */
 .view-switcher { display: flex; gap: 4px; align-items: center; }
-/* All three view buttons use the same compact sizing */
+/* Both view buttons use the same compact sizing */
 #btn-view-grid, #btn-view-list {
   font-size: 15px;
   padding: 6px 9px;
@@ -560,7 +587,6 @@ select:focus { border-color: var(--accent); }
   font-size: 12px;
   font-weight: 500;
 }
-#btn-view-cal { padding: 6px 9px; line-height: 0; display: inline-flex; align-items: center; justify-content: center; }
 .view-btn {
   display: flex;
   align-items: center;
@@ -1281,7 +1307,7 @@ header .streamer-tag a:hover {
    Controls layout:
      row 1 — search + sort
      row 2 — game-filter (fills full width)
-     row 3 — date-filter-group (fills full width)
+     row 3 — date inputs (fill full width)
      row 4 — view-switcher + result-count */
 @media (max-width: 600px) {
   header    { padding: 10px 12px; }
@@ -1308,8 +1334,7 @@ header .streamer-tag a:hover {
   #game-filter { flex: 1 1 0; min-width: 0; }
   /* Date row fills its row and the inputs shrink to fit, rather than pushing
      the "to" input and clear button off-screen on the narrowest phones. */
-  .date-filter-group { flex: 1 1 100%; min-width: 0; }
-  .date-range-filter { flex: 1 1 0; min-width: 0; }
+  .date-range-filter { flex: 1 1 100%; min-width: 0; }
   .date-range-filter input[type="date"] { flex: 1 1 0; min-width: 0; padding: 7px 6px; }
   /* Show short text labels on both view buttons — both labels keeps them
      symmetrical in width, preventing one button from unexpectedly wrapping. */
