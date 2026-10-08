@@ -23,8 +23,9 @@ Always ensure tests and lint commands pass. (See below for specifics.)
 ## Subagents
 
 Opus sessions may dispatch Sonnet subagents (`model: "sonnet"`) for any task
-they can help with — e.g. screenshot/visual QA sweeps, broad code searches,
-doc updates, mechanical refactors — to save tokens. No need to ask first.
+they can help with — e.g. screenshot/visual QA sweeps (point them at
+"Headless browser for visual QA" below), broad code searches, doc updates,
+mechanical refactors — to save tokens. No need to ask first.
 
 ---
 
@@ -170,6 +171,52 @@ rm -f ~/.pyenv/shims/.pyenv-shim
 
 When you see this warning in tool output, ignore it and look at the rest of the
 output for actual results or errors.
+
+### Headless browser for visual QA
+
+To screenshot the app or measure layout, drive a headless browser with
+`playwright-core` (a frontend devDependency) via the helpers in
+`frontend/scripts/qa-browser.mjs`:
+
+- `launchBrowser()` — launches the Playwright **chromium headless shell** from
+  `~/Library/Caches/ms-playwright/`, which works inside the Bash sandbox.
+  System Chrome (`channel: 'chrome'`, used by `screenshot-og`) does **not**:
+  the sandbox blocks it from loading its framework (`dlopen … blocked by
+  sandbox`), so don't reach for `dangerouslyDisableSandbox` — use the shell.
+- `stubClipEmbeds(page)` — serves a stub for Twitch embed iframes (offline,
+  shows the clip slug) and returns `{ loads }`, a count of embed loads; assert
+  it's unchanged to prove an action didn't reload the player.
+- `gotoApp(page, url?)` — opens the app (default `http://localhost:5173/`) and
+  waits for the first clips to render.
+
+Start the dev server first (run it with the Bash tool's `run_in_background`),
+then write the QA script in the session scratchpad and import the helpers by
+absolute path, so `playwright-core` resolves from `frontend/node_modules`:
+
+```sh
+# from frontend/, in the background:
+node node_modules/.bin/vite --port 5173 --strictPort
+```
+
+```js
+// scratchpad/qa.mjs — run with: node qa.mjs
+import { launchBrowser, stubClipEmbeds, gotoApp } from '/abs/path/to/frontend/scripts/qa-browser.mjs';
+const browser = await launchBrowser();
+const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+const embeds = await stubClipEmbeds(page);
+await gotoApp(page);
+await page.locator('#clips-grid .clip-card').nth(1).locator('.clip-thumb').click();
+await page.screenshot({ path: 'grid-open.png' });
+await browser.close();
+```
+
+Then view the PNGs with the Read tool. Chromium is the only engine that works
+here: Playwright's WebKit and Firefox builds (also in the cache) fail at
+`browser.newPage`, with or without the sandbox. The colour palette comes from
+`config.toml`, not `prefers-color-scheme`, so `colorScheme: 'dark'` doesn't
+change the page's look. If no headless shell is installed, `node
+node_modules/.bin/playwright-core install chromium-headless-shell` fetches one
+(needs network access).
 
 ## Development commands
 
