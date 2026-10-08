@@ -21,8 +21,6 @@ ordered by impact. Remove items (and eventually this section) as they're done.
 
 ### Bugs
 
-- **`clipCount` has no thousands separator** (`i18n.ts`): the preview label
-  reads "28488 clips" while everything else says "28,488".
 - **Duplicate `.view-btn` rules** in `style.css` and `calendar.css` with
   conflicting `.active` styles; `calendar.css` wins by load order, so the
   `style.css` block is dead.
