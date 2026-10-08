@@ -37,13 +37,24 @@ filter bar always shows — and edits — the filter. Design and code walkthroug
   timeline's trick — `INDEXED BY clips_created_at` for FTS matches, see
   `queryDayCounts()` in `timeline.ts` — would make `queryYearDays` /
   `queryMonthDays` cheap with a search too; then drop `#cal-search-notice`.
-- **Result-count query for broad searches.** `SELECT COUNT(*) … WHERE c.rowid
-  IN (fts match)` reads ≈1,850 pages (≈7 MB) for a common term like りりまる;
-  the same `INDEXED BY clips_created_at` form reads ≈210 (measured with the
-  sqlite3 CLI's `.stats`). Confirm in the browser first — sql.js-httpvfs
-  read-ahead changes actual bytes fetched.
 - **Fold the date inputs into the timeline**, e.g. editable start / end labels
   on the band, now that the band shows the filter at all times.
+
+---
+
+## Query cost: remaining hot spots
+
+Measured as DB bytes fetched on the dev server (see "Query plans" in
+`frontend/docs/search.md` for the FTS fixes and how to measure).
+
+- **Game filter + "Most viewed", no search: ≈14 MB** for a big game (8,448
+  clips). SQLite walks `clips_game_created` and looks up every row for
+  `view_count` to sort. A covering index `(game_id, view_count DESC,
+  created_at DESC)` in `prepare_web_db.py` would make it a short index walk.
+- **Searches under 3 characters: ≈13 MB.** The LIKE fallback scans the whole
+  table (once; later queries hit the cache). An index on `clips(title)` would
+  let it scan titles only — they total ≈0.7 MB of the 11 MB table — at the
+  cost of that much DB size.
 
 ---
 

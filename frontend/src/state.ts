@@ -40,6 +40,12 @@ export let useFts: boolean = false;
 // useMeta: true when prepare_web_db.py has built clips_meta / game_clip_counts.
 // Falls back to live aggregate queries when false (e.g. raw dev-symlink DB).
 export let useMeta: boolean = false;
+// useIndexHints: true when the indexes named by lib/query.ts's INDEXED BY
+// hints exist (prepare_web_db.py builds them; older prepared DBs may not).
+export let useIndexHints: boolean = false;
+// devCutoff: localStorage 'tc_dev_cutoff' (dev testing of live clips) — DB
+// clips after it are hidden as if not yet scraped. null = off.
+export let devCutoff: string | null = null;
 
 // ── Setters ───────────────────────────────────────────────────────────────
 // ES module live bindings are read-only from importing modules, so mutations
@@ -60,6 +66,8 @@ export function setCalMinDate(v: string | null): void { calMinDate = v; }
 export function setCalMaxDate(v: string | null): void { calMaxDate = v; }
 export function setUseFts(v: boolean): void { useFts = v; }
 export function setUseMeta(v: boolean): void { useMeta = v; }
+export function setUseIndexHints(v: boolean): void { useIndexHints = v; }
+export function setDevCutoff(v: string | null): void { devCutoff = v; }
 export function setDebounceTimer(v: ReturnType<typeof setTimeout>): void { debounceTimer = v; }
 export function setLastStructuralHash(v: string): void { lastStructuralHash = v; }
 

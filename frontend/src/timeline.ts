@@ -21,7 +21,7 @@
 
 import * as state from './state';
 import { q } from './db';
-import { buildWhere } from './lib/query';
+import { buildWhere, byDayHint } from './lib/query';
 import { filterLiveClips } from './lib/liveFilter';
 import { addDays, tzToSqlModifier, utcTimestampToLocalDate } from './lib/dateUtils';
 import { daysBetween, periodLabel, shiftRange, rangeKind } from './lib/dateRange';
@@ -48,10 +48,6 @@ const HEIGHT = PLOT_H + AXIS_H;
 const DRAG_THRESHOLD = 4;     // px before a press counts as a drag
 const MIN_BAND_PX = 6;        // keep a one-day selection visible
 const NARROW_BAND_PX = 12;    // below this the band is drawn solid, without handles
-
-let _devCutoff: string | null = null;
-// INDEXED BY needs the index to exist; the raw dev DB may not have it.
-let _hasCreatedAtIndex = false;
 
 // ── DOM ────────────────────────────────────────────────────────────────────
 
@@ -109,25 +105,23 @@ function filtersActive(): boolean {
 async function queryDayCounts(filtered: boolean): Promise<Map<string, number>> {
   const search = filtered ? state.searchQuery : '';
   const game   = filtered ? state.gameFilter  : '';
-  const { where, params } = buildWhere({
+  const opts = {
     searchQuery: search,
     gameFilter:  game,
     calDateFrom: null,
     calDateTo:   null,
     useFts:      state.useFts,
     tzOffset:    state.tzOffset,
-    devCutoff:   _devCutoff,
-  });
-  // SQLite's default plan for an FTS match looks up every matching row to read
-  // created_at — thousands of HTTP range reads for a common term. Scanning the
-  // created_at index and probing the match list instead costs about the same
-  // as the unfiltered query whatever the term. With a game filter the default
-  // plan (clips_game_created) is already cheaper.
-  const indexedBy = _hasCreatedAtIndex && !game && where.includes('clips_fts')
-    ? 'INDEXED BY clips_created_at' : '';
+    devCutoff:   state.devCutoff,
+    indexHints:  state.useIndexHints,
+  };
+  const w = buildWhere(opts);
+  const { where, params } = w;
+  // An FTS search walks the created_at index (≈210 pages whatever the term)
+  // instead of looking up every matching row — see byDayHint().
   const rows = await q(
     `SELECT strftime('%Y-%m-%d', c.created_at, :tzmod) AS day, COUNT(*) AS cnt
-     FROM clips c ${indexedBy} ${where}
+     FROM clips c ${byDayHint(w, opts)} ${where}
      GROUP BY day`,
     { ...params, ':tzmod': tzToSqlModifier(state.tzOffset) },
   );
@@ -524,15 +518,9 @@ export function refreshTimeline(): void {
   void refreshData();
 }
 
-export async function initTimeline(devCutoff: string | null): Promise<void> {
-  _devCutoff = devCutoff;
+export function initTimeline(): void {
   _root = document.getElementById('timeline');
   if (!_root) return;
-
-  const idx = await q(
-    "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'clips_created_at'",
-  );
-  _hasCreatedAtIndex = idx.length > 0;
 
   const svg = svgEl('svg', { class: 'tl-svg', height: HEIGHT, role: 'group' });
   const defs = svgEl('defs');

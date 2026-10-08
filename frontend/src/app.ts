@@ -1,7 +1,7 @@
 import * as state from './state';
 import { initDb, q, DB_URL } from './db';
 import { escHtml, fmtDateTime } from './lib/format';
-import { buildWhere, ORDER } from './lib/query';
+import { buildWhere, countSql, listHint, ORDER } from './lib/query';
 import type { SortKey } from './lib/query';
 import { serializeHash, serializeHashExecptSearchQuery, deserializeHash, HashState } from './lib/hash';
 import { t, lang, setLang, detectLang } from './lib/i18n';
@@ -148,10 +148,6 @@ const _gameNameJa = new Map<string, string>();
 // MAX(created_at) from clips — used as started_at for the Twitch live-clip
 // API call and as the deduplication boundary in filterLiveClips.
 let _dbCutoffDate:  string | null = null;
-// Dev-only override: set localStorage key 'tc_dev_cutoff' to an ISO date string
-// earlier than the real cutoff to simulate a stale archive (clips after this date
-// are hidden from the DB query and fetched live from the Twitch API instead).
-let _devCutoff: string | null = null;
 // True when live clips arrived during a fetch but render was deferred (card
 // expanded or user on page > 1). Cleared when a render fires on page 1.
 let _liveRenderPending = false;
@@ -295,9 +291,11 @@ async function updateGameFilter(liveGameCounts: Map<string, LiveGameEntry>, live
     const dateClause = dateParts.length ? `WHERE ${dateParts.join(' AND ')}` : '';
     // Run per-game breakdown and overall COUNT(*) in parallel.
     // COUNT(*) is the authoritative total; the JOIN query misses ungamed clips.
+    // COUNT(*), not COUNT(c.id): reading c.id would look up every clip row in
+    // the range, where the clips_created_at_game index alone answers this.
     const [gameRows, totalRows] = await Promise.all([
       q(
-        `SELECT g.id, g.name, g.name_ja, COUNT(c.id) AS cnt
+        `SELECT g.id, g.name, g.name_ja, COUNT(*) AS cnt
          FROM games g
          JOIN clips c ON c.game_id = g.id
          ${dateClause}
@@ -666,22 +664,25 @@ export async function render(): Promise<void> {
     const calNotice = document.getElementById('cal-search-notice');
     if (calNotice) calNotice.style.display = state.searchQuery ? '' : 'none';
 
-    const { where, params } = buildWhere({
+    const whereOpts = {
       searchQuery: state.searchQuery,
       gameFilter: state.gameFilter,
       calDateFrom: state.calDateFrom,
       calDateTo: state.calDateTo,
       useFts: state.useFts,
       tzOffset: state.tzOffset,
-      devCutoff: _devCutoff,
-    });
+      devCutoff: state.devCutoff,
+      indexHints: state.useIndexHints,
+    };
+    const w = buildWhere(whereOpts);
+    const { where, params } = w;
 
     // Fast path: avoid a full COUNT(*) scan when precomputed totals are available.
     //   - No filters: read total_clips from clips_meta (single row).
     //   - Game-only filter: read cnt from game_clip_counts (single row).
     //     COUNT(*) with only a game filter would scan the entire clips_game_created
     //     index for that game_id — potentially thousands of pages for popular games.
-    //   - Any other filter combination: fall back to COUNT(*).
+    //   - Any other filter combination: COUNT(*), planned by countSql().
     let dbCount: number;
     const gameOnlyFilter = state.useMeta
       && state.gameFilter !== ''
@@ -698,7 +699,7 @@ export async function render(): Promise<void> {
       );
       dbCount = (gcRows[0]?.['cnt'] as number | undefined) ?? 0;
     } else {
-      const countRows = await q(`SELECT COUNT(*) AS cnt FROM clips c ${where}`, params);
+      const countRows = await q(countSql(w, whereOpts), params);
       dbCount = (countRows[0]?.['cnt'] as number | undefined) ?? 0;
     }
     if (ctrl.signal.aborted) return;
@@ -753,6 +754,8 @@ export async function render(): Promise<void> {
       liveStart  = 0;
     }
 
+    // Plan for an FTS search; '' otherwise (see listHint()).
+    const hint = listHint(w, whereOpts, state.sortBy, dbCount);
     const dbClips = dbOnPage > 0
       ? await q(
           `SELECT c.id, c.title, c.creator_name, c.view_count,
@@ -760,7 +763,7 @@ export async function render(): Promise<void> {
                   c.game_id,
                   COALESCE(g.name, '') AS game_name,
                   COALESCE(g.name_ja, '') AS game_name_ja
-           FROM clips c
+           FROM clips c ${hint}
            LEFT JOIN games g ON c.game_id = g.id
            ${where}
            ORDER BY ${ORDER[state.sortBy]}
@@ -790,7 +793,7 @@ export async function render(): Promise<void> {
           prevPageLast = toPeek(live.clip);
         } else if (vcPage!.dbOffset > 0) {
           const rows = await q(
-            `SELECT c.title, c.thumbnail_url FROM clips c ${where} ORDER BY ${ORDER[state.sortBy]} LIMIT 1 OFFSET ${vcPage!.dbOffset - 1}`,
+            `SELECT c.title, c.thumbnail_url FROM clips c ${hint} ${where} ORDER BY ${ORDER[state.sortBy]} LIMIT 1 OFFSET ${vcPage!.dbOffset - 1}`,
             params,
           );
           if (ctrl.signal.aborted) return;
@@ -803,7 +806,7 @@ export async function render(): Promise<void> {
         // For non-merging:                       DB offset = prevPos = dbOffset - 1.
         if (dbOffset > 0) {
           const rows = await q(
-            `SELECT c.title, c.thumbnail_url FROM clips c ${where} ORDER BY ${ORDER[state.sortBy]} LIMIT 1 OFFSET ${dbOffset - 1}`,
+            `SELECT c.title, c.thumbnail_url FROM clips c ${hint} ${where} ORDER BY ${ORDER[state.sortBy]} LIMIT 1 OFFSET ${dbOffset - 1}`,
             params,
           );
           if (ctrl.signal.aborted) return;
@@ -824,7 +827,7 @@ export async function render(): Promise<void> {
         } else {
           const nextDbOffset = vcPage!.dbOffset + vcPage!.dbOnPage;
           const rows = await q(
-            `SELECT c.title, c.thumbnail_url FROM clips c ${where} ORDER BY ${ORDER[state.sortBy]} LIMIT 1 OFFSET ${nextDbOffset}`,
+            `SELECT c.title, c.thumbnail_url FROM clips c ${hint} ${where} ORDER BY ${ORDER[state.sortBy]} LIMIT 1 OFFSET ${nextDbOffset}`,
             params,
           );
           if (ctrl.signal.aborted) return;
@@ -837,7 +840,7 @@ export async function render(): Promise<void> {
         // For non-merging:                       DB offset = nextPos = dbOffset + dbOnPage.
         const nextDbOffset = dbOffset + dbOnPage;
         const rows = await q(
-          `SELECT c.title, c.thumbnail_url FROM clips c ${where} ORDER BY ${ORDER[state.sortBy]} LIMIT 1 OFFSET ${nextDbOffset}`,
+          `SELECT c.title, c.thumbnail_url FROM clips c ${hint} ${where} ORDER BY ${ORDER[state.sortBy]} LIMIT 1 OFFSET ${nextDbOffset}`,
           params,
         );
         if (ctrl.signal.aborted) return;
@@ -1508,6 +1511,15 @@ export async function init(): Promise<void> {
     );
     setUseMeta(metaRows.length > 0);
 
+    // INDEXED BY fails outright on a missing index, so the FTS query plans in
+    // lib/query.ts are only used when all the indexes they name exist.
+    const hintIndexes = ['clips_created_at', 'clips_created_at_game', 'clips_view_count'];
+    const idxRows = await q(
+      `SELECT name FROM sqlite_master WHERE type='index' AND name IN (${hintIndexes.map(() => '?').join(', ')})`,
+      hintIndexes,
+    );
+    state.setUseIndexHints(idxRows.length === hintIndexes.length);
+
     // Get the DB cutoff date for the live-clip fetch and deduplication.
     // Always use MAX(created_at) directly — clips_meta.max_date is truncated to
     // YYYY-MM-DD for calendar use, which would cause clips already in the DB to
@@ -1515,9 +1527,12 @@ export async function init(): Promise<void> {
     // The clips_created_at index makes this a single B-tree leaf read.
     const cutoffRows = await q('SELECT MAX(created_at) AS max_date FROM clips');
     _dbCutoffDate = (cutoffRows[0]?.['max_date'] as string | undefined) ?? null;
+    // Dev-only override: set localStorage key 'tc_dev_cutoff' to an ISO date
+    // string earlier than the real cutoff to simulate a stale archive (clips
+    // after it are hidden from DB queries and fetched live from the Twitch API).
     const devCutoffRaw = localStorage.getItem('tc_dev_cutoff');
     if (devCutoffRaw && _dbCutoffDate && devCutoffRaw < _dbCutoffDate) {
-      _devCutoff = devCutoffRaw;
+      state.setDevCutoff(devCutoffRaw);
       _dbCutoffDate = devCutoffRaw;
     }
     state.setDbCutoffDate(_dbCutoffDate);
@@ -1551,7 +1566,7 @@ export async function init(): Promise<void> {
       }
     });
     await initCalendar(render); // must await: queries clip date range for nav bounds
-    await initTimeline(_devCutoff); // needs the date range from initCalendar
+    initTimeline(); // needs the date range from initCalendar
 
     // Fetch live clips in the background; render() is called again when done.
     if (auth.isLoggedIn()) void fetchLiveClips();

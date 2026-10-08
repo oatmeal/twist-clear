@@ -16,8 +16,14 @@ startup aggregates with cheap single-page lookups:
   any timezone via `utcTimestampToLocalDate`.
 - `game_clip_counts` — one row per game: `id`, `name`, `name_ja`, `cnt` (no date filter)
 - `clips_created_at` — index on `clips(created_at)` for date-range COUNT(*)
+  and per-day GROUP BY (timeline, calendar)
 - `clips_created_at_game` — covering index `(created_at, game_id)` for
-  date-filtered game GROUP BY (index-only, no table access)
+  date-filtered game GROUP BY (index-only, no table access). Count it with
+  `COUNT(*)`, not `COUNT(c.id)`: reading `id` forces a row lookup per clip
+  (selecting a year in the calendar fetched 4.1 MB instead of 176 KB)
+
+FTS searches force some of these with `INDEXED BY` — see "Query plans" in
+`docs/search.md`.
 - `clips_game_created` — index `(game_id, created_at DESC)` for
   early-termination game-filtered sorts
 - VACUUM — contiguous page layout for better range-request cache locality

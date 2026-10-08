@@ -22,6 +22,46 @@ NOT). This makes boolean searches work for short Japanese terms. Only if
 `parseLikeSearchQuery` also returns null (pure negation with no positive terms)
 does the code fall back to a plain `c.title LIKE '%query%'`.
 
+## Query plans (`INDEXED BY`)
+
+SQLite's own plan for the FTS filter, `c.rowid IN (SELECT rowid FROM clips_fts
+WHERE clips_fts MATCH :search)`, builds the match list and then looks up every
+matching row in `clips` — to read `created_at` or `view_count`, or to sort.
+For a common term that is most of the table: りりまる (≈3,100 of ≈28,500 clips)
+touches ≈1,850 4 KB pages, and sql.js-httpvfs's read-ahead turns those into
+≈13 MB of range requests — for the result count, the first page of clips, and
+any aggregate alike. Walking an index in date or view order and probing the
+match list instead reads the index plus the rows actually returned.
+
+`lib/query.ts` picks a hint per query shape; `buildWhere()` reports whether the
+search went through FTS (`fts`), and hints apply only then, and only when the DB
+has all the indexes they name (`state.useIndexHints`, checked in
+`sqlite_master` at startup — `INDEXED BY` a missing index is an error):
+
+| Helper | Used by | Plan |
+|---|---|---|
+| `countSql()` | result count | search only: `COUNT(*)` from `clips_fts` alone (5–15 pages); with a date range: `clips_created_at`; with a game: SQLite's (`clips_game_created`) |
+| `listHint()` | clip list + page-boundary probes | given the result count: > `MANY_MATCHES` (300) → walk the sort's index (`clips_created_at` / `clips_view_count`) and stop when the page is full; a date range → walk `clips_created_at` within it; few matches and no range → SQLite's (a few row lookups beat walking a whole index); a game filter → SQLite's, except a view sort over many matches |
+| `byDayHint()` | timeline, calendar heat-map | no game filter → `clips_created_at` |
+| `byGameHint()` | calendar preview strip | no game filter → `clips_created_at_game` (covering) |
+
+Measured on the dev server: DB bytes fetched after the initial load (28,488
+clips), summing the `content-length` of `clips.db` GET responses in a
+`scripts/qa-browser.mjs` script (`page.on('response')`; skip the size-probe
+HEAD). For a single query, `.stats on` in the sqlite3 CLI prints its "Page
+cache misses" — 4 KB pages, before read-ahead.
+
+| Search | Before | After |
+|---|---|---|
+| りりまる (3,143 matches), newest first | 13.4 MB | 112 KB |
+| りりまる, most viewed | 13.4 MB | 172 KB |
+| ダイヤ (751) | 13.4 MB | 156 KB |
+| エメラルド (4) | 72 KB | 72 KB |
+| りりまる + a quarter's date range | 13.9 MB | 208 KB |
+
+LIKE fallbacks (terms under 3 characters) are untouched: they scan the whole
+table (≈13 MB) once, and later queries hit the cache.
+
 ## Boolean syntax
 
 Supported boolean syntax: space-separated terms are implicit AND; `OR` or `|`
