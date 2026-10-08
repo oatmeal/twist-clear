@@ -21,11 +21,6 @@ ordered by impact. Remove items (and eventually this section) as they're done.
 
 ### Bugs
 
-- **Year strip duplicates on overlapping renders.** `renderAllYearsStrip()`
-  (`calendar.ts`) clears `#cal-all-years-strip` *before* awaiting
-  `queryAllYearTotals()`, so two overlapping `renderCalendar()` calls each
-  append a full set of pills (8 years → 16). Repro: with the calendar open,
-  change the From date then the To date, or click ‹ twice quickly.
 - **Card game link doesn't refresh the calendar.** The `.clip-game-link`
   click handler in `app.ts` sets the game filter and calls `render()` but not
   `renderCalendar()` (the `#game-filter` change handler does both). With the

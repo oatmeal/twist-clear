@@ -772,11 +772,13 @@ function renderNavControls(): void {
 
 async function renderAllYearsStrip(): Promise<void> {
   const strip = document.getElementById('cal-all-years-strip')!;
-  strip.innerHTML = '';
 
-  if (!state.calMinDate || !state.calMaxDate) return;
+  if (!state.calMinDate || !state.calMaxDate) { strip.innerHTML = ''; return; }
 
   const totals  = await queryAllYearTotals();
+  // Clear only after the await: renderCalendar() calls can overlap, and
+  // clearing before it let each one append a full set of pills.
+  strip.innerHTML = '';
   const yearMap = Object.fromEntries(totals.map(r => [r.year, r.cnt]));
 
   // Merge live clip counts.
