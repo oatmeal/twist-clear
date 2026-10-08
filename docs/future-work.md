@@ -28,11 +28,12 @@ filter bar always shows — and edits — the filter. Design and code walkthroug
   (previously clicking the month itself did), and whether stepping a
   selected day by keyboard on the timeline band is enough of a replacement for
   the old day ‹ › arrows.
-- **Range selection on touch.** A touch drag must scroll the page, so phones
-  can only tap single days / weeks; ranges need the timeline (≈ a month per
-  4 px there) or the date inputs. Option: drag handles on the end cells of the
-  selected range in the month grid, mirroring the timeline's handles (with
-  `touch-action: none` on the handles only).
+- **Touch selection handles: try them on a real phone.** The month view's
+  knobs (see "Selection handles" in `frontend/docs/calendar.md`) were only
+  tested with synthetic touch events in headless Chromium. Check the 14 px knob
+  is findable, whether the year view's mini-days need them too (they're
+  ≈ 20 px on a phone), and whether a range that ends in another month needs a
+  hint that its other end is off-screen.
 - **Heat-map scale under a search or game filter.** The absolute thresholds
   (1–5 clips = lightest) make most days one shade once a filter leaves a few
   clips a day; relative quantiles only kick in above an average of 15 a day

@@ -150,6 +150,29 @@
   pointer-events: none;
 }
 
+/* Month view: a knob on each end of the selection (top-left of its first day,
+   bottom-right of its last), dragged to move that end — the way to select a
+   range on touch, where dragging across days scrolls instead. touch-action
+   opts just the handle out of scrolling. Hidden while a drag repaints the
+   range. */
+.sel-handle {
+  position: absolute;
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  cursor: grab;
+  touch-action: none;
+}
+.sel-handle.start { top: -3px; left: -3px; }
+.sel-handle.end   { bottom: -3px; right: -3px; }
+/* A finger-sized target around the knob. */
+.sel-handle::before { content: ''; position: absolute; inset: -11px; }
+#cal-month-grid.dragging .sel-handle { visibility: hidden; }
+
 /* Zooms into the month (navigation only). */
 .mini-month-title {
   display: block;
@@ -185,6 +208,7 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   overflow: hidden;
+  isolation: isolate; /* keeps .sel-handle's z-index below the preview strip */
 }
 
 .month-dow-header {
@@ -305,7 +329,6 @@
   #cal-select-view { order: 3; }
 }
 
-/* ── Search notice ───────────────────────────────────────────────────────── */
 /* ── Heat-map density legend ─────────────────────────────────────────────── */
 .cal-hint { margin-right: auto; }
 @media (hover: none) { .cal-hint { display: none; } }

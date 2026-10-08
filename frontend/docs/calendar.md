@@ -125,16 +125,30 @@ Sunday-start rows) to select that Sun–Sat week.
 **Ranges** (mouse/trackpad, both views): drag across days to select a range —
 in the year view a drag can span months; Shift-click extends the selection to
 the clicked day, moving whichever end is on that side, including across months
-after paging with ‹ ›. On touch, a drag scrolls the page, so phones only tap;
-ranges there come from the timeline or the date inputs. All of this is one
-delegated `pointerdown` handler on `#cal-month-grid` / `#cal-year-view` (cells
-carry `data-date`; cards `data-month`). A hint line under the calendar
-(`#cal-hint`, hidden on `(hover: none)` devices) explains the gestures.
+after paging with ‹ ›. On touch, a drag scrolls the page, so a drag across
+days isn't available.
+
+**Selection handles** (month view, mouse and touch): a closed selection has a
+knob (`.sel-handle`) at the top-left of its first day and the bottom-right of
+its last, on whichever ends are in the month on screen. Dragging one is a
+drag-select anchored at the other end (which may be in another month), so it
+moves that end, and past the other end it swaps roles. This is how phones
+make ranges in the calendar: tap a day, then drag a knob, the way text
+selection works. Only the knob has `touch-action: none`, so a swipe anywhere
+else still scrolls. Its finger target (36 px) overlaps the neighbouring days;
+a tap there selects that day, while a tap on the knob's own day does nothing,
+so grabbing a knob without dragging keeps the range. Keyboard users have the
+timeline's handles instead (the knobs are `aria-hidden`).
+
+All of this is one delegated `pointerdown` handler on `#cal-month-grid` /
+`#cal-year-view` (cells carry `data-date`; cards `data-month`; knobs
+`data-anchor`, the fixed end). A hint line under the calendar (`#cal-hint`,
+hidden on `(hover: none)` devices) explains the mouse gestures.
 
 **Clear** (`#btn-clear-dates`): `applyDateSelection(null, null)`.
 
 ## Open questions
 
 The experiment's year/month flow (toggle + "Filter to …" + card zoom) is still
-being evaluated, and touch range selection is unsolved — see "Timeline &
-calendar follow-ups" in `docs/future-work.md`.
+being evaluated — see "Timeline & calendar follow-ups" in
+`docs/future-work.md`.

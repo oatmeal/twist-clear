@@ -887,6 +887,11 @@ async function renderMonthGrid(): Promise<void> {
   const container = document.getElementById('cal-month-grid')!;
   container.innerHTML = '';
 
+  // Ends of a closed selection get drag handles (on whichever ends are in
+  // this month); see onCellPointerDown().
+  const { calDateFrom: selFrom, calDateTo: selTo } = state;
+  const selLast = selFrom !== null && selTo !== null ? addDays(selTo, -1) : null;
+
   // DOW header row
   const header = document.createElement('div');
   header.className = 'month-dow-header';
@@ -956,6 +961,11 @@ async function renderMonthGrid(): Promise<void> {
       numEl.className = 'day-number';
       numEl.textContent = String(day);
       cell.appendChild(numEl);
+
+      if (selLast !== null) {
+        if (dateKey === selFrom) cell.appendChild(selectionHandle('start', selLast));
+        if (dateKey === selLast) cell.appendChild(selectionHandle('end', selFrom!));
+      }
 
       if (cnt > 0) {
         const cntEl = document.createElement('div');
@@ -1050,20 +1060,39 @@ export function switchView(view: 'grid' | 'calendar'): void {
 
 // ── Day cells: click, drag, shift-click ───────────────────────────────────
 // Delegated from #cal-month-grid and #cal-year-view (cells carry data-date).
-//   Month view: click a day to select it.
+//   Month view: click a day to select it; drag a selection handle to move
+//   that end of the range (mouse and touch).
 //   Year view:  click a month card to zoom into it.
 //   Both (mouse): drag across days to select a range; Shift-click extends the
 //   selection to the clicked day, also across months.
-// Touch only taps: a touch drag scrolls the page as usual.
+// Otherwise touch only taps: a touch drag scrolls the page as usual. The
+// handles opt out of that with `touch-action: none`.
 
 interface CellPress {
   container: HTMLElement;
-  anchor: string | null;   // day under the press, if any
+  // Day under the press, if any — or, on a handle, the selection's other end:
+  // dragging a handle is a drag-select anchored there.
+  anchor: string | null;
   month: number | null;    // year view: month card under the press
+  handle: string | null;   // pressed a selection handle: the day it sits on
   x0: number;
   y0: number;
   mouse: boolean;
+  cur: string | null;      // day under the pointer, once dragging
   range: [string, string] | null;  // inclusive, once dragging
+}
+
+/**
+ * A drag handle for one end of the selection, placed in that end's day cell.
+ * anchor is the opposite end (inclusive), which stays put while dragging.
+ */
+function selectionHandle(end: 'start' | 'end', anchor: string): HTMLElement {
+  const h = document.createElement('span');
+  h.className = `sel-handle ${end}`;
+  h.dataset['anchor'] = anchor;
+  h.title = t().calHandle;
+  h.setAttribute('aria-hidden', 'true'); // pointer-only; keyboard: the timeline's handles
+  return h;
 }
 
 let _press: CellPress | null = null;
@@ -1071,6 +1100,14 @@ let _press: CellPress | null = null;
 function dateUnder(x: number, y: number): string | null {
   const el = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-date]');
   return el && _press?.container.contains(el) ? el.dataset['date']! : null;
+}
+
+/** The day cell at (x, y) in container, looking through anything on top of it. */
+function dayBeneath(container: HTMLElement, x: number, y: number): string | null {
+  for (const el of document.elementsFromPoint(x, y)) {
+    if (el instanceof HTMLElement && el.dataset['date'] && container.contains(el)) return el.dataset['date'];
+  }
+  return null;
 }
 
 function paintDragRange(range: [string, string] | null): void {
@@ -1086,13 +1123,18 @@ function onCellPointerDown(e: PointerEvent): void {
   // The mini-month title button handles its own clicks (and keyboard).
   if (target.closest('.mini-month-title')) return;
   const card = target.closest<HTMLElement>('.mini-month');
+  const handle = target.closest<HTMLElement>('.sel-handle');
   _press = {
     container: e.currentTarget as HTMLElement,
-    anchor: target.closest<HTMLElement>('[data-date]')?.dataset['date'] ?? null,
+    anchor: handle
+      ? handle.dataset['anchor']!
+      : target.closest<HTMLElement>('[data-date]')?.dataset['date'] ?? null,
     month: card && !card.classList.contains('is-empty') ? Number(card.dataset['month']) : null,
+    handle: handle?.closest<HTMLElement>('[data-date]')?.dataset['date'] ?? null,
     x0: e.clientX,
     y0: e.clientY,
     mouse: e.pointerType !== 'touch',
+    cur: null,
     range: null,
   };
   window.addEventListener('pointermove', onCellPointerMove);
@@ -1102,9 +1144,13 @@ function onCellPointerDown(e: PointerEvent): void {
 
 function onCellPointerMove(e: PointerEvent): void {
   const p = _press;
-  if (!p || !p.mouse || !p.anchor) return;
+  if (!p || !(p.mouse || p.handle) || !p.anchor) return;
   if (!p.range && Math.hypot(e.clientX - p.x0, e.clientY - p.y0) <= 4) return;
-  const cur = dateUnder(e.clientX, e.clientY) ?? p.range?.[1] ?? p.anchor;
+  // Hides the handles, so they don't hide the day under the pointer.
+  p.container.classList.add('dragging');
+  // Off the grid, keep the last day under the pointer.
+  const cur = dateUnder(e.clientX, e.clientY) ?? p.cur ?? p.anchor;
+  p.cur = cur;
   const range: [string, string] = p.anchor <= cur ? [p.anchor, cur] : [cur, p.anchor];
   if (p.range && p.range[0] === range[0] && p.range[1] === range[1]) return;
   p.range = range;
@@ -1121,6 +1167,12 @@ function onCellPointerUp(e: PointerEvent): void {
   if (!p) return;
   if (p.range) {
     applyDateSelection(p.range[0], addDays(p.range[1], 1));
+  } else if (p.handle) {
+    // The handle's finger-sized target overlaps the neighbouring days; a tap
+    // there is a tap on that day. On the handle's own day it does nothing, so
+    // grabbing a handle without dragging keeps the range.
+    const day = dayBeneath(p.container, e.clientX, e.clientY);
+    if (day && day !== p.handle) { if (e.shiftKey) extendSelectionTo(day); else selectDay(day); }
   } else if (e.shiftKey && p.anchor) {
     extendSelectionTo(p.anchor);
   } else if (p.month !== null) {
@@ -1132,6 +1184,7 @@ function onCellPointerUp(e: PointerEvent): void {
 
 function endCellPress(): void {
   paintDragRange(null);
+  _press?.container.classList.remove('dragging');
   _press = null;
   window.removeEventListener('pointermove', onCellPointerMove);
   window.removeEventListener('pointerup', onCellPointerUp);
