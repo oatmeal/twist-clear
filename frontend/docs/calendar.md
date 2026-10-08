@@ -115,6 +115,23 @@ same index plans.
 During a search, the default breakdown is computed here (`defaultPeriod()`)
 rather than taken from app.ts, whose per-game counts ignore the search.
 
+- **Shades** (`heatScale()` in `lib/heat.ts`): without a filter, fixed
+  thresholds (1–5, 6–15, 16–30, 31+ clips), so a busy day looks busy in any
+  month. With a search or game filter — which leaves a few clips a day that
+  fixed thresholds would shade all alike — or when the days with clips average
+  over 15, quartiles of the days on screen. Each relative threshold is at least
+  one clip above the last, so a filter leaving a clip or two a day steps one
+  shade per clip instead of shading 1 clip lightest and 2 darkest.
+- **Strip height**: on hover devices the strip always has room for five games
+  and the "+N more" line (one game with a game filter), blank rows hidden, so
+  it doesn't change height under the pointer. Touch devices, which have no
+  hover, get only the rows they show.
+- **Hover**: one delegated `pointermove` per grid (`onGridPointerMove()`)
+  finds the card, day or week number under the pointer and previews it only
+  when that changes; leaving one for a gap or the panel reverts to the default
+  after 150 ms, unless another is entered first. (Per-cell `mouseenter` /
+  `mouseleave` flashed the default breakdown on every 1–2 px border.)
+
 **Year view**: all twelve mini-months; months without clips (that match the
 filters) are dimmed and inert. Clicking anywhere on a card zooms into that month (navigation; the title
 is the keyboard-focusable button for the same thing). Hovering a card previews

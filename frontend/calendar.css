@@ -421,3 +421,5 @@
   color: var(--muted);
   margin-top: 4px;
 }
+/* Placeholder rows keep the strip's height fixed (see displayPreview()). */
+.cal-preview-row.is-blank { visibility: hidden; }

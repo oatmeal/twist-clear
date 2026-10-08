@@ -34,11 +34,6 @@ filter bar always shows — and edits — the filter. Design and code walkthroug
   is findable, whether the year view's mini-days need them too (they're
   ≈ 20 px on a phone), and whether a range that ends in another month needs a
   hint that its other end is off-screen.
-- **Heat-map scale under a search or game filter.** The absolute thresholds
-  (1–5 clips = lightest) make most days one shade once a filter leaves a few
-  clips a day; relative quantiles only kick in above an average of 15 a day
-  (`computeHeatThresholds()` in `calendar.ts`). Consider relative shading
-  whenever a filter is active, without overstating 1 vs 2 clips.
 - **Fold the date inputs into the timeline**, e.g. editable start / end labels
   on the band, now that the band shows the filter at all times.
 
@@ -118,7 +113,7 @@ buttons.
 - The preview strip is `position: sticky; bottom: 0` and covers ~20 % of a
   phone viewport; on `(hover: none)` devices it only duplicates the game
   dropdown. Make it non-sticky or one line there. (See also "Calendar preview
-  strip: jumpy height, flashing, placement" below.)
+  strip: placement" below.)
 - The clear-dates ✕ is 22×19 px (below the 24 px minimum target) and is shown
   even when no dates are set.
 
@@ -132,29 +127,16 @@ buttons.
 
 ---
 
-## Calendar preview strip: jumpy height, flashing, placement
+## Calendar preview strip: placement
 
-Hovering around the calendar is distracting:
-
-- **Height changes constantly.** The strip shows 0–5 game rows plus a "+N
-  more" line, so its height follows whatever is hovered; because it is
-  `position: sticky; bottom: 0`, the jump happens right under the cursor's
-  line of sight. Reserving the full height (5 rows + the "more" line) would
-  stop it.
-- **It flashes on cell borders.** Each cell has its own `mouseenter` /
-  `mouseleave`; crossing the 1 px border between cells (or the 2 px gap
-  between mini-days) fires `mouseleave` → `revertToDefault()`, which swaps in
-  the selection's breakdown for a frame before the next cell's hover preview
-  (an async query) replaces it. A delegated `pointermove` on the grid that
-  finds the cell under the pointer, plus a short delay before reverting,
-  would remove the flash.
-- **Placement.** It may work better as a tooltip anchored to the hovered
-  cell (less eye travel), but a tooltip covers the heat-map being read, and
-  on touch devices there is no hover — the strip is then the only place the
-  selection's game breakdown appears (it duplicates the game dropdown). The
-  timeline's hover tooltip could also carry a top-games line. Decide this
-  together with the "preview strip is sticky and covers ~20 % of a phone
-  viewport" item in the review above.
+(Its jumping height and the flashes on cell borders are fixed — see
+"Heat-map and preview strip" in `frontend/docs/calendar.md`.) It may work
+better as a tooltip anchored to the hovered cell (less eye travel), but a
+tooltip covers the heat-map being read, and on touch devices there is no
+hover — the strip is then the only place the selection's game breakdown
+appears (it duplicates the game dropdown). The timeline's hover tooltip could
+also carry a top-games line. Decide this together with the "preview strip is
+sticky and covers ~20 % of a phone viewport" item in the review above.
 
 ---
 

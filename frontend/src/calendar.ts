@@ -13,6 +13,7 @@ import {
 import { monthLabel, periodLabel, rangeKind, rangesOverlap, yearLabel } from './lib/dateRange';
 import { aggregateHint, buildWhere, type BuildWhereOpts } from './lib/query';
 import { filterLiveClips } from './lib/liveFilter';
+import { heatScale } from './lib/heat';
 import { t, lang } from './lib/i18n';
 
 // ── Raw timestamp storage ─────────────────────────────────────────────────
@@ -40,6 +41,9 @@ function callRender(): void {
 const _supportsHover = window.matchMedia('(hover: hover)').matches;
 
 interface GamePreviewEntry { id: string; name: string; name_ja: string; cnt: number; }
+
+/** Games the strip lists before "+N more". */
+const PREVIEW_ROWS = 5;
 interface PeriodGames { games: GamePreviewEntry[]; totalGames: number; }
 
 // DB-only per-game counts by period — avoids re-querying the same period.
@@ -128,6 +132,11 @@ function rangeWhereOpts(from: string, to: string, gameFilter = state.gameFilter)
   };
 }
 
+/** A search or game filter narrows the heat-map and preview strip. */
+function filtersActive(): boolean {
+  return state.searchQuery !== '' || state.gameFilter !== '';
+}
+
 /** Live clips in the local-date range [from, to) matching the search and game filters. */
 function liveClipsIn(from: string, to: string, gameFilter = state.gameFilter) {
   return filterLiveClips({
@@ -152,30 +161,36 @@ function displayPreview(label: string, data: PeriodGames): void {
   const gamesEl = document.getElementById('cal-preview-games')!;
   gamesEl.innerHTML = '';
 
-  const top5 = data.games.slice(0, 5);
-  const maxCnt = top5[0]?.cnt ?? 1; // top5 is sorted by cnt desc
+  // With hover, always the same number of rows (blank ones hidden) and the
+  // "+N more" line, so the strip's height doesn't follow whatever is hovered.
+  // (Without, it only changes with the selection; reserving room would just
+  // make the sticky strip cover more of a phone screen.) With a game filter
+  // the strip only ever shows that game.
+  const slots = state.gameFilter ? 1 : PREVIEW_ROWS;
+  const top = data.games.slice(0, slots);
+  const maxCnt = top[0]?.cnt ?? 1; // sorted by cnt desc
+  const rows = _supportsHover ? slots : top.length;
 
-  for (const g of top5) {
-    const gameName = lang === 'ja' && g.name_ja ? g.name_ja : g.name;
-    const pct = Math.round((g.cnt / maxCnt) * 100);
+  for (let i = 0; i < rows; i++) {
+    const g = top[i];
 
     const row = document.createElement('div');
-    row.className = 'cal-preview-row';
+    row.className = 'cal-preview-row' + (g ? '' : ' is-blank');
 
     const nameSpan = document.createElement('span');
     nameSpan.className = 'cal-preview-name';
-    nameSpan.textContent = gameName;
+    nameSpan.textContent = g ? (lang === 'ja' && g.name_ja ? g.name_ja : g.name) : '\u00a0';
 
     const barWrap = document.createElement('span');
     barWrap.className = 'cal-preview-bar-wrap';
     const bar = document.createElement('span');
     bar.className = 'cal-preview-bar';
-    bar.style.width = `${pct}%`;
+    bar.style.width = `${g ? Math.round((g.cnt / maxCnt) * 100) : 0}%`;
     barWrap.appendChild(bar);
 
     const countSpan = document.createElement('span');
     countSpan.className = 'cal-preview-count';
-    countSpan.textContent = g.cnt.toLocaleString();
+    countSpan.textContent = g ? g.cnt.toLocaleString() : '';
 
     row.appendChild(nameSpan);
     row.appendChild(barWrap);
@@ -183,10 +198,10 @@ function displayPreview(label: string, data: PeriodGames): void {
     gamesEl.appendChild(row);
   }
 
-  if (data.totalGames > 5) {
+  if (data.totalGames > slots || (_supportsHover && slots > 1)) {
     const more = document.createElement('div');
     more.className = 'cal-preview-more';
-    more.textContent = t().calPreviewMore(data.totalGames - 5);
+    more.textContent = data.totalGames > slots ? t().calPreviewMore(data.totalGames - slots) : '\u00a0';
     gamesEl.appendChild(more);
   }
 }
@@ -267,6 +282,54 @@ function revertToDefault(): void {
   }
 }
 
+// ── Hover tracking ────────────────────────────────────────────────────────
+// One delegated pointermove per grid (year-view cards; month-view days and
+// week numbers) instead of mouseenter / mouseleave on each cell, which
+// reverted the strip to the default breakdown for a frame whenever the
+// pointer crossed the 1–2 px border or gap between cells. Leaving a period
+// for a gap or anything else reverts only after REVERT_DELAY_MS, so moving on
+// to the next cell goes straight from one preview to the next.
+
+const REVERT_DELAY_MS = 150;
+let _hoverKey: string | null = null; // the period previewed, e.g. "d:2024-06-03"
+let _revertTimer: number | undefined;
+
+/** Preview the period `key` names (no-op if it already is) via show(). */
+function hoverPreview(key: string, show: () => void): void {
+  window.clearTimeout(_revertTimer);
+  if (key === _hoverKey) return;
+  _hoverKey = key;
+  show();
+}
+
+/** The pointer left the previewed period: revert unless another starts soon. */
+function hoverEnd(): void {
+  window.clearTimeout(_revertTimer);
+  if (_hoverKey === null) return;
+  _revertTimer = window.setTimeout(() => {
+    _hoverKey = null;
+    revertToDefault();
+  }, REVERT_DELAY_MS);
+}
+
+function onGridPointerMove(e: PointerEvent): void {
+  // A drag-select previews its range instead (onCellPointerMove).
+  if (e.pointerType !== 'mouse' || _press?.range) return;
+  const target = e.target as HTMLElement;
+  if (state.calMonth === null) {
+    const card = target.closest<HTMLElement>('.mini-month:not(.is-empty)');
+    if (!card) { hoverEnd(); return; }
+    const [y, m] = [state.calYear, Number(card.dataset['month'])];
+    hoverPreview(`m:${y}-${m}`, () => showPreviewForMonth(y, m));
+    return;
+  }
+  const week = target.closest<HTMLElement>('[data-week]')?.dataset['week'];
+  const day = target.closest<HTMLElement>('[data-date]')?.dataset['date'];
+  if (week) hoverPreview(`w:${week}`, () => showPreviewForWeek(week));
+  else if (day) hoverPreview(`d:${day}`, () => showPreviewForDay(day));
+  else hoverEnd();
+}
+
 // ── Convenience wrappers for each period type ─────────────────────────────
 
 function showPreviewForYear(y: number): void {
@@ -330,42 +393,6 @@ async function prefetchDefault(): Promise<void> {
   const label = labelWithCount([gameName, period.label].filter(Boolean).join(' · ') || t().allClips, data);
   _defaultPreview = { label, data };
   if (!_hovering) displayPreview(label, data);
-}
-
-// ── Heat color ────────────────────────────────────────────────────────────
-
-function heatLevel(cnt: number): 0 | 1 | 2 | 3 | 4 {
-  if (!cnt)      return 0;
-  if (cnt <= 5)  return 1;
-  if (cnt <= 15) return 2;
-  if (cnt <= 30) return 3;
-  return 4;
-}
-
-function heatColor(cnt: number): string {
-  return `var(--cal-${heatLevel(cnt)})`;
-}
-
-/**
- * Computes [p25, p50, p75] quantile thresholds from an array of counts,
- * ignoring zeros.  Used for relative (per-view) heat normalization so that
- * the full 0–4 scale is visible regardless of absolute clip volume.
- */
-function computeHeatThresholds(counts: number[]): [number, number, number] {
-  const nonZero = counts.filter(v => v > 0).sort((a, b) => a - b);
-  const n = nonZero.length;
-  if (n === 0) return [1, 2, 3];
-  const at = (p: number) => nonZero[Math.floor((n - 1) * p)]!;
-  return [at(0.25), at(0.5), at(0.75)];
-}
-
-/** Assigns a heat level 0–4 using pre-computed quantile thresholds. */
-function heatLevelRelative(cnt: number, thresholds: [number, number, number]): 0 | 1 | 2 | 3 | 4 {
-  if (cnt === 0) return 0;
-  if (cnt <= thresholds[0]) return 1;
-  if (cnt <= thresholds[1]) return 2;
-  if (cnt <= thresholds[2]) return 3;
-  return 4;
 }
 
 // ── Selection ─────────────────────────────────────────────────────────────
@@ -715,8 +742,11 @@ export async function renderCalendar(): Promise<void> {
   panel.style.display = 'block';
 
   // Reset hover state so the default preview isn't suppressed by a stale flag.
+  // The next pointermove previews whatever is under the pointer again.
   _hovering = false;
   _hoverSeq++;
+  window.clearTimeout(_revertTimer);
+  _hoverKey = null;
 
   if (state.calMonth === null) {
     await renderYearView();
@@ -778,12 +808,7 @@ async function renderYearView(): Promise<void> {
     monthTotals[parseInt(key.slice(5, 7), 10) - 1]! += cnt;
   }
 
-  const dayCountsArr  = Object.values(dayMap);
-  const nonZeroDays   = dayCountsArr.filter(v => v > 0);
-  const avgDay        = nonZeroDays.length > 0
-    ? nonZeroDays.reduce((a, b) => a + b, 0) / nonZeroDays.length
-    : 0;
-  const dayThresholds = avgDay > 15 ? computeHeatThresholds(dayCountsArr) : null;
+  const heat = heatScale(Object.values(dayMap), filtersActive());
 
   const container = document.getElementById('cal-year-view')!;
   container.innerHTML = '';
@@ -831,8 +856,7 @@ async function renderYearView(): Promise<void> {
       const cell = document.createElement('div');
       cell.className = 'mini-day';
       cell.dataset['date'] = key;
-      const miniDayLevel = dayThresholds ? heatLevelRelative(cnt, dayThresholds) : heatLevel(cnt);
-      cell.style.background = `var(--cal-${miniDayLevel})`;
+      cell.style.background = `var(--cal-${heat(cnt)})`;
       if (isInRange(key)) {
         const dayOfWeek = (firstDow + day - 1) % 7; // 0=Sun, 6=Sat
         if (isFullMonth) {
@@ -849,10 +873,6 @@ async function renderYearView(): Promise<void> {
     }
 
     card.appendChild(grid);
-    if (_supportsHover && total > 0) {
-      card.addEventListener('mouseenter', () => showPreviewForMonth(year, m));
-      card.addEventListener('mouseleave', revertToDefault);
-    }
     container.appendChild(card);
   }
 }
@@ -877,12 +897,7 @@ async function renderMonthGrid(): Promise<void> {
   const today      = todayStrInOffset(state.tzOffset);
   const totalSlots = Math.ceil((firstDow + totalDays) / 7) * 7;
 
-  const dayCountsArr  = Object.values(dayMap);
-  const nonZeroDays   = dayCountsArr.filter(v => v > 0);
-  const avgDay        = nonZeroDays.length > 0
-    ? nonZeroDays.reduce((a, b) => a + b, 0) / nonZeroDays.length
-    : 0;
-  const dayThresholds = avgDay > 15 ? computeHeatThresholds(dayCountsArr) : null;
+  const heat = heatScale(Object.values(dayMap), filtersActive());
 
   const container = document.getElementById('cal-month-grid')!;
   container.innerHTML = '';
@@ -926,11 +941,8 @@ async function renderMonthGrid(): Promise<void> {
       weekBtn.className = 'week-number-btn' + (selectedWeek() === rowSunday ? ' selected' : '');
       weekBtn.textContent = String(weekNum);
       weekBtn.title = t().selectWeek(weekNum, rowSunday);
+      weekBtn.dataset['week'] = rowSunday; // hover: see onGridPointerMove()
       weekBtn.addEventListener('click', () => selectWeek(rowSunday));
-      if (_supportsHover) {
-        weekBtn.addEventListener('mouseenter', () => showPreviewForWeek(rowSunday));
-        weekBtn.addEventListener('mouseleave', revertToDefault);
-      }
       currentRow.appendChild(weekBtn);
     }
 
@@ -946,7 +958,7 @@ async function renderMonthGrid(): Promise<void> {
       if (dateKey === today)         classes.push('today');
       if (dateKey === selectedDay()) classes.push('selected');
       cell.className = classes.join(' ');
-      const dayLevel = dayThresholds ? heatLevelRelative(cnt, dayThresholds) : heatLevel(cnt);
+      const dayLevel = heat(cnt);
       cell.style.background = `var(--cal-${dayLevel})`;
       cell.dataset.heat = String(dayLevel);
 
@@ -974,12 +986,8 @@ async function renderMonthGrid(): Promise<void> {
         cell.appendChild(cntEl);
       }
 
-      cell.dataset['date'] = dateKey; // click / drag: see onCellPointerDown()
-      if (_supportsHover) {
-        // While drag-selecting, the strip previews the dragged range instead.
-        cell.addEventListener('mouseenter', () => { if (!_press?.range) showPreviewForDay(dateKey); });
-        cell.addEventListener('mouseleave', () => { if (!_press?.range) revertToDefault(); });
-      }
+      // Click / drag: see onCellPointerDown(); hover: onGridPointerMove().
+      cell.dataset['date'] = dateKey;
     }
 
     currentRow!.appendChild(cell);
@@ -1157,6 +1165,8 @@ function onCellPointerMove(e: PointerEvent): void {
   paintDragRange(range);
   if (_supportsHover) {
     const [from, to] = [range[0], addDays(range[1], 1)];
+    window.clearTimeout(_revertTimer);
+    _hoverKey = null; // after the drag, hovering previews days again
     void showPreviewFor(from, to, periodLabel(from, to, lang));
   }
 }
@@ -1314,14 +1324,20 @@ export async function initCalendar(onRender: () => Promise<void>): Promise<void>
   }
 
   if (_supportsHover) {
+    for (const id of ['cal-month-grid', 'cal-year-view']) {
+      const grid = document.getElementById(id)!;
+      grid.addEventListener('pointermove', onGridPointerMove);
+      grid.addEventListener('pointerleave', hoverEnd);
+    }
     // Preview the period a button would show or select. State is read at
     // event time so it reflects the current view.
     const previewView = (y: number, m: number | null): void => {
-      if (m === null) showPreviewForYear(y); else showPreviewForMonth(y, m);
+      if (m === null) hoverPreview(`y:${y}`, () => showPreviewForYear(y));
+      else hoverPreview(`m:${y}-${m}`, () => showPreviewForMonth(y, m));
     };
     prev.addEventListener('mouseenter', () => { if (canStep(-1)) previewView(...steppedView(-1)); });
     next.addEventListener('mouseenter', () => { if (canStep(1)) previewView(...steppedView(1)); });
     selectBtn.addEventListener('mouseenter', () => previewView(state.calYear, state.calMonth));
-    for (const el of [prev, next, selectBtn]) el.addEventListener('mouseleave', revertToDefault);
+    for (const el of [prev, next, selectBtn]) el.addEventListener('mouseleave', hoverEnd);
   }
 }

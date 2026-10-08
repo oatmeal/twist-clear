@@ -40,6 +40,7 @@ src/
                   #   custom, derived from from/to), shiftRange(), periodLabel()
     format.ts     # escHtml, fmtDuration, fmtViews, fmtDateTime
     hash.ts       # Pure serializeHash() / deserializeHash() — URL hash state
+    heat.ts       # Pure heatScale() — calendar heat-map shades (fixed, or relative under a filter)
     i18n.ts       # English & Japanese translations; t(), detectLang(), setLang()
     liveCoverage.ts # Pure bisectCoverage() / fetchWithCoverage() — 0-clip coverage via bisection
     liveFilter.ts # Pure filterLiveClips() — filters live clips against UI state
@@ -233,7 +234,7 @@ npm run test:watch   # re-run on change
 ```
 
 Tests cover: `buildWhere` combinations, query-plan hints, `serializeHash`/`deserializeHash`
-round-trips, date utilities, date-range kinds / stepping / labels, timeline
+round-trips, date utilities, date-range kinds / stepping / labels, heat-map shades, timeline
 binning, scale and drag snapping, format helpers, live clip filtering, live coverage
 bisection (suppression discovery, deduplication), OAuth crypto helpers,
 `extractClipSlug` URL parsing, `panelSlot` grid player placement, and
