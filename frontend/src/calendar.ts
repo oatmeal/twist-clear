@@ -535,6 +535,15 @@ function isInRange(dateStr: string): boolean {
 }
 
 /**
+ * Inset box-shadow that tints a whole cell with the accent colour at `pct`%
+ * opacity. Derived from --accent (not a fixed colour) so it follows the
+ * site palette; color-mix() is already required by the heat-map ramp.
+ */
+function accentTint(pct: number): string {
+  return `inset 0 0 0 1000px color-mix(in srgb, var(--accent) ${pct}%, transparent)`;
+}
+
+/**
  * Compute the combined box-shadow for an in-range day cell: a perimeter
  * accent border on whichever edges are not shared with another in-range cell,
  * plus a subtle tint layer covering the whole cell.
@@ -547,7 +556,7 @@ function isInRange(dateStr: string): boolean {
  * Smaller inset shadows (spread 0, blur 0, large offset) produce edge-only
  * stripes that stack in front of the fill.
  */
-function inRangeBoxShadow(dateKey: string, dayOfWeek: number, borderPx = 2, tintOpacity = 0.10): string {
+function inRangeBoxShadow(dateKey: string, dayOfWeek: number, borderPx = 2, tintPct = 10): string {
   const b = borderPx;
   const shadows: string[] = [];
   if (!isInRange(addDays(dateKey, -7))) shadows.push(`inset 0 ${b}px 0 0 var(--accent)`);   // top
@@ -555,7 +564,7 @@ function inRangeBoxShadow(dateKey: string, dayOfWeek: number, borderPx = 2, tint
   if (dayOfWeek === 0 || !isInRange(addDays(dateKey, -1))) shadows.push(`inset ${b}px 0 0 0 var(--accent)`);  // left
   if (dayOfWeek === 6 || !isInRange(addDays(dateKey,  1))) shadows.push(`inset -${b}px 0 0 0 var(--accent)`); // right
   // Tint is listed last so it renders behind the edge stripes.
-  shadows.push(`inset 0 0 0 1000px rgba(145, 71, 255, ${tintOpacity})`);
+  shadows.push(accentTint(tintPct));
   return shadows.join(', ');
 }
 
@@ -893,9 +902,9 @@ async function renderYearView(): Promise<void> {
           // Card border already shows the full-month selection — just tint the
           // cells without drawing per-cell left/right column-edge borders, which
           // would create a noisy grid of vertical stripes across all week rows.
-          cell.style.boxShadow = 'inset 0 0 0 1000px rgba(145, 71, 255, 0.12)';
+          cell.style.boxShadow = accentTint(12);
         } else {
-          cell.style.boxShadow = inRangeBoxShadow(key, dayOfWeek, 2, 0.12);
+          cell.style.boxShadow = inRangeBoxShadow(key, dayOfWeek, 2, 12);
         }
       }
       if (cnt > 0) cell.title = t().dayTooltip(key, cnt);

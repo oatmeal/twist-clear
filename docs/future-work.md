@@ -21,9 +21,6 @@ ordered by impact. Remove items (and eventually this section) as they're done.
 
 ### Bugs
 
-- **Range tint hardcodes Twitch purple.** `inRangeBoxShadow()` and the
-  full-month tint in `renderYearView()` use `rgba(145, 71, 255, …)` instead of
-  `--accent`, so custom palettes don't match.
 - **Empty-state copy assumes a search.** `#empty` always says "No clips match
   your search.", including for date- or game-only filters (e.g. selecting a
   zero-clip day), and offers no way out.
