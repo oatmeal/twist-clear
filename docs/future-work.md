@@ -10,16 +10,7 @@ Deferred items with rationale. See the relevant source files for implementation 
 - template repo: fork + change settings to deploy an archive for a streamer
 - featured clips
 - custom `site_heading` HTML (e.g. clipmaru's animated icon) can overlap the header buttons at ≤390px; `overflow: hidden` was deliberately removed from the header, so a fix needs to keep decorations unclipped.
----
-
-## Keyboard access to clips
-
-Grid cards and list rows are clickable `div`/`tr` elements with no
-`tabindex` or role, so keyboard users can reach only the external-link icon
-and the game-filter button — not the player. Making `.clip-thumb` (grid) and
-`.clip-row` (list) focusable with `role="button"` plus an Enter/Space handler
-in `app.ts` would fix it; the peeks are already real buttons.
-
+- the open-on-Twitch link on each card/row is an icon-only `<a>` (its SVG is `aria-hidden`) with no accessible name, so screen readers announce just "link" or the URL; it needs an `aria-label` (a new i18n string).
 ---
 
 ## DOM/integration testing (jsdom or Playwright)

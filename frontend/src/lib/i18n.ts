@@ -82,6 +82,7 @@ export interface Translations {
   // Settings panel
   tzLabel: string;
   // Embed
+  playClip: (title: string) => string;
   closeEmbed: string;
   closeModal: string;
   prevClip: string;
@@ -175,6 +176,7 @@ const en: Translations = {
   listColCreator: 'Creator',
   listColDate: 'Date',
   tzLabel: 'Timezone',
+  playClip: (title) => `Play: ${title}`,
   closeEmbed: 'Close embed',
   closeModal: 'Close',
   prevClip: 'Previous clip',
@@ -274,6 +276,7 @@ const ja: Translations = {
   listColCreator: '作成者',
   listColDate: '日時',
   tzLabel: 'タイムゾーン',
+  playClip: (title) => `「${title}」を再生`,
   closeEmbed: '閉じる',
   closeModal: '閉じる',
   prevClip: '前のクリップ',

@@ -25,7 +25,7 @@ src/
   calendar.ts   # Calendar view — year → month → day/week drill-down
   db.ts         # sql.js-httpvfs worker init; exports async q() query helper
   embed.ts      # Clip player open/close (grid: panel below the card's row; list:
-                #   embed row), prev/next peek navigation
+                #   embed row), prev/next peek navigation, keyboard focus hand-off
   filterBar.ts  # Non-sticky filter bar + the tab that pins it back in when scrolled away
   state.ts      # All shared mutable state + explicit typed setters
   twitch.ts     # Helix API client for live clips (auto-paginates, resolves game names)
@@ -224,8 +224,8 @@ round-trips, date utilities, format helpers, live clip filtering, live coverage
 bisection (suppression discovery, deduplication), OAuth crypto helpers,
 `extractClipSlug` URL parsing, `panelSlot` grid player placement, and
 `clipCardHtml`/`clipListRowHtml` HTML structure, XSS escaping, game name
-language switching, and live-clip class. The render pipeline and DOM
-interactions are not unit-tested (they require a live DB and browser
-environment); check them against the dev server with a headless-browser
+language switching, live-clip class, and play-button labels. The render
+pipeline and DOM interactions are not unit-tested (they require a live DB and
+browser environment); check them against the dev server with a headless-browser
 script — see `scripts/qa-browser.mjs` and "Headless browser for visual QA" in
 the root CLAUDE.md.

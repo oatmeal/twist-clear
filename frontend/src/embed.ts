@@ -204,6 +204,40 @@ function hideBrokenPeekImages(container: HTMLElement): void {
   });
 }
 
+// ── Keyboard focus ────────────────────────────────────────────────────────
+//
+// Stepping to another clip rebuilds the player's buttons and closing removes
+// them. If one had focus, keyboard users would be dropped back to <body>, so
+// focus moves to the same button in the new player, or to the clip's
+// thumbnail (its play button) when the player closes.
+
+const STAGE_CONTROLS = ['.clip-prev-btn', '.clip-next-btn', '.clip-close-btn'];
+
+/** The selector of the player button in `stage` that has focus, if any. */
+function focusedControl(stage: HTMLElement | null): string | null {
+  const el = document.activeElement;
+  if (!stage || !el || !stage.contains(el)) return null;
+  return STAGE_CONTROLS.find(sel => el.matches(sel)) ?? null;
+}
+
+/** Focus the `sel` button in `stage`, or its close button if that one's
+ *  disabled (no clip that way). */
+function refocus(stage: HTMLElement | null, sel: string | null): void {
+  if (!stage || !sel) return;
+  const btn = stage.querySelector<HTMLButtonElement>(sel);
+  const target = btn && !btn.disabled ? btn : stage.querySelector<HTMLElement>('.clip-close-btn');
+  target?.focus({ preventScroll: true });
+}
+
+function thumbOf(clip: HTMLElement): HTMLElement | null {
+  return clip.querySelector<HTMLElement>('.clip-thumb');
+}
+
+/** Mark `clip`'s play button as having its player open or closed. */
+function setExpanded(clip: HTMLElement, expanded: boolean): void {
+  thumbOf(clip)?.setAttribute('aria-expanded', String(expanded));
+}
+
 function _onDocClickOutside(e: MouseEvent): void {
   const target = e.target as Node;
   if (_expandedCard) {
@@ -272,20 +306,27 @@ function placePanel(): void {
   // One column: the player sits right under the card, so its thumbnail would
   // just repeat it — hide it and leave the title/meta as the player's header.
   card.classList.toggle('single-col', cols === 1);
+  // That hides the play button; if it had focus, pass focus to the player.
+  if (cols === 1 && document.activeElement === thumbOf(card)) {
+    panel.querySelector<HTMLElement>('.clip-close-btn')?.focus({ preventScroll: true });
+  }
   const c = card.getBoundingClientRect();
   panel.style.setProperty('--notch-x', `${c.left + c.width / 2 - panel.getBoundingClientRect().left}px`);
   _panelGridWidth = grid.clientWidth;
 }
 
 export function collapseCard(card: HTMLElement): void {
+  const hadFocus = !!_panel?.contains(document.activeElement);
   card.classList.remove('playing', 'single-col');
   card.removeAttribute('aria-current');
+  setExpanded(card, false);
   _panel?.remove();
   _panel = null;
   _panelObserver?.disconnect();
   _panelObserver = null;
   document.removeEventListener('click', _onDocClickOutside);
   _expandedCard = null;
+  if (hadFocus) thumbOf(card)?.focus({ preventScroll: true });
   _onCloseRender?.();
 }
 
@@ -307,9 +348,11 @@ export function expandCard(card: HTMLElement, skipScroll = false): void {
   const idx = cards.indexOf(card);
   const slot = panelSlot(idx, gridColumnCount(grid), cards.length);
 
+  const focused = focusedControl(_panel);
   if (_expandedCard) {
     _expandedCard.classList.remove('playing', 'single-col');
     _expandedCard.removeAttribute('aria-current');
+    setExpanded(_expandedCard, false);
   }
   if (!_panel) {
     _panel = document.createElement('div');
@@ -332,8 +375,10 @@ export function expandCard(card: HTMLElement, skipScroll = false): void {
 
   card.classList.add('playing');
   card.setAttribute('aria-current', 'true');
+  setExpanded(card, true);
   _expandedCard = card;
   placePanel();
+  refocus(_panel, focused);
 
   if (!skipScroll) {
     // Clicking a card below an open panel pulls that card up by the panel's
@@ -352,15 +397,20 @@ export function expandCard(card: HTMLElement, skipScroll = false): void {
 // ── List-view row expand/collapse ─────────────────────────────────────────
 
 export function collapseRow(row: HTMLElement): void {
+  const hadFocus = !!_insertedEmbedRow?.contains(document.activeElement);
   _insertedEmbedRow?.remove();
   _insertedEmbedRow = null;
   row.classList.remove('expanded');
+  setExpanded(row, false);
   document.removeEventListener('click', _onDocClickOutside);
   _expandedRow = null;
-  if (!_expanding) _onCloseRender?.();
+  if (_expanding) return; // expandRow refocuses the new embed row
+  if (hadFocus) thumbOf(row)?.focus({ preventScroll: true });
+  _onCloseRender?.();
 }
 
 export function expandRow(row: HTMLElement, skipScroll = false): void {
+  const focused = focusedControl(_insertedEmbedRow);
   if (_expandedRow && _expandedRow !== row) {
     _expanding = true;
     collapseRow(_expandedRow);
@@ -391,7 +441,9 @@ export function expandRow(row: HTMLElement, skipScroll = false): void {
   row.insertAdjacentElement('afterend', embedRow);
   _insertedEmbedRow = embedRow;
   row.classList.add('expanded');
+  setExpanded(row, true);
   _expandedRow = row;
+  refocus(embedRow, focused);
   if (!skipScroll) scrollSpanIntoView(row, embedRow);
   setTimeout(() => document.addEventListener('click', _onDocClickOutside), 0);
 }
@@ -415,6 +467,9 @@ export async function navigateClip(direction: 'prev' | 'next'): Promise<void> {
     const shift = viewportTop(panel) - topBefore;
     if (shift !== 0) window.scrollBy({ top: shift, behavior: 'instant' });
   } else {
+    // render() replaces the whole grid, player included: note which of its
+    // buttons had focus so the new page's player can take it over.
+    const focused = focusedControl(_panel);
     const totalPages = Math.ceil(state.totalClips / state.PAGE_SIZE);
     if (direction === 'next' && state.currentPage < totalPages) {
       state.setCurrentPage(state.currentPage + 1);
@@ -428,6 +483,7 @@ export async function navigateClip(direction: 'prev' | 'next'): Promise<void> {
       const lastCard = allNewCards[allNewCards.length - 1];
       if (lastCard) expandCard(lastCard);
     }
+    refocus(_panel, focused);
   }
 }
 
@@ -443,6 +499,7 @@ export async function navigateRow(direction: 'prev' | 'next'): Promise<void> {
     const topAfter = target.getBoundingClientRect().top;
     window.scrollBy({ top: topAfter - topBefore, behavior: 'instant' });
   } else {
+    const focused = focusedControl(_insertedEmbedRow); // see navigateClip
     const totalPages = Math.ceil(state.totalClips / state.PAGE_SIZE);
     if (direction === 'next' && state.currentPage < totalPages) {
       state.setCurrentPage(state.currentPage + 1);
@@ -456,5 +513,6 @@ export async function navigateRow(direction: 'prev' | 'next'): Promise<void> {
       const lastRow = allNewRows[allNewRows.length - 1];
       if (lastRow) expandRow(lastRow);
     }
+    refocus(_insertedEmbedRow, focused);
   }
 }

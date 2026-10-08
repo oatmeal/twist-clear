@@ -106,6 +106,29 @@ In both layouts the clicked clip and its player are separate elements, so
 `←` / `→` (keydown handler in `app.ts`) also navigate while a clip is open,
 except when focus is in a form control or inside the cross-origin iframe.
 
+## Keyboard access
+
+Each clip's thumbnail (`.clip-thumb`, in both layouts) is a real `<button>`,
+the clip's play button: Tab reaches it, and Enter/Space fire the same click
+the delegated handler in `app.ts` already routes, so it needs no key handling
+of its own. (The whole card/row stays clickable by mouse; the thumbnail is the
+keyboard target because a `<tr role="button">` would break the table's
+semantics for screen readers.) Its `aria-label` is "Play: <title>" (`playClip`
+in `i18n.ts`) and `embed.ts` keeps `aria-expanded` in step with the player.
+
+The player sits after the clip in the DOM (list: the next `<tr>`; grid: after
+the row's last card), so Tab from the thumbnail reaches its prev/next peeks
+and close button. Opening a clip leaves focus on its thumbnail, except on a
+one-column grid, where `.single-col` hides the thumbnail and `placePanel()`
+moves focus to the close button. Stepping to another clip rebuilds the
+player's buttons and closing removes them, so `embed.ts` hands focus on rather
+than let it drop to `<body>`: to the same button in the new player
+(`focusedControl()` / `refocus()`; the close button if that peek is now
+disabled), or to the thumbnail when the player closes. A page-boundary step
+re-renders the grid, so `navigateClip`/`navigateRow` note the focused button
+before calling `render()`. All of these use `focus({ preventScroll: true })`
+so they don't fight the scroll handling above.
+
 ## Filter bar (`filterBar.ts`)
 
 `#sticky-bar` is in normal flow and scrolls away with the page. A sentinel

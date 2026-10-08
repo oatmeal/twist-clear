@@ -14,6 +14,12 @@ export type ClipItem = {
   isLive: boolean;
 };
 
+// The thumbnail is the clip's play button: a real <button> so keyboard users
+// can open the player. embed.ts flips aria-expanded while its player is open.
+function thumbAria(title: string): string {
+  return `aria-label="${escHtml(t().playClip(title))}" aria-expanded="false"`;
+}
+
 // The onerror attribute is intentionally omitted — broken images are handled
 // by attachImgErrorHandlers() after setting innerHTML, avoiding inline JS
 // which is blocked by the Content-Security-Policy.
@@ -30,13 +36,13 @@ export function clipCardHtml(clip: {
     : '';
   return `
     <div class="clip-card${extraClass}" data-clip-url="${escHtml(clip.url)}">
-      <div class="clip-thumb">
+      <button class="clip-thumb" type="button" ${thumbAria(clip.title)}>
         <img src="${escHtml(clip.thumbnail_url)}" alt="${escHtml(clip.title)}" loading="lazy">
-        <div class="clip-play-icon">
+        <span class="clip-play-icon">
           <svg viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
-        </div>
+        </span>
         <span class="clip-duration">${fmtDuration(clip.duration)}</span>
-      </div>
+      </button>
       <div class="clip-info">
         <div class="clip-title">
           <a href="${escHtml(clip.url)}" target="_blank" rel="noopener noreferrer">
@@ -68,10 +74,10 @@ export function clipListRowHtml(clip: ClipItem, tzOffset = 0): string {
     <tr class="clip-row${liveClass}" data-clip-url="${escHtml(clip.url)}">
       <td class="clip-col-title">
         <div class="clip-list-title-cell">
-          <div class="clip-thumb clip-list-thumb">
+          <button class="clip-thumb clip-list-thumb" type="button" ${thumbAria(clip.title)}>
             <img src="${escHtml(clip.thumbnail_url)}" alt="${escHtml(clip.title)}" loading="lazy">
             <span class="clip-duration">${fmtDuration(clip.duration)}</span>
-          </div>
+          </button>
           <a href="${escHtml(clip.url)}" target="_blank" rel="noopener noreferrer"><svg class="clip-ext-icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 1H1v10h10V8.5M7 1h4m0 0v4m0-4L5 7"/></svg></a>
           <span class="clip-title-text">${escHtml(clip.title)}</span>
         </div>

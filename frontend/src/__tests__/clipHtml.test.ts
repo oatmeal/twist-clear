@@ -92,6 +92,22 @@ describe('clipCardHtml', () => {
     const html = clipCardHtml(baseClip({ game_name: '', game_name_ja: '' }));
     expect(html).not.toContain('clip-game-link');
   });
+
+  it('renders the thumbnail as a collapsed play button labelled with the title', () => {
+    const html = clipCardHtml(baseClip());
+    expect(html).toContain('<button class="clip-thumb" type="button" aria-label="Play: My Test Clip" aria-expanded="false">');
+  });
+
+  it('labels the play button in Japanese when lang=ja', () => {
+    setLang('ja');
+    const html = clipCardHtml(baseClip());
+    expect(html).toContain('aria-label="「My Test Clip」を再生"');
+  });
+
+  it('escapes the title in the play button label', () => {
+    const html = clipCardHtml(baseClip({ title: '"><script>evil()</script>' }));
+    expect(html).toContain('aria-label="Play: &quot;&gt;&lt;script&gt;');
+  });
 });
 
 describe('clipListRowHtml', () => {
@@ -148,5 +164,10 @@ describe('clipListRowHtml', () => {
   it('includes the view count', () => {
     const html = clipListRowHtml(baseClip({ view_count: 2500 }));
     expect(html).toContain('2.5K');
+  });
+
+  it('renders the thumbnail as a collapsed play button labelled with the title', () => {
+    const html = clipListRowHtml(baseClip());
+    expect(html).toContain('<button class="clip-thumb clip-list-thumb" type="button" aria-label="Play: My Test Clip" aria-expanded="false">');
   });
 });

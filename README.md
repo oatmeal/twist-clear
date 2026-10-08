@@ -240,6 +240,7 @@ Requires `frontend/public/clips.db` — run `prepare-db` first. Serve `frontend/
 - Date range filter and calendar view (year heatmap → month grid, also selectable by day or week)
 - URL hash preserves all filter state — links are bookmarkable and shareable
 - Click a thumbnail to embed the clip inline; click outside or press Escape to close
+- Keyboard accessible: Tab to a thumbnail and press Enter or Space to play; ← / → step between clips
 - **Login with Twitch** — fetches clips newer than the data from the scraper live from the Twitch API and merges them into the previously scraped clips (no backend required; uses Twitch's implicit grant OAuth)
 
 ---
