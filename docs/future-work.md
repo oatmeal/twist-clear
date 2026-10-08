@@ -18,12 +18,9 @@ A usability review of the calendar panel and filter bar, done on the
 `ui-refresh` branch by driving the dev server with `scripts/qa-browser.mjs`
 at 1400×900 (EN) and 390×844 touch (JA). Within each group, items are roughly
 ordered by impact. Remove items (and eventually this section) as they're done.
-
-### Bugs
-
-- **Duplicate `.view-btn` rules** in `style.css` and `calendar.css` with
-  conflicting `.active` styles; `calendar.css` wins by load order, so the
-  `style.css` block is dead.
+The bugs it found (duplicated year strip, stale heat-map after a card's game
+link, hardcoded selection tint, search-only empty-state copy, ungrouped
+`clipCount`, duplicate `.view-btn` CSS) have been fixed.
 
 ### Navigation vs. selection semantics (highest-impact UX issue)
 

@@ -514,17 +514,25 @@ select:focus { border-color: var(--accent); }
 }
 #btn-view-cal { padding: 6px 9px; line-height: 0; display: inline-flex; align-items: center; justify-content: center; }
 .view-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   background: var(--surface2);
   border: 1px solid var(--border);
   color: var(--muted);
-  padding: 5px 12px;
+  padding: 7px 14px;
   border-radius: 6px;
   font-size: 13px;
   cursor: pointer;
-  transition: border-color 0.12s, color 0.12s;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
 }
 .view-btn:hover { border-color: var(--accent); color: var(--text); }
-.view-btn.active { border-color: var(--accent); color: var(--accent); }
+.view-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
 
 /* ── Clip list (table layout) ── */
 /* overflow-x: hidden creates a containing block so the table's width: 100%

@@ -20,32 +20,6 @@
   --cal-text-muted: color-mix(in srgb, var(--cal-accent), black 50%);
 }
 
-/* ── View switcher ── */
-.view-switcher {
-  display: flex;
-  gap: 4px;
-}
-.view-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  color: var(--muted);
-  padding: 7px 14px;
-  border-radius: 6px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: border-color 0.12s, color 0.12s, background 0.12s;
-}
-.view-btn:hover { border-color: var(--accent); color: var(--text); }
-.view-btn.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-  font-weight: 600;
-}
-
 /* ── Calendar panel shell ── */
 #calendar-panel {
   background: var(--surface);
