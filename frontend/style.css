@@ -548,8 +548,12 @@ select:focus { border-color: var(--accent); }
 .clip-col-creator { max-width: 160px; min-width: 130px; word-break: keep-all; color: var(--muted); }
 .clip-col-date    { color: var(--muted); white-space: nowrap; }
 /* Combined meta column (narrow screens): hidden by default, shown via media query.
-   white-space: normal overrides the global th rule so the header can wrap. */
-.clip-col-meta  { display: none; white-space: normal; }
+   white-space: normal overrides the global th rule (hence the th selector, to
+   beat .clips-table th's specificity) so the "Game / Creator / Date" header can
+   wrap instead of setting a min width wider than a phone. */
+.clip-col-meta { display: none; }
+.clip-col-meta,
+.clips-table th.clip-col-meta { white-space: normal; overflow-wrap: anywhere; }
 /* Views: auto-sizes to content via white-space: nowrap below. */
 
 .clips-table th {
@@ -602,6 +606,10 @@ select:focus { border-color: var(--accent); }
   align-items: flex-start; /* thumbnail pins to top when title wraps */
   gap: 10px;
 }
+/* overflow-wrap: anywhere lowers the cell's min-content width so a title with
+   a long unbreakable run (Latin word, "!!!!!!") can't force the auto-layout
+   table wider than a phone viewport. */
+.clip-list-title-cell .clip-title-text { overflow-wrap: anywhere; }
 .clip-list-title-cell a {
   color: var(--text);
   text-decoration: none;
@@ -801,10 +809,11 @@ main { padding: 24px; }
    Both layouts hold [prev peek][player][next peek] — the grid card also has
    its .clip-info — and are arranged by container width (#clips-grid is the
    query container, so this tracks the space actually available):
-     narrow  (< 640px)   player / info / [prev | next]
-     medium  (640–1099)  player / [prev | info | next]
-     wide    (≥ 1100px)  [prev | player | next] / info — peeks fill the
-                         gutters that a 854px-max player leaves empty */
+     < 1100px   player / info / [prev | next]   (list: no info row)
+     ≥ 1100px   [prev | player | next] / info — the peeks fill the gutters
+                beside the player, vertically centred on it, so they're in
+                view whenever the video is. Gutters never drop below 160px;
+                the player shrinks from its 854px max instead. */
 #clips-grid { container: clips / inline-size; }
 
 .clip-card.expanded,
@@ -841,19 +850,10 @@ main { padding: 24px; }
 /* List view has no info block (the clicked row above is the info) */
 .clip-stage { grid-template-areas: "embed embed" "prev next"; }
 
-@container clips (min-width: 640px) {
-  .clip-card.expanded {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
-    grid-template-areas:
-      "embed embed embed"
-      "prev  info  next";
-    align-items: center;
-  }
-}
 @container clips (min-width: 1100px) {
   .clip-card.expanded,
   .clip-stage {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 854px) minmax(0, 1fr);
+    grid-template-columns: minmax(160px, 1fr) minmax(0, 854px) minmax(160px, 1fr);
     grid-template-areas: "prev embed next";
     column-gap: 20px;
     align-items: center;
@@ -862,22 +862,22 @@ main { padding: 24px; }
     grid-template-areas:
       "prev  embed next"
       ".     info  .";
-    padding: 16px 0 6px;
+    padding: 16px 16px 6px;
   }
   .clip-card.expanded .clip-info { padding: 2px 0 0; }
   .clip-card.expanded .clip-prev-btn,
-  .clip-stage .clip-prev-btn { justify-self: end; margin: 0 0 0 16px; }
+  .clip-stage .clip-prev-btn { justify-self: end; margin: 0; }
   .clip-card.expanded .clip-next-btn,
-  .clip-stage .clip-next-btn { justify-self: start; margin: 0 16px 0 0; }
+  .clip-stage .clip-next-btn { justify-self: start; margin: 0; }
 }
 
 /* ── Prev / next peek button ──
    A mini clip card: direction label, thumbnail with an arrow badge, title.
-   Stacked vertically by default (narrow: two side by side below the player;
-   wide: one in each gutter beside it) and horizontal — thumb beside text —
-   at medium widths where it shares a row with .clip-info. Title lines are
-   reserved so a pair of peeks always matches in height. Disabled = no
-   neighbour; kept in the layout but invisible so the player stays centred. */
+   Stacked vertically on phones (two side by side below the player) and in
+   the side gutters on wide containers; horizontal — thumb beside text — in
+   between. Two title lines are reserved so a pair of peeks always matches in
+   height. Disabled = no neighbour; kept in the layout but invisible so the
+   player stays centred. */
 .clip-peek {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -970,7 +970,7 @@ main { padding: 24px; }
 }
 .clip-peek:hover .clip-peek-title { color: var(--text); }
 
-@container clips (min-width: 640px) and (max-width: 1099.98px) {
+@container clips (min-width: 520px) and (max-width: 1099.98px) {
   .clip-peek {
     grid-template-columns: clamp(72px, 40%, 128px) minmax(0, 1fr);
     grid-template-areas:
@@ -1001,7 +1001,6 @@ main { padding: 24px; }
   .clip-peek-dir { font-size: 13px; }
   .clip-peek-arrow { width: 40px; height: 40px; }
   .clip-peek-arrow svg { width: 16px; height: 16px; }
-  .clip-peek-title { -webkit-line-clamp: 3; line-clamp: 3; min-height: calc(1.4em * 3); }
 }
 
 .clip-embed-wrap {

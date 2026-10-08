@@ -46,14 +46,20 @@ disabled button (`visibility: hidden`) so the player stays centred.
 
 Layout is driven by container queries on `#clips-grid` (`container: clips`):
 
-| container width | grid card                         | list `.clip-stage`   |
-|-----------------|-----------------------------------|----------------------|
-| < 640px         | player / info / prev · next       | player / prev · next |
-| 640–1099px      | player / prev · info · next       | player / prev · next |
-| ≥ 1100px        | prev · player · next / info       | prev · player · next |
+| container width | grid card                   | list `.clip-stage`   | peek shape            |
+|-----------------|-----------------------------|----------------------|-----------------------|
+| < 520px         | player / info / prev · next | player / prev · next | stacked (thumb above) |
+| 520–1099px      | player / info / prev · next | player / prev · next | thumb beside text     |
+| ≥ 1100px        | prev · player · next / info | prev · player · next | stacked, in gutters   |
 
 At ≥ 1100px the peeks sit in the gutters a max-854px player leaves empty and
-are vertically centred on it, so they're visible whenever the video is.
+are vertically centred on it, so they're visible whenever the video is. The
+gutter columns are `minmax(160px, 1fr)`: below ~1260px the player shrinks
+rather than squeezing the peeks.
+
+List view's clicked row and player are separate `<tr>`s, so `expandRow` uses
+`scrollSpanIntoView(row, embedRow)` to bring the whole span into view (a
+plain `scrollIntoView` on either can leave the player or peeks off-screen).
 `←` / `→` (keydown handler in `app.ts`) also navigate while a clip is open,
 except when focus is in a form control or inside the cross-origin iframe.
 

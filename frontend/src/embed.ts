@@ -150,6 +150,22 @@ function peekButtonHtml(dir: 'prev' | 'next', clip: PeekClip | null, disabled: b
     `</button>`;
 }
 
+/**
+ * Scroll (if needed) so everything from the top of `top` to the bottom of
+ * `bottom` is in view — or, when that span is taller than the viewport, so
+ * `top` sits at the top. List view needs this because the clicked row and its
+ * player live in separate <tr>s, so scrollIntoView on either alone can leave
+ * the player or the peeks below the fold.
+ */
+function scrollSpanIntoView(top: HTMLElement, bottom: HTMLElement): void {
+  const MARGIN = 8;
+  const t = top.getBoundingClientRect().top - MARGIN;
+  const b = bottom.getBoundingClientRect().bottom + MARGIN;
+  const vh = window.innerHeight;
+  const delta = (b - t > vh || t < 0) ? t : (b > vh ? b - vh : 0);
+  if (delta !== 0) window.scrollBy({ top: delta, behavior: 'smooth' });
+}
+
 function hideBrokenPeekImages(container: HTMLElement): void {
   container.querySelectorAll<HTMLImageElement>('.clip-peek-thumb img').forEach(img => {
     img.addEventListener('error', () => img.remove(), { once: true });
@@ -269,7 +285,7 @@ export function expandRow(row: HTMLElement, skipScroll = false): void {
   _insertedEmbedRow = embedRow;
   row.classList.add('expanded');
   _expandedRow = row;
-  if (!skipScroll) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  if (!skipScroll) scrollSpanIntoView(row, embedRow);
   setTimeout(() => document.addEventListener('click', _onDocClickOutside), 0);
 }
 
@@ -327,12 +343,7 @@ export async function navigateRow(direction: 'prev' | 'next'): Promise<void> {
       await _render?.();
       const allNewRows = Array.from(document.querySelectorAll<HTMLElement>('#clips-grid .clip-row'));
       const lastRow = allNewRows[allNewRows.length - 1];
-      if (lastRow) {
-        expandRow(lastRow, true);
-        // scrollIntoView on the row alone leaves the embed below the fold;
-        // scroll the embed row into view instead so both row and player are visible.
-        _insertedEmbedRow?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-      }
+      if (lastRow) expandRow(lastRow);
     }
   }
 }

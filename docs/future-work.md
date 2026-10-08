@@ -9,6 +9,36 @@ Deferred items with rationale. See the relevant source files for implementation 
 - remember list vs grid view? or change default to list view?
 - template repo: fork + change settings to deploy an archive for a streamer
 - featured clips
+- custom `site_heading` HTML (e.g. clipmaru's animated icon) can overlap the header buttons at ≤390px; `overflow: hidden` was deliberately removed from the header, so a fix needs to keep decorations unclipped.
+---
+
+## Grid: expanding a card orphans the cards before it in its row
+
+The expanded card takes `grid-column: 1 / -1`, so it jumps to a new row and
+leaves the earlier cards of its row alone with empty space beside them (on a
+4-column grid, 3 of every 4 clicks do this), and every prev/next step reflows
+the grid around the player.
+
+Possible approach (Google Images style): leave the clicked card in place,
+highlighted as "now playing", and insert a full-width player panel after the
+last card of its row. Prev/next within the same row would swap the panel's
+content with no layout shift, and the neighbours are already visible in the
+row above. Needs row-end detection from card offsets (recomputed on resize)
+and a rework of `expandCard`/`collapseCard`/`navigateClip` in `embed.ts`.
+
+Deferred: larger change to the embed state model; worth trying as its own
+experiment now that the peeks make prev/next discoverable.
+
+---
+
+## Keyboard access to clips
+
+Grid cards and list rows are clickable `div`/`tr` elements with no
+`tabindex` or role, so keyboard users can reach only the external-link icon
+and the game-filter button — not the player. Making `.clip-thumb` (grid) and
+`.clip-row` (list) focusable with `role="button"` plus an Enter/Space handler
+in `app.ts` would fix it; the peeks are already real buttons.
+
 ---
 
 ## DOM/integration testing (jsdom or Playwright)
