@@ -21,9 +21,6 @@ ordered by impact. Remove items (and eventually this section) as they're done.
 
 ### Bugs
 
-- **Empty-state copy assumes a search.** `#empty` always says "No clips match
-  your search.", including for date- or game-only filters (e.g. selecting a
-  zero-clip day), and offers no way out.
 - **`clipCount` has no thousands separator** (`i18n.ts`): the preview label
   reads "28488 clips" while everything else says "28,488".
 - **Duplicate `.view-btn` rules** in `style.css` and `calendar.css` with

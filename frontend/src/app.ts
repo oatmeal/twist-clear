@@ -869,6 +869,8 @@ export async function render(): Promise<void> {
       grid.innerHTML = '';
       grid.classList.remove('is-list');
       empty.style.display = 'block';
+      (document.getElementById('btn-clear-filters') as HTMLButtonElement).hidden =
+        !state.searchQuery && !state.gameFilter && !state.calDateFrom && !state.calDateTo;
     } else {
       empty.style.display = 'none';
 
@@ -1029,7 +1031,8 @@ function applyTranslations(): void {
 
   const loadingText = document.getElementById('loading-text');
   if (loadingText) loadingText.textContent = tr.loading;
-  (document.getElementById('empty') as HTMLElement).textContent = tr.noClips;
+  (document.getElementById('empty-text') as HTMLElement).textContent = tr.noClips;
+  (document.getElementById('btn-clear-filters') as HTMLButtonElement).textContent = tr.clearFilters;
 
   // Auth / login
   const loginBtn = document.getElementById('btn-login');
@@ -1260,6 +1263,19 @@ function bindEvents(): void {
   const gameSelect = document.getElementById('game-filter') as HTMLSelectElement;
   gameSelect.addEventListener('change', e => {
     applyGameFilter((e.target as HTMLSelectElement).value);
+  });
+
+  // Empty-state "Clear filters": drops the search, game and date filters but
+  // keeps sort order, layout and whether the calendar is open.
+  document.getElementById('btn-clear-filters')?.addEventListener('click', () => {
+    if (searchTimer !== null) clearTimeout(searchTimer);
+    state.setSearchQuery('');
+    searchInput.value = '';
+    state.setGameFilter('');
+    clearCalDateFilter();
+    state.setCurrentPage(1);
+    void render();
+    if (state.currentView === 'calendar') void renderCalendar();
   });
 
   // ── Layout toggle ─────────────────────────────────────────────────────────

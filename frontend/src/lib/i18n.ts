@@ -15,6 +15,7 @@ export interface Translations {
   // Loading / empty / error
   loading: string;
   noClips: string;
+  clearFilters: string;     // empty-state button: clears search, game and date filters
   errorTitle: string;
   errorHint: string;
   renderError: string;
@@ -125,7 +126,8 @@ const en: Translations = {
   dateFrom: 'From date',
   dateTo: 'End date',
   loading: 'Loading clips database…',
-  noClips: 'No clips match your search.',
+  noClips: 'No clips match the current filters.',
+  clearFilters: 'Clear filters',
   errorTitle: 'Could not load the database.',
   errorHint: 'Try refreshing the page. If the problem persists, the site may be temporarily unavailable.',
   renderError: 'Something went wrong loading clips — try refreshing the page.',
@@ -226,7 +228,8 @@ const ja: Translations = {
   dateFrom: '開始日',
   dateTo: '終了日（当日含む）',
   loading: 'クリップデータベースを読み込み中…',
-  noClips: '検索に一致するクリップがありません。',
+  noClips: '条件に一致するクリップがありません。',
+  clearFilters: 'フィルターをクリア',
   errorTitle: 'データベースを読み込めませんでした。',
   errorHint: 'ページを更新してみてください。問題が解決しない場合、このサイトが一時的に利用できない状態になっている可能性があります。',
   renderError: 'クリップの読み込みに失敗しました。ページを更新してみてください。',

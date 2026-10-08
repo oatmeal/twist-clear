@@ -1148,6 +1148,20 @@ main { padding: 24px; }
   color: var(--muted);
   font-size: 14px;
 }
+#empty p { margin: 0 0 14px; }
+/* No display rule here, so the [hidden] attribute keeps working. */
+.clear-filters-btn {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 7px 14px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+}
+.clear-filters-btn:hover { border-color: var(--accent); }
 
 /* ── Pagination ── */
 #pagination {
