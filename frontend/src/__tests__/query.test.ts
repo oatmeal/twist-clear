@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildWhere, byDayHint, byGameHint, countSql, listHint, MANY_MATCHES, type BuildWhereOpts } from '../lib/query';
+import { aggregateHint, buildWhere, countSql, listHint, MANY_MATCHES, type BuildWhereOpts } from '../lib/query';
 
 const base = {
   searchQuery: '',
@@ -231,86 +231,124 @@ describe('buildWhere devCutoff', () => {
   });
 });
 
-describe('FTS query plans', () => {
-  // An FTS search on a DB with the hinted indexes.
-  const fts: BuildWhereOpts = { ...base, searchQuery: 'pog', useFts: true, indexHints: true };
+describe('query plans', () => {
+  // A DB with the hinted indexes: no search, an FTS search, a LIKE search.
+  const hints: BuildWhereOpts = { ...base, useFts: true, indexHints: true };
+  const fts: BuildWhereOpts = { ...hints, searchQuery: 'pog' };
+  const like: BuildWhereOpts = { ...hints, searchQuery: 'po' };
+  const game = { gameFilter: '1' };
+  const range = { calDateFrom: '2024-01-01', calDateTo: null };
   const plan = (opts: BuildWhereOpts) => ({ w: buildWhere(opts), opts });
 
-  it('buildWhere flags FTS searches only', () => {
-    expect(buildWhere(fts).fts).toBe(true);
-    expect(buildWhere({ ...fts, searchQuery: 'po' }).fts).toBe(false); // LIKE
-    expect(buildWhere({ ...base, searchQuery: 'pog' }).fts).toBe(false);
-    expect(buildWhere(base).fts).toBe(false);
+  it('buildWhere reports how the search matches titles', () => {
+    expect(buildWhere(fts).search).toBe('fts');
+    expect(buildWhere(like).search).toBe('like'); // under 3 characters
+    expect(buildWhere({ ...base, searchQuery: 'pog' }).search).toBe('like'); // no FTS table
+    expect(buildWhere(base).search).toBe(null);
   });
 
-  it('gives no hints without an FTS search or without the indexes', () => {
-    for (const opts of [base, { ...base, indexHints: true }, { ...fts, indexHints: false }, { ...fts, searchQuery: 'po' }]) {
+  it('gives no hints without the indexes', () => {
+    for (const opts of [{ ...fts, indexHints: false }, { ...like, indexHints: false }, { ...base, ...range }]) {
       const { w } = plan(opts);
-      expect(byDayHint(w, opts)).toBe('');
-      expect(byGameHint(w, opts)).toBe('');
+      expect(aggregateHint(w, opts)).toBe('');
       expect(listHint(w, opts, 'date_desc', 10_000)).toBe('');
-      expect(countSql(w, opts)).toMatch(/^SELECT COUNT\(\*\) AS cnt FROM clips c\s+(WHERE|$)/);
+      expect(listHint(w, opts, 'view_count_desc', 10)).toBe('');
+      expect(countSql(w, opts)).toMatch(/^SELECT COUNT\(\*\) AS cnt FROM clips c\s+WHERE/);
     }
   });
 
-  it('per-day and per-game aggregates walk created_at indexes unless a game is filtered', () => {
-    const { w, opts } = plan(fts);
-    expect(byDayHint(w, opts)).toBe('INDEXED BY clips_created_at');
-    expect(byGameHint(w, opts)).toBe('INDEXED BY clips_created_at_game');
-    const g = plan({ ...fts, gameFilter: '1' });
-    expect(byDayHint(g.w, g.opts)).toBe('');
-    expect(byGameHint(g.w, g.opts)).toBe('');
+  describe('aggregateHint', () => {
+    it('reads every date aggregate from clips_created_at_game, with or without an FTS search', () => {
+      for (const opts of [hints, fts, { ...hints, ...range }, { ...fts, ...range }]) {
+        const { w } = plan(opts);
+        expect(aggregateHint(w, opts)).toBe('INDEXED BY clips_created_at_game');
+      }
+    });
+
+    it('scans clips_title for a LIKE search, whatever the other filters', () => {
+      for (const opts of [like, { ...like, ...game }, { ...like, ...range }]) {
+        const { w } = plan(opts);
+        expect(aggregateHint(w, opts)).toBe('INDEXED BY clips_title');
+      }
+    });
+
+    it("leaves a game filter to SQLite's plans", () => {
+      for (const opts of [{ ...hints, ...game }, { ...fts, ...game }]) {
+        const { w } = plan(opts);
+        expect(aggregateHint(w, opts)).toBe('');
+      }
+    });
   });
 
-  it('counts a search-only filter from the FTS index alone', () => {
-    const { w, opts } = plan(fts);
-    expect(countSql(w, opts)).toBe('SELECT COUNT(*) AS cnt FROM clips_fts WHERE clips_fts MATCH :search');
-    expect(Object.keys(w.params)).toEqual([':search']);
-  });
+  describe('countSql', () => {
+    it('counts a search-only FTS filter from the FTS index alone', () => {
+      const { w, opts } = plan(fts);
+      expect(countSql(w, opts)).toBe('SELECT COUNT(*) AS cnt FROM clips_fts WHERE clips_fts MATCH :search');
+      expect(Object.keys(w.params)).toEqual([':search']);
+    });
 
-  it('counts with other filters through clips, hinted like per-day aggregates', () => {
-    const d = plan({ ...fts, calDateFrom: '2024-01-01', calDateTo: '2024-02-01' });
-    expect(countSql(d.w, d.opts)).toBe(`SELECT COUNT(*) AS cnt FROM clips c INDEXED BY clips_created_at ${d.w.where}`);
-    const c = plan({ ...fts, devCutoff: '2024-06-01T00:00:00Z' });
-    expect(countSql(c.w, c.opts)).toContain('FROM clips c INDEXED BY clips_created_at');
-    const g = plan({ ...fts, gameFilter: '1' });
-    expect(countSql(g.w, g.opts)).toMatch(/^SELECT COUNT\(\*\) AS cnt FROM clips c\s+WHERE/);
+    it('counts anything else through clips, hinted like the other aggregates', () => {
+      const d = plan({ ...fts, calDateFrom: '2024-01-01', calDateTo: '2024-02-01' });
+      expect(countSql(d.w, d.opts)).toBe(`SELECT COUNT(*) AS cnt FROM clips c INDEXED BY clips_created_at_game ${d.w.where}`);
+      const c = plan({ ...fts, devCutoff: '2024-06-01T00:00:00Z' });
+      expect(countSql(c.w, c.opts)).toContain('FROM clips c INDEXED BY clips_created_at_game');
+      const g = plan({ ...fts, ...game });
+      expect(countSql(g.w, g.opts)).toMatch(/^SELECT COUNT\(\*\) AS cnt FROM clips c\s+WHERE/);
+      const l = plan(like);
+      expect(countSql(l.w, l.opts)).toBe(`SELECT COUNT(*) AS cnt FROM clips c INDEXED BY clips_title ${l.w.where}`);
+    });
   });
 
   describe('listHint', () => {
     const many = MANY_MATCHES + 1;
     const few = MANY_MATCHES;
-    const range = { calDateFrom: '2024-01-01', calDateTo: null };
 
     it('walks the sort index when matches are many', () => {
-      const { w, opts } = plan(fts);
-      expect(listHint(w, opts, 'date_desc', many)).toBe('INDEXED BY clips_created_at');
-      expect(listHint(w, opts, 'date_asc', many)).toBe('INDEXED BY clips_created_at');
-      expect(listHint(w, opts, 'view_count_desc', many)).toBe('INDEXED BY clips_view_count');
-      expect(listHint(w, opts, 'view_count_asc', many)).toBe('INDEXED BY clips_view_count');
+      for (const opts of [fts, like, { ...fts, ...range }, { ...hints, ...range }]) {
+        const { w } = plan(opts);
+        expect(listHint(w, opts, 'date_desc', many)).toBe('INDEXED BY clips_created_at_game');
+        expect(listHint(w, opts, 'date_asc', many)).toBe('INDEXED BY clips_created_at_game');
+        expect(listHint(w, opts, 'view_count_desc', many)).toBe('INDEXED BY clips_view_count');
+        expect(listHint(w, opts, 'view_count_asc', many)).toBe('INDEXED BY clips_view_count');
+      }
     });
 
-    it('leaves rare terms to SQLite', () => {
+    it("walks the game's part of the sort index for many matches, or a game alone", () => {
+      for (const [opts, n] of [[{ ...fts, ...game }, many], [{ ...like, ...game }, many], [{ ...hints, ...game }, few]] as const) {
+        const { w } = plan(opts);
+        expect(listHint(w, opts, 'date_desc', n)).toBe('INDEXED BY clips_game_created');
+        expect(listHint(w, opts, 'view_count_desc', n)).toBe('INDEXED BY clips_game_views');
+      }
+    });
+
+    it('collects few LIKE matches from clips_title', () => {
+      for (const opts of [like, { ...like, ...game }, { ...like, ...range }]) {
+        const { w } = plan(opts);
+        expect(listHint(w, opts, 'date_desc', few)).toBe('INDEXED BY clips_title');
+        expect(listHint(w, opts, 'view_count_desc', few)).toBe('INDEXED BY clips_title');
+      }
+    });
+
+    it('seeks few FTS matches within a game in clips_game', () => {
+      const { w, opts } = plan({ ...fts, ...game });
+      expect(listHint(w, opts, 'date_desc', few)).toBe('INDEXED BY clips_game');
+      expect(listHint(w, opts, 'view_count_desc', few)).toBe('INDEXED BY clips_game');
+    });
+
+    it('collects few matches in a date range from that range', () => {
+      for (const opts of [{ ...fts, ...range }, { ...hints, ...range }]) {
+        const { w } = plan(opts);
+        expect(listHint(w, opts, 'date_desc', few)).toBe('INDEXED BY clips_created_at_game');
+        expect(listHint(w, opts, 'view_count_desc', few)).toBe('INDEXED BY clips_created_at_game');
+      }
+      const g = plan({ ...hints, ...game, ...range });
+      expect(listHint(g.w, g.opts, 'view_count_desc', few)).toBe('INDEXED BY clips_game_created');
+    });
+
+    it('leaves few FTS matches without other filters to SQLite', () => {
       const { w, opts } = plan(fts);
       expect(listHint(w, opts, 'date_desc', few)).toBe('');
       expect(listHint(w, opts, 'view_count_desc', few)).toBe('');
-    });
-
-    it('walks dates within a date range, unless a view sort has many matches', () => {
-      const { w, opts } = plan({ ...fts, ...range });
-      expect(listHint(w, opts, 'date_desc', few)).toBe('INDEXED BY clips_created_at');
-      expect(listHint(w, opts, 'date_desc', many)).toBe('INDEXED BY clips_created_at');
-      expect(listHint(w, opts, 'view_count_desc', few)).toBe('INDEXED BY clips_created_at');
-      expect(listHint(w, opts, 'view_count_desc', many)).toBe('INDEXED BY clips_view_count');
-    });
-
-    it('with a game filter, only walks views for a view sort over many matches and no range', () => {
-      const { w, opts } = plan({ ...fts, gameFilter: '1' });
-      expect(listHint(w, opts, 'view_count_desc', many)).toBe('INDEXED BY clips_view_count');
-      expect(listHint(w, opts, 'view_count_desc', few)).toBe('');
-      expect(listHint(w, opts, 'date_desc', many)).toBe('');
-      const r = plan({ ...fts, gameFilter: '1', ...range });
-      expect(listHint(r.w, r.opts, 'view_count_desc', many)).toBe('');
     });
   });
 });

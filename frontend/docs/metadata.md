@@ -15,18 +15,29 @@ startup aggregates with cheap single-page lookups:
   UTC ISO timestamps so `initCalendar` can compute local calendar boundaries for
   any timezone via `utcTimestampToLocalDate`.
 - `game_clip_counts` — one row per game: `id`, `name`, `name_ja`, `cnt` (no date filter)
-- `clips_created_at` — index on `clips(created_at)` for date-range COUNT(*)
-  and per-day GROUP BY (timeline, calendar)
-- `clips_created_at_game` — covering index `(created_at, game_id)` for
-  date-filtered game GROUP BY (index-only, no table access). Count it with
+- `clips_created_at_game` — covering index `(created_at, game_id)` for every
+  date aggregate: the timeline's per-day counts (a full scan at startup), the
+  calendar heat-map, date-range COUNT(*), and date-filtered game GROUP BY — all
+  index-only, and after the startup scan, all cached. Count it with
   `COUNT(*)`, not `COUNT(c.id)`: reading `id` forces a row lookup per clip
-  (selecting a year in the calendar fetched 4.1 MB instead of 176 KB)
-
-FTS searches force some of these with `INDEXED BY` — see "Query plans" in
-`docs/search.md`.
-- `clips_game_created` — index `(game_id, created_at DESC)` for
-  early-termination game-filtered sorts
+  (selecting a year in the calendar fetched 4.1 MB instead of 176 KB). It
+  replaced a plain `clips_created_at` index, which the timeline scanned while
+  the calendar's per-game counts read this one.
+- `clips_view_count` — `(view_count DESC, created_at DESC)` for "most viewed"
+- `clips_game` `(game_id)`, `clips_game_created` `(game_id, created_at DESC)`,
+  `clips_game_views` `(game_id, view_count DESC, created_at DESC)` — a game
+  filter walks one game's clips in sort order and stops after a page; a title
+  search within a game seeks each match in `clips_game`, whose key is
+  `(game_id, rowid)`
+- `clips_title` — `(title, created_at, game_id)` for LIKE searches (under 3
+  characters): a scan of it is a quarter of the table's and covers every
+  aggregate. Built after VACUUM, at the end of the file (see "Query plans" in
+  `docs/search.md`)
 - VACUUM — contiguous page layout for better range-request cache locality
+
+The scraper's `clips_broadcaster_created` index is dropped (one streamer per
+archive). Searches force some of these indexes with `INDEXED BY` — see "Query
+plans" in `docs/search.md`, which also has measurements.
 
 ## Usage in app.ts
 

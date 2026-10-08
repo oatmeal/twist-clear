@@ -45,8 +45,8 @@ src/
     liveFilter.ts # Pure filterLiveClips() — filters live clips against UI state
     pkce.ts         # OAuth crypto helpers (randomBase64url, sha256Base64url)
     query.ts        # Pure buildWhere() — builds SQL WHERE clause from filter state;
-                    #   countSql() / listHint() / byDayHint() / byGameHint() pick
-                    #   INDEXED BY plans for FTS searches (docs/search.md)
+                    #   countSql() / listHint() / aggregateHint() pick INDEXED BY
+                    #   plans; HINT_INDEXES lists the indexes they name (docs/search.md)
     searchParser.ts # Pure parseSearchQuery() — translates boolean search syntax to FTS5
     timeline.ts     # Pure timeline geometry: week/month bins, date ↔ x, drag snapping
 ```
@@ -232,7 +232,7 @@ npm test             # Vitest, all pure functions, fast (~0.5 s)
 npm run test:watch   # re-run on change
 ```
 
-Tests cover: `buildWhere` combinations, FTS query-plan hints, `serializeHash`/`deserializeHash`
+Tests cover: `buildWhere` combinations, query-plan hints, `serializeHash`/`deserializeHash`
 round-trips, date utilities, date-range kinds / stepping / labels, timeline
 binning, scale and drag snapping, format helpers, live clip filtering, live coverage
 bisection (suppression discovery, deduplication), OAuth crypto helpers,

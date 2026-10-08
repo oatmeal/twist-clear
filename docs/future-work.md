@@ -47,21 +47,15 @@ filter bar always shows — and edits — the filter. Design and code walkthroug
 ## Query cost: remaining hot spots
 
 Measured as DB bytes fetched on the dev server (see "Query plans" in
-`frontend/docs/search.md` for the FTS fixes and how to measure).
+`frontend/docs/search.md` for the plans and how to measure).
 
-- **Game filter + "Most viewed", no search: ≈14 MB** for a big game (8,448
-  clips). SQLite walks `clips_game_created` and looks up every row for
-  `view_count` to sort. A covering index `(game_id, view_count DESC,
-  created_at DESC)` in `prepare_web_db.py` would make it a short index walk.
-- **Searches under 3 characters: ≈13 MB.** The LIKE fallback scans the whole
-  table (once; later queries hit the cache). An index on `clips(title)` would
-  let it scan titles only — they total ≈0.7 MB of the 11 MB table — at the
-  cost of that much DB size.
-- **Calendar open during a search: ≈1.1 MB**, almost all the preview strip's
-  all-time game breakdown reading `clips_created_at_game`. The timeline and
-  calendar read the slightly smaller `clips_created_at`; moving them onto
-  `clips_created_at_game` (or dropping `clips_created_at`) would put every
-  date aggregate on one index, cached after the first load.
+- **The first short (LIKE) search: ≈2.8 MB**, a scan of `clips_title`, once
+  per session. With many matches the list then walks the sort index and looks
+  up each row for its title (≈2 MB more for "OW", 1,981 matches). Cheaper
+  would need a smaller structure to scan — e.g. a bigram FTS table for 2-char
+  terms, which FTS5 has no built-in tokenizer for.
+- **A big game's filter: ≈0.6 MB** (Overwatch, 8,448 clips), mostly the
+  timeline's per-day counts walking the game's part of `clips_game_created`.
 
 ---
 

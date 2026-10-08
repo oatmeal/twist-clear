@@ -19,9 +19,11 @@ What this script does
 5. Optimises the FTS index (merges all segments into one) so fewer HTTP Range
    requests are needed when searching.
 6. Builds precomputed metadata tables (clips_meta, game_clip_counts) and
-   covering indexes so the browser avoids full-table-scan aggregates.
+   the indexes the browser's query plans name, so it avoids full-table-scan
+   aggregates; drops indexes it doesn't use.
 7. VACUUMs the output file to remove any slack space and produce a compact,
    contiguous layout that is friendlier to range-request caching.
+8. Builds the title index for short searches last, at the end of the file.
 
 The output file is intended to be placed in `frontend/public/` and served
 statically.  In development the `npm run prepare-db` script in `frontend/`
@@ -150,6 +152,21 @@ def prepare(src_path: str, dst_path: str) -> None:
     """)
     print("  done.")
 
+    # ── Indexes ───────────────────────────────────────────────────────────
+    # The browser's query plans (frontend/src/lib/query.ts, which names these
+    # in INDEXED BY — see "Query plans" in frontend/docs/search.md) need
+    # exactly this set. Every full scan or row lookup costs HTTP range
+    # requests, so each index is chosen to let a query read only index pages,
+    # or stop after one page of clips.
+
+    # The scraper's indexes the browser never uses (clips_broadcaster_created:
+    # one streamer per archive), and clips_created_at, superseded by
+    # clips_created_at_game below.
+    print("Dropping indexes the browser doesn't use …")
+    for name in ("clips_broadcaster_created", "clips_created_at"):
+        dst_conn.execute(f"DROP INDEX IF EXISTS {name}")
+    print("  done.")
+
     # Replace the single-column view_count index (if carried over from an older
     # source DB) with the composite (view_count, created_at) index that makes
     # the secondary tiebreak sort index-accelerated.  DROP IF EXISTS is safe to
@@ -161,56 +178,58 @@ def prepare(src_path: str, dst_path: str) -> None:
     )
     print("  done.")
 
-    # Standalone created_at index — makes date-filtered COUNT(*) queries and
-    # general range scans efficient without a full table scan.
-    print("Creating clips_created_at index …")
-    dst_conn.execute("CREATE INDEX IF NOT EXISTS clips_created_at ON clips(created_at)")
-    print("  done.")
-
-    # Covering index (created_at, game_id) — eliminates table-row lookups for
-    # the date-filtered game-count query:
+    # (created_at, game_id) — every date aggregate reads this one index: the
+    # timeline's per-day counts (a full scan at startup), the calendar
+    # heat-map, date-range counts, and per-game counts for a date range:
     #   SELECT game_id, COUNT(*) FROM clips
     #   WHERE created_at >= ? AND created_at < ?
     #   GROUP BY game_id
-    # With both columns in the index, SQLite answers the whole query from the
-    # index alone (~1.5 MB) instead of fetching each matching clip row from the
-    # main table (~7 MB+), cutting the sql.js-httpvfs range-request chain for
-    # calendar date-filter interactions.
+    # Both columns are in the index, so none of these touch the table, and
+    # after the timeline's scan the rest are served from cache.
     print("Creating clips_created_at_game covering index …")
     dst_conn.execute(
         "CREATE INDEX IF NOT EXISTS clips_created_at_game ON clips(created_at, game_id)"
     )
     print("  done.")
 
-    # Covering index for game-filtered queries.  Includes every column
-    # selected by the browser's main clips fetch so SQLite can answer the
-    # query entirely from index pages — no table-row lookups required.
-    #
-    # Without this, each page of 24 results required 24 random table-page
-    # fetches (clips for a game are scattered across the B-tree), each one
-    # triggering sql.js-httpvfs's exponential read-ahead and totalling many
-    # MB per interaction.
-    #
-    # With this index:
-    #   date_desc sort  — walks (game_id, created_at DESC, …) and stops
-    #                     after 24 rows; a few KB downloaded.
-    #   view_count sort — must scan all rows for the game in the index and
-    #                     sort in memory, but the scan is sequential and
-    #                     bounded by the clip count for that game.
-    #   date filter     — narrows the created_at range, reducing the scan
-    #                     further for all sort orders.
-    print("Creating clips_game_created covering index …")
+    # Game-filtered queries.  The scraper's schema already has the first two;
+    # IF NOT EXISTS covers source DBs that don't.
+    #   clips_game         (game_id) — its key is (game_id, rowid), so a title
+    #                      search within a game seeks each FTS match directly.
+    #   clips_game_created — "newest first" walks one game's clips in order and
+    #                      stops after a page.
+    #   clips_game_views   — the same for "most viewed"; without it SQLite
+    #                      sorts every clip of the game (≈14 MB for the
+    #                      biggest one).
+    print("Creating game indexes …")
+    dst_conn.execute("CREATE INDEX IF NOT EXISTS clips_game ON clips(game_id)")
     dst_conn.execute(
-        "CREATE INDEX IF NOT EXISTS clips_game_created"
-        " ON clips(game_id, created_at DESC,"
-        "          id, title, creator_name, view_count, duration,"
-        "          thumbnail_url, url)"
+        "CREATE INDEX IF NOT EXISTS clips_game_created ON clips(game_id, created_at DESC)"
+    )
+    dst_conn.execute(
+        "CREATE INDEX IF NOT EXISTS clips_game_views"
+        " ON clips(game_id, view_count DESC, created_at DESC)"
     )
     print("  done.")
 
     # ── 8. VACUUM ─────────────────────────────────────────────────────────
     print("Vacuuming …")
     dst_conn.execute("VACUUM")
+    print("  done.")
+
+    # ── 9. Title index, at the end of the file ────────────────────────────
+    # Searches under 3 characters can't use the trigram index, so they match
+    # titles with LIKE — a scan of every title.  Scanning this index instead of
+    # the table reads about a quarter as much, and it covers every aggregate
+    # (count, per day, per game) for such a search.
+    #
+    # Built after VACUUM so its pages are appended at the end of the file.
+    # sql.js-httpvfs doubles its read-ahead on sequential reads, so a scan ends
+    # with a request as large as the index; if another index followed, the
+    # next read there would fetch twice that (≈4 MB).  At the end, the
+    # read-ahead stops at the end of the file.
+    print("Creating clips_title index …")
+    dst_conn.execute("CREATE INDEX IF NOT EXISTS clips_title ON clips(title, created_at, game_id)")
     print("  done.")
 
     dst_conn.close()

@@ -1,7 +1,7 @@
 import * as state from './state';
 import { initDb, q, DB_URL } from './db';
 import { escHtml, fmtDateTime } from './lib/format';
-import { buildWhere, countSql, listHint, ORDER } from './lib/query';
+import { buildWhere, countSql, HINT_INDEXES, listHint, ORDER } from './lib/query';
 import type { SortKey } from './lib/query';
 import { serializeHash, serializeHashExecptSearchQuery, deserializeHash, HashState } from './lib/hash';
 import { t, lang, setLang, detectLang } from './lib/i18n';
@@ -1503,20 +1503,19 @@ export async function init(): Promise<void> {
     );
     setUseMeta(metaRows.length > 0);
 
-    // INDEXED BY fails outright on a missing index, so the FTS query plans in
+    // INDEXED BY fails outright on a missing index, so the query plans in
     // lib/query.ts are only used when all the indexes they name exist.
-    const hintIndexes = ['clips_created_at', 'clips_created_at_game', 'clips_view_count'];
     const idxRows = await q(
-      `SELECT name FROM sqlite_master WHERE type='index' AND name IN (${hintIndexes.map(() => '?').join(', ')})`,
-      hintIndexes,
+      `SELECT name FROM sqlite_master WHERE type='index' AND name IN (${HINT_INDEXES.map(() => '?').join(', ')})`,
+      HINT_INDEXES,
     );
-    state.setUseIndexHints(idxRows.length === hintIndexes.length);
+    state.setUseIndexHints(idxRows.length === HINT_INDEXES.length);
 
     // Get the DB cutoff date for the live-clip fetch and deduplication.
     // Always use MAX(created_at) directly — clips_meta.max_date is truncated to
     // YYYY-MM-DD for calendar use, which would cause clips already in the DB to
     // be re-fetched as "new" when passed as started_at to the Twitch API.
-    // The clips_created_at index makes this a single B-tree leaf read.
+    // The clips_created_at_game index makes this a single B-tree leaf read.
     const cutoffRows = await q('SELECT MAX(created_at) AS max_date FROM clips');
     _dbCutoffDate = (cutoffRows[0]?.['max_date'] as string | undefined) ?? null;
     // Dev-only override: set localStorage key 'tc_dev_cutoff' to an ISO date

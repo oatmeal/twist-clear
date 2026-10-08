@@ -13,8 +13,12 @@ export const ORDER: Record<SortKey, string> = {
 export interface WhereClause {
   where: string;
   params: Record<string, string>;
-  /** The search uses the FTS5 index (`c.rowid IN (… MATCH :search)`). */
-  fts: boolean;
+  /**
+   * How the search matches titles: 'fts' through the FTS5 index
+   * (`c.rowid IN (… MATCH :search)`), 'like' with LIKE patterns on c.title
+   * (terms under 3 characters, or a DB without clips_fts); null without one.
+   */
+  search: 'fts' | 'like' | null;
 }
 
 export interface BuildWhereOpts {
@@ -26,9 +30,9 @@ export interface BuildWhereOpts {
   tzOffset: number;
   devCutoff?: string | null;
   /**
-   * The DB has the indexes the plan helpers below name in `INDEXED BY`
-   * (clips_created_at, clips_created_at_game, clips_view_count). Built by
-   * prepare_web_db.py, but older prepared DBs may have clips_fts without them.
+   * The DB has HINT_INDEXES, the indexes the plan helpers below name in
+   * `INDEXED BY`. Built by prepare_web_db.py, but older prepared DBs may have
+   * clips_fts without them.
    */
   indexHints?: boolean;
 }
@@ -36,7 +40,7 @@ export interface BuildWhereOpts {
 export function buildWhere(opts: BuildWhereOpts): WhereClause {
   const parts: string[] = [];
   const params: Record<string, string> = {};
-  let fts = false;
+  let search: WhereClause['search'] = null;
 
   if (opts.searchQuery) {
     let handled = false;
@@ -48,7 +52,7 @@ export function buildWhere(opts: BuildWhereOpts): WhereClause {
         parts.push('c.rowid IN (SELECT rowid FROM clips_fts WHERE clips_fts MATCH :search)');
         params[':search'] = ftsQuery;
         handled = true;
-        fts = true;
+        search = 'fts';
       } else {
         // Short terms or pure negation — try boolean LIKE before simple fallback
         const likeQuery = parseLikeSearchQuery(opts.searchQuery);
@@ -56,6 +60,7 @@ export function buildWhere(opts: BuildWhereOpts): WhereClause {
           parts.push(likeQuery.clause);
           Object.assign(params, likeQuery.params);
           handled = true;
+          search = 'like';
         }
       }
     }
@@ -63,6 +68,7 @@ export function buildWhere(opts: BuildWhereOpts): WhereClause {
     if (!handled) {
       parts.push('c.title LIKE :search');
       params[':search'] = `%${opts.searchQuery}%`;
+      search = 'like';
     }
   }
 
@@ -91,53 +97,74 @@ export function buildWhere(opts: BuildWhereOpts): WhereClause {
   return {
     where: parts.length ? `WHERE ${parts.join(' AND ')}` : '',
     params,
-    fts,
+    search,
   };
 }
 
-// ── Query plans for FTS searches ──────────────────────────────────────────
-// SQLite's own plan for `c.rowid IN (SELECT rowid FROM clips_fts …)` looks up
-// every matching row in the clips table. For a common term that is thousands
-// of scattered pages, and sql.js-httpvfs's read-ahead turns them into ~13 MB
-// of HTTP range requests (for りりまる, ~3,100 matches). Walking an index in
-// created_at or view_count order and probing the match list instead reads the
-// index plus the rows actually returned. These helpers pick an `INDEXED BY`
-// hint per query shape; '' leaves the choice to SQLite, which is right without
-// a search, and for rare terms (a handful of row lookups beats walking a whole
-// index). Page counts measured with the sqlite3 CLI's `.stats` are in
+// ── Query plans ───────────────────────────────────────────────────────────
+// SQLite's own plans for a search read the clips table: for FTS,
+// `c.rowid IN (SELECT rowid FROM clips_fts …)` looks up every matching row to
+// read created_at or view_count, or to sort; for LIKE it scans every title.
+// For a common term (or any LIKE search) that is thousands of pages, and
+// sql.js-httpvfs's read-ahead turns them into ~13 MB of HTTP range requests.
+// These helpers pick an `INDEXED BY` hint per query shape instead:
+//   - FTS: walk an index in created_at or view_count order and probe the
+//     match list, so only the rows actually returned are read.
+//   - LIKE: scan clips_title (title, created_at, game_id), a quarter of the
+//     table's size. It covers every aggregate, so one scan serves the count,
+//     timeline, heat-map and preview strip; with few matches, the list too.
+//   - Every date aggregate reads clips_created_at_game, so the timeline's
+//     scan at startup leaves it cached for the calendar and preview strip.
+//   - Lists with many matches walk their sort order and stop once the page
+//     is full; with few, the matches are collected and sorted.
+// '' leaves the choice to SQLite. Measurements are in "Query plans" in
 // frontend/docs/search.md.
 
-/** Result counts above which walking a sort index beats looking up every match. */
-export const MANY_MATCHES = 300;
+/**
+ * Indexes the hints name, built by prepare_web_db.py. `INDEXED BY` a missing
+ * index is an error, so app.ts turns hints on (indexHints) only when the DB
+ * has all of them.
+ */
+export const HINT_INDEXES = [
+  'clips_created_at_game', 'clips_view_count', 'clips_game', 'clips_game_created',
+  'clips_game_views', 'clips_title',
+];
 
-function hintsApply(w: WhereClause, opts: BuildWhereOpts): boolean {
-  return w.fts && opts.indexHints === true;
-}
+/** Result counts above which walking a sort index beats collecting every match. */
+export const MANY_MATCHES = 300;
 
 function hasDateRange(opts: BuildWhereOpts): boolean {
   return opts.calDateFrom !== null || opts.calDateTo !== null;
 }
 
-/** `INDEXED BY` for a per-day GROUP BY (timeline, calendar heat-map). */
-export function byDayHint(w: WhereClause, opts: BuildWhereOpts): string {
-  // With a game filter, SQLite's own plan (clips_game_created) is cheaper.
-  return hintsApply(w, opts) && !opts.gameFilter ? 'INDEXED BY clips_created_at' : '';
-}
-
-/** `INDEXED BY` for a per-game GROUP BY over a date range (calendar preview strip). */
-export function byGameHint(w: WhereClause, opts: BuildWhereOpts): string {
-  // Covering: the probe needs only rowid, created_at and game_id.
-  return hintsApply(w, opts) && !opts.gameFilter ? 'INDEXED BY clips_created_at_game' : '';
+/**
+ * `INDEXED BY` for a COUNT or GROUP BY over the clips matching w: the result
+ * count, the timeline and calendar heat-map (per day), the preview strip (per
+ * game).
+ */
+export function aggregateHint(w: WhereClause, opts: BuildWhereOpts): string {
+  if (opts.indexHints !== true) return '';
+  // Covers title, created_at and game_id: no row lookups.
+  if (w.search === 'like') return 'INDEXED BY clips_title';
+  // With a game filter, SQLite's own plans are cheaper: a count seeks each FTS
+  // match in clips_game (game_id, rowid); per day walks the game's part of
+  // clips_game_created.
+  if (opts.gameFilter) return '';
+  // Covers created_at and game_id. Without a hint SQLite would pick the
+  // smallest index holding created_at (clips_view_count), so the calendar's
+  // queries would read a second index.
+  return 'INDEXED BY clips_created_at_game';
 }
 
 /** `SELECT COUNT(*) AS cnt …` for the clips matching w. */
 export function countSql(w: WhereClause, opts: BuildWhereOpts): string {
-  if (hintsApply(w, opts) && !opts.gameFilter && !hasDateRange(opts) && !opts.devCutoff) {
+  if (opts.indexHints === true && w.search === 'fts'
+      && !opts.gameFilter && !hasDateRange(opts) && !opts.devCutoff) {
     // Search only: count from the FTS index alone (a few pages). Its rows are
     // the clips table's (content=clips, rebuilt by prepare_web_db.py).
     return 'SELECT COUNT(*) AS cnt FROM clips_fts WHERE clips_fts MATCH :search';
   }
-  return `SELECT COUNT(*) AS cnt FROM clips c ${byDayHint(w, opts)} ${w.where}`;
+  return `SELECT COUNT(*) AS cnt FROM clips c ${aggregateHint(w, opts)} ${w.where}`;
 }
 
 /**
@@ -145,21 +172,24 @@ export function countSql(w: WhereClause, opts: BuildWhereOpts): string {
  * order, given `matches` — the result count, which is known by then.
  */
 export function listHint(w: WhereClause, opts: BuildWhereOpts, sort: SortKey, matches: number): string {
-  if (!hintsApply(w, opts)) return '';
+  if (opts.indexHints !== true) return '';
   const byDate = sort === 'date_desc' || sort === 'date_asc';
-  const many = matches > MANY_MATCHES;
-  if (opts.gameFilter) {
-    // clips_game_created already walks one game's clips in date order, or
-    // just a date range of them; only a view sort over many matches does
-    // better by walking views.
-    return !byDate && many && !hasDateRange(opts) ? 'INDEXED BY clips_view_count' : '';
+  const game = opts.gameFilter !== '';
+  const range = hasDateRange(opts);
+  if (matches > MANY_MATCHES || (w.search === null && !range)) {
+    // Many matches (or all of a game's clips): walk the sort order — within
+    // the game, if filtered — and stop once the page is full. A date range is
+    // checked on the index (each one holds created_at).
+    if (game) return byDate ? 'INDEXED BY clips_game_created' : 'INDEXED BY clips_game_views';
+    return byDate ? 'INDEXED BY clips_created_at_game' : 'INDEXED BY clips_view_count';
   }
-  // Walk dates in order and stop once the page is full; a date range bounds
-  // the walk even when matches are rare.
-  if (byDate) return many || hasDateRange(opts) ? 'INDEXED BY clips_created_at' : '';
-  // View sorts: walk views when matches are dense enough to fill a page
-  // quickly (the index covers created_at for a date range), else collect the
-  // range's matches from the date index and sort those.
-  if (many) return 'INDEXED BY clips_view_count';
-  return hasDateRange(opts) ? 'INDEXED BY clips_created_at' : '';
+  // Few matches: collect them all, then sort.
+  //   LIKE: from clips_title, which the count just read.
+  //   FTS + game: seek each match in clips_game (game_id, rowid).
+  //   Game + date range: that range of the game's clips.
+  //   Date range: walk it in clips_created_at_game (probing FTS matches).
+  //   FTS alone: SQLite's plan, a row lookup per match.
+  if (w.search === 'like') return 'INDEXED BY clips_title';
+  if (game) return w.search === 'fts' ? 'INDEXED BY clips_game' : 'INDEXED BY clips_game_created';
+  return range ? 'INDEXED BY clips_created_at_game' : '';
 }

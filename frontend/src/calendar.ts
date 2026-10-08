@@ -11,7 +11,7 @@ import {
   utcTimestampToLocalDate,
 } from './lib/dateUtils';
 import { monthLabel, periodLabel, rangeKind, rangesOverlap, yearLabel } from './lib/dateRange';
-import { buildWhere, byDayHint, byGameHint, type BuildWhereOpts } from './lib/query';
+import { aggregateHint, buildWhere, type BuildWhereOpts } from './lib/query';
 import { filterLiveClips } from './lib/liveFilter';
 import { t, lang } from './lib/i18n';
 
@@ -204,7 +204,7 @@ async function fetchPreviewData(from: string, to: string): Promise<PeriodGames> 
   const w = buildWhere(opts);
   const rows = await q(
     `SELECT c.game_id, g.name, g.name_ja, COUNT(*) AS cnt
-     FROM clips c ${byGameHint(w, opts)}
+     FROM clips c ${aggregateHint(w, opts)}
      JOIN games g ON g.id = c.game_id
      ${w.where}
      GROUP BY c.game_id
@@ -695,7 +695,7 @@ async function queryDays(from: string, to: string): Promise<Record<string, numbe
   const w = buildWhere(opts);
   const rows = await q(
     `SELECT strftime('%Y-%m-%d', c.created_at, :tzmod) AS day, COUNT(*) AS cnt
-     FROM clips c ${byDayHint(w, opts)} ${w.where}
+     FROM clips c ${aggregateHint(w, opts)} ${w.where}
      GROUP BY day`,
     { ...w.params, ':tzmod': tzToSqlModifier(state.tzOffset) },
   );

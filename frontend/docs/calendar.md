@@ -59,15 +59,15 @@ archive, `calMinDate`…`calMaxDate`.
   (`queryDayCounts`), rebinned in JS on resize; re-queried only when the
   search / game filter, timezone, archive bounds or live-clip count change.
   Live clips are merged in through `filterLiveClips()`.
-  - FTS searches add `INDEXED BY clips_created_at` (`byDayHint()`): SQLite's
-    default plan looks up every matching row to read `created_at` (≈1,850 4 KB
-    pages for a common term such as りりまる); scanning the index and probing
-    the match list costs ≈210 pages whatever the term — about the same as no
-    filter. With a game filter the default plan (`clips_game_created`) is
-    cheaper (≈90), so the hint is skipped. See "Query plans" in
-    `docs/search.md`.
-  - LIKE fallback searches (terms under 3 characters) scan the table, but the
-    result-count query already does that same scan, so the pages are cached.
+  - It scans `clips_created_at_game` (`aggregateHint()`), also for an FTS
+    search (≈250 pages whatever the term, probing the match list; SQLite's own
+    plan would look up every matching row, ≈1,850 pages for りりまる). The
+    calendar's heat-map and preview strip read the same index, so after the
+    startup scan they're served from cache. With a game filter SQLite's plan
+    (`clips_game_created`) is cheaper (≈90), so there's no hint. See "Query
+    plans" in `docs/search.md`.
+  - LIKE searches (terms under 3 characters) scan `clips_title`, which the
+    result count has just read.
 - **Calendar-view underline** (`rect.tl-view`): the year or month the calendar
   panel shows, while it's open.
 
@@ -110,7 +110,8 @@ last are navigation only.
 timeline: `queryDays()` counts clips per day over the viewed year or month
 (the date filter is shown, not applied), and the game preview strip under the
 calendar breaks down the hovered period, or by default the selection, by game.
-Both go through `buildWhere()`, so FTS searches get the same index plans.
+Both go through `buildWhere()` and `aggregateHint()`, so searches get the
+same index plans.
 During a search, the default breakdown is computed here (`defaultPeriod()`)
 rather than taken from app.ts, whose per-game counts ignore the search.
 

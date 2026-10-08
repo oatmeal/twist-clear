@@ -24,44 +24,68 @@ does the code fall back to a plain `c.title LIKE '%query%'`.
 
 ## Query plans (`INDEXED BY`)
 
-SQLite's own plan for the FTS filter, `c.rowid IN (SELECT rowid FROM clips_fts
-WHERE clips_fts MATCH :search)`, builds the match list and then looks up every
-matching row in `clips` — to read `created_at` or `view_count`, or to sort.
-For a common term that is most of the table: りりまる (≈3,100 of ≈28,500 clips)
-touches ≈1,850 4 KB pages, and sql.js-httpvfs's read-ahead turns those into
-≈13 MB of range requests — for the result count, the first page of clips, and
-any aggregate alike. Walking an index in date or view order and probing the
-match list instead reads the index plus the rows actually returned.
+Every page SQLite reads is an HTTP range request, and sql.js-httpvfs's
+read-ahead doubles on sequential reads, so a plan that touches the clips table
+row by row costs megabytes. SQLite's own plans for a search do exactly that:
 
-`lib/query.ts` picks a hint per query shape; `buildWhere()` reports whether the
-search went through FTS (`fts`), and hints apply only then, and only when the DB
-has all the indexes they name (`state.useIndexHints`, checked in
-`sqlite_master` at startup — `INDEXED BY` a missing index is an error):
+- **FTS** (`c.rowid IN (SELECT rowid FROM clips_fts WHERE clips_fts MATCH
+  :search)`): builds the match list, then looks up every matching row in
+  `clips` — to read `created_at` or `view_count`, or to sort. For a common term
+  that is most of the table: りりまる (≈3,100 of ≈28,500 clips) touched ≈1,850
+  4 KB pages, ≈13 MB of range requests, for the result count, the first page
+  of clips and any aggregate alike.
+- **LIKE** (terms under 3 characters, see above): scans every title in the
+  table, ≈13 MB.
+
+`lib/query.ts` picks an `INDEXED BY` hint per query shape instead, using the
+indexes `prepare_web_db.py` builds (listed in `docs/metadata.md`). Hints apply
+only when the DB has all of them (`HINT_INDEXES`, checked in `sqlite_master` at
+startup into `state.useIndexHints` — `INDEXED BY` a missing index is an error).
+`buildWhere()` reports how the search matched (`search: 'fts' | 'like' | null`).
 
 | Helper | Used by | Plan |
 |---|---|---|
-| `countSql()` | result count | search only: `COUNT(*)` from `clips_fts` alone (5–15 pages); with a date range: `clips_created_at`; with a game: SQLite's (`clips_game_created`) |
-| `listHint()` | clip list + page-boundary probes | given the result count: > `MANY_MATCHES` (300) → walk the sort's index (`clips_created_at` / `clips_view_count`) and stop when the page is full; a date range → walk `clips_created_at` within it; few matches and no range → SQLite's (a few row lookups beat walking a whole index); a game filter → SQLite's, except a view sort over many matches |
-| `byDayHint()` | timeline, calendar heat-map | no game filter → `clips_created_at` |
-| `byGameHint()` | calendar preview strip | no game filter → `clips_created_at_game` (covering) |
+| `aggregateHint()` | timeline, calendar heat-map (per day), preview strip (per game), result count | LIKE → `clips_title` (title, created_at, game_id): one 2.8 MB scan covers every aggregate; a game filter → SQLite's (an FTS count seeks each match in `clips_game` (game_id, rowid)); else `clips_created_at_game`, also without a search, so the timeline's scan at startup leaves it cached for everything date-based |
+| `countSql()` | result count | FTS search only: `COUNT(*)` from `clips_fts` alone (5–15 pages); otherwise `aggregateHint()` |
+| `listHint()` | clip list + page-boundary probes | given the result count: > `MANY_MATCHES` (300), or a game with no other filter → walk the sort's index (`clips_created_at_game` / `clips_view_count`, or the game's `clips_game_created` / `clips_game_views`) and stop when the page is full; few matches → collect them and sort: LIKE from `clips_title`, FTS + game by seeking `clips_game`, a date range from that range, FTS alone with SQLite's plan (a few row lookups) |
 
-Measured on the dev server: DB bytes fetched after the initial load (28,488
-clips), summing the `content-length` of `clips.db` GET responses in a
-`scripts/qa-browser.mjs` script (`page.on('response')`; skip the size-probe
-HEAD). For a single query, `.stats on` in the sqlite3 CLI prints its "Page
-cache misses" — 4 KB pages, before read-ahead.
+The startup timeline needs the hint too: without one SQLite scans the smallest
+index holding `created_at`, which is `clips_view_count`, and the calendar's
+queries would then read a second index.
 
-| Search | Before | After |
+Measured on the dev server (28,488 clips): DB bytes fetched for a filter
+change after the initial load, summing the `content-length` of `clips.db` GET
+responses in a `scripts/qa-browser.mjs` script (`page.on('requestfinished')`;
+open the app, wait for the requests to stop, set `location.hash`, wait again).
+The initial load itself is ≈1.1 MB either way. For a single query, `.stats on`
+in the sqlite3 CLI prints its "Page cache misses" (4 KB pages, before
+read-ahead) — use Homebrew's `sqlite3`: Apple's `/usr/bin/sqlite3` gives
+different counts from run to run. The browser runs SQLite 3.35, whose planner
+can differ from the CLI's, so check plans in the browser.
+
+| Filter | Before | After |
 |---|---|---|
-| りりまる (3,143 matches), newest first | 13.4 MB | 112 KB |
-| りりまる, most viewed | 13.4 MB | 172 KB |
-| ダイヤ (751) | 13.4 MB | 156 KB |
-| エメラルド (4) | 72 KB | 72 KB |
-| りりまる + a quarter's date range | 13.9 MB | 208 KB |
-| りりまる, calendar open | 13.4 MB, heat-map ignoring the search | 1.1 MB — the strip's all-time game breakdown reads all of `clips_created_at_game` |
+| Overwatch (8,448 clips), most viewed | 14.3 MB | 616 KB |
+| Minecraft (876), most viewed | 13.4 MB | 172 KB |
+| Overwatch + 2024, most viewed | 2.2 MB | 648 KB |
+| 2024, most viewed | 4.3 MB | 84 KB |
+| Calendar open on 2024, hovering three months | 64 KB | 0 KB |
+| りりまる (3,143), newest / most viewed | 112 / 172 KB | 112 / 180 KB |
+| りりまる + 2024, newest | 276 KB | 148 KB |
+| りりまる + Overwatch, most viewed | 1.5 MB | 824 KB |
+| りりまる, calendar open on 2024, hovering three months | 1.1 MB | 112 KB |
+| 神回 (13 matches, LIKE), newest | 13.3 MB | 2.8 MB |
+| 猫 (270, LIKE), most viewed | 18.4 MB | 3.6 MB |
+| OW (1,981, LIKE), newest | 13.3 MB | 4.9 MB |
+| w (3,055, LIKE), most viewed | 18.4 MB | 3.3 MB |
 
-LIKE fallbacks (terms under 3 characters) are untouched: they scan the whole
-table (≈13 MB) once, and later queries hit the cache.
+(Before: the FTS-only hints of the previous version, on a DB without
+`clips_game_views` / `clips_title`.) A LIKE search's 2.8 MB is the
+`clips_title` scan, paid once per session; with many matches the list then
+walks the sort index looking up rows for their titles (≈2 MB for OW).
+`clips_title` is built after the VACUUM so it sits at the end of the file:
+in the middle, a scan's last read-ahead doubling fetched 4 MB of the indexes
+after it.
 
 ## Boolean syntax
 

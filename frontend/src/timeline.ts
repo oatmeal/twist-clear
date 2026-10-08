@@ -21,7 +21,7 @@
 
 import * as state from './state';
 import { q } from './db';
-import { buildWhere, byDayHint } from './lib/query';
+import { aggregateHint, buildWhere } from './lib/query';
 import { filterLiveClips } from './lib/liveFilter';
 import { addDays, tzToSqlModifier, utcTimestampToLocalDate } from './lib/dateUtils';
 import { daysBetween, periodLabel, shiftRange, rangeKind } from './lib/dateRange';
@@ -117,11 +117,11 @@ async function queryDayCounts(filtered: boolean): Promise<Map<string, number>> {
   };
   const w = buildWhere(opts);
   const { where, params } = w;
-  // An FTS search walks the created_at index (≈210 pages whatever the term)
-  // instead of looking up every matching row — see byDayHint().
+  // Scans clips_created_at_game (≈250 pages, also for an FTS search, whatever
+  // the term), or clips_title for a LIKE search — see aggregateHint().
   const rows = await q(
     `SELECT strftime('%Y-%m-%d', c.created_at, :tzmod) AS day, COUNT(*) AS cnt
-     FROM clips c ${byDayHint(w, opts)} ${where}
+     FROM clips c ${aggregateHint(w, opts)} ${where}
      GROUP BY day`,
     { ...params, ':tzmod': tzToSqlModifier(state.tzOffset) },
   );
