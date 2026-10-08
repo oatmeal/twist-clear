@@ -45,7 +45,7 @@ export function clipCardHtml(clip: {
       </button>
       <div class="clip-info">
         <div class="clip-title">
-          <a href="${escHtml(clip.url)}" target="_blank" rel="noopener noreferrer">
+          <a href="${escHtml(clip.url)}" target="_blank" rel="noopener noreferrer" aria-label="${escHtml(t().openOnTwitch(clip.title))}">
             <svg class="clip-ext-icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 1H1v10h10V8.5M7 1h4m0 0v4m0-4L5 7"/></svg>
           </a>
           <span class="clip-title-text">${escHtml(clip.title)}</span>
@@ -78,7 +78,7 @@ export function clipListRowHtml(clip: ClipItem, tzOffset = 0): string {
             <img src="${escHtml(clip.thumbnail_url)}" alt="${escHtml(clip.title)}" loading="lazy">
             <span class="clip-duration">${fmtDuration(clip.duration)}</span>
           </button>
-          <a href="${escHtml(clip.url)}" target="_blank" rel="noopener noreferrer"><svg class="clip-ext-icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 1H1v10h10V8.5M7 1h4m0 0v4m0-4L5 7"/></svg></a>
+          <a href="${escHtml(clip.url)}" target="_blank" rel="noopener noreferrer" aria-label="${escHtml(t().openOnTwitch(clip.title))}"><svg class="clip-ext-icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 1H1v10h10V8.5M7 1h4m0 0v4m0-4L5 7"/></svg></a>
           <span class="clip-title-text">${escHtml(clip.title)}</span>
         </div>
       </td>

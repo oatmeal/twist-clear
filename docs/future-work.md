@@ -10,7 +10,6 @@ Deferred items with rationale. See the relevant source files for implementation 
 - template repo: fork + change settings to deploy an archive for a streamer
 - featured clips
 - custom `site_heading` HTML (e.g. clipmaru's animated icon) can overlap the header buttons at ≤390px; `overflow: hidden` was deliberately removed from the header, so a fix needs to keep decorations unclipped.
-- the open-on-Twitch link on each card/row is an icon-only `<a>` (its SVG is `aria-hidden`) with no accessible name, so screen readers announce just "link" or the URL; it needs an `aria-label` (a new i18n string).
 ---
 
 ## DOM/integration testing (jsdom or Playwright)

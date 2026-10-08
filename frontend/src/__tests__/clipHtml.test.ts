@@ -108,6 +108,22 @@ describe('clipCardHtml', () => {
     const html = clipCardHtml(baseClip({ title: '"><script>evil()</script>' }));
     expect(html).toContain('aria-label="Play: &quot;&gt;&lt;script&gt;');
   });
+
+  it('labels the icon-only Twitch link with the title', () => {
+    const html = clipCardHtml(baseClip());
+    expect(html).toContain('rel="noopener noreferrer" aria-label="Open on Twitch: My Test Clip">');
+  });
+
+  it('labels the Twitch link in Japanese when lang=ja', () => {
+    setLang('ja');
+    const html = clipCardHtml(baseClip());
+    expect(html).toContain('aria-label="「My Test Clip」をTwitchで開く"');
+  });
+
+  it('escapes the title in the Twitch link label', () => {
+    const html = clipCardHtml(baseClip({ title: '"><script>evil()</script>' }));
+    expect(html).toContain('aria-label="Open on Twitch: &quot;&gt;&lt;script&gt;');
+  });
 });
 
 describe('clipListRowHtml', () => {
@@ -169,5 +185,10 @@ describe('clipListRowHtml', () => {
   it('renders the thumbnail as a collapsed play button labelled with the title', () => {
     const html = clipListRowHtml(baseClip());
     expect(html).toContain('<button class="clip-thumb clip-list-thumb" type="button" aria-label="Play: My Test Clip" aria-expanded="false">');
+  });
+
+  it('labels the icon-only Twitch link with the title', () => {
+    const html = clipListRowHtml(baseClip());
+    expect(html).toContain('rel="noopener noreferrer" aria-label="Open on Twitch: My Test Clip">');
   });
 });

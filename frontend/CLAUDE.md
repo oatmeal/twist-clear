@@ -224,7 +224,7 @@ round-trips, date utilities, format helpers, live clip filtering, live coverage
 bisection (suppression discovery, deduplication), OAuth crypto helpers,
 `extractClipSlug` URL parsing, `panelSlot` grid player placement, and
 `clipCardHtml`/`clipListRowHtml` HTML structure, XSS escaping, game name
-language switching, live-clip class, and play-button labels. The render
+language switching, live-clip class, and play-button / Twitch-link labels. The render
 pipeline and DOM interactions are not unit-tested (they require a live DB and
 browser environment); check them against the dev server with a headless-browser
 script — see `scripts/qa-browser.mjs` and "Headless browser for visual QA" in

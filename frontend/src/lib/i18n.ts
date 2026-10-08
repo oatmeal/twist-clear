@@ -83,6 +83,7 @@ export interface Translations {
   tzLabel: string;
   // Embed
   playClip: (title: string) => string;
+  openOnTwitch: (title: string) => string;   // clip card/row's icon-only external link
   closeEmbed: string;
   closeModal: string;
   prevClip: string;
@@ -177,6 +178,7 @@ const en: Translations = {
   listColDate: 'Date',
   tzLabel: 'Timezone',
   playClip: (title) => `Play: ${title}`,
+  openOnTwitch: (title) => `Open on Twitch: ${title}`,
   closeEmbed: 'Close embed',
   closeModal: 'Close',
   prevClip: 'Previous clip',
@@ -277,6 +279,7 @@ const ja: Translations = {
   listColDate: '日時',
   tzLabel: 'タイムゾーン',
   playClip: (title) => `「${title}」を再生`,
+  openOnTwitch: (title) => `「${title}」をTwitchで開く`,
   closeEmbed: '閉じる',
   closeModal: '閉じる',
   prevClip: '前のクリップ',
