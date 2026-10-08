@@ -306,12 +306,6 @@
 }
 
 /* ── Search notice ───────────────────────────────────────────────────────── */
-#cal-search-notice {
-  margin-top: 12px;
-  font-size: 12px;
-  color: var(--muted);
-}
-
 /* ── Heat-map density legend ─────────────────────────────────────────────── */
 .cal-hint { margin-right: auto; }
 @media (hover: none) { .cal-hint { display: none; } }

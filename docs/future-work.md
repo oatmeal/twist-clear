@@ -33,10 +33,11 @@ filter bar always shows — and edits — the filter. Design and code walkthroug
   4 px there) or the date inputs. Option: drag handles on the end cells of the
   selected range in the month grid, mirroring the timeline's handles (with
   `touch-action: none` on the handles only).
-- **Calendar heat-map ignores search** while the timeline follows it. The
-  timeline's trick — `INDEXED BY clips_created_at` for FTS matches, see
-  `queryDayCounts()` in `timeline.ts` — would make `queryYearDays` /
-  `queryMonthDays` cheap with a search too; then drop `#cal-search-notice`.
+- **Heat-map scale under a search or game filter.** The absolute thresholds
+  (1–5 clips = lightest) make most days one shade once a filter leaves a few
+  clips a day; relative quantiles only kick in above an average of 15 a day
+  (`computeHeatThresholds()` in `calendar.ts`). Consider relative shading
+  whenever a filter is active, without overstating 1 vs 2 clips.
 - **Fold the date inputs into the timeline**, e.g. editable start / end labels
   on the band, now that the band shows the filter at all times.
 
@@ -55,6 +56,11 @@ Measured as DB bytes fetched on the dev server (see "Query plans" in
   table (once; later queries hit the cache). An index on `clips(title)` would
   let it scan titles only — they total ≈0.7 MB of the 11 MB table — at the
   cost of that much DB size.
+- **Calendar open during a search: ≈1.1 MB**, almost all the preview strip's
+  all-time game breakdown reading `clips_created_at_game`. The timeline and
+  calendar read the slightly smaller `clips_created_at`; moving them onto
+  `clips_created_at_game` (or dropping `clips_created_at`) would put every
+  date aggregate on one index, cached after the first load.
 
 ---
 

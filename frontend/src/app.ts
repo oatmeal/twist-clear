@@ -313,8 +313,8 @@ async function updateGameFilter(liveGameCounts: Map<string, LiveGameEntry>, live
     // when prefetchDefault() runs for the same date range in renderCalendar().
     if (state.calDateFrom && state.calDateTo) {
       primePreviewCache(
-        localDateToUtcBound(state.calDateFrom, state.tzOffset),
-        localDateToUtcBound(state.calDateTo, state.tzOffset),
+        state.calDateFrom,
+        state.calDateTo,
         rows.map(r => ({
           id:      String(r['id']      ?? ''),
           name:    String(r['name']    ?? ''),
@@ -400,8 +400,8 @@ async function updateGameFilter(liveGameCounts: Map<string, LiveGameEntry>, live
 
   // Push the current game breakdown to the calendar preview strip.
   // When a game filter is active, show only that game's bar (the strip reflects
-  // what's displayed in the clip grid below). Hover previews remain unfiltered
-  // (independent of game/search filters, consistent with the heat-map).
+  // what's displayed in the clip grid below). The calendar ignores this during
+  // a search, since these counts don't apply it — see setDefaultPreviewGames().
   const filteredForPreview = state.gameFilter
     ? rows.filter(r => String(r['id']) === state.gameFilter)
     : rows;
@@ -658,11 +658,6 @@ export async function render(): Promise<void> {
 
     await updateGameFilter(liveGameCounts, liveNoGameCount);
     if (ctrl.signal.aborted) return;
-
-    // Keep the search notice in sync even when renderCalendar() isn't called
-    // (e.g. initial load, hash navigation with calendar closed).
-    const calNotice = document.getElementById('cal-search-notice');
-    if (calNotice) calNotice.style.display = state.searchQuery ? '' : 'none';
 
     const whereOpts = {
       searchQuery: state.searchQuery,
@@ -1135,9 +1130,6 @@ function applyTranslations(): void {
   if (calLegendFewer) calLegendFewer.textContent = tr.calLegendFewer;
   const calLegendMore = document.getElementById('cal-legend-more');
   if (calLegendMore) calLegendMore.textContent = tr.calLegendMore;
-  // Calendar search notice
-  const calSearchNotice = document.getElementById('cal-search-notice');
-  if (calSearchNotice) calSearchNotice.textContent = tr.calSearchNotice;
 }
 
 /**

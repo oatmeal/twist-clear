@@ -46,24 +46,20 @@ because true interleaving would require loading all DB clips into memory.
 
 After `fetchLiveClips()` completes, `updateLiveClipBounds()` in `calendar.ts`
 is called to extend `calMaxDate` if live clips are newer than the DB cutoff
-(which also extends the timeline's axis). The calendar heat-map counts also
-include live clips: `liveDayCountsForYear/Month` aggregate `state.liveClips`
-in-memory and merge into the DB query results in `renderYearView` and
-`renderMonthGrid`. The timeline (`timeline.ts`) merges them into its per-day
-counts the same way, through `filterLiveClips()` so they follow the game and
-search filters.
+(which also extends the timeline's axis). The calendar heat-map and preview
+strip also include live clips: `queryDays()` and `mergeLiveIntoPreview()` in
+`calendar.ts` add the live clips in their range, selected through
+`filterLiveClips()` so they follow the game and search filters. The timeline
+(`timeline.ts`) merges them into its per-day counts the same way.
 
-## Game filter interaction
+## Game filter and search interaction
 
-The calendar heat-map **respects the active game filter** — `queryYearDays`,
-`queryMonthDays` and the live clip count helpers all apply `AND game_id = ?`
-when `state.gameFilter` is set. The game filter change handler and the search
-debounce both call `renderCalendar()` when the calendar is open so the heat-map
-re-renders immediately. **Title search is not reflected** in calendar counts;
-when a search is active, a `#cal-search-notice` element is shown inside the
-calendar panel. The timeline *does* follow search, using a forced index plan
-that makes it cheap (see `docs/calendar.md`); the calendar could adopt the same
-approach (listed in `docs/future-work.md`).
+The calendar heat-map and preview strip **follow the game and search
+filters**, like the timeline: their queries go through `buildWhere()` with the
+viewed period in place of the date filter, and FTS searches use the same
+forced index plans (see "Query plans" in `docs/search.md`). The game filter
+change handler and the search debounce both call `renderCalendar()` when the
+calendar is open so the heat-map re-renders immediately.
 
 The game filter is **never auto-cleared** when the user clicks a calendar period
 where the selected game has no clips. Instead, `updateGameFilter` adds a (0)

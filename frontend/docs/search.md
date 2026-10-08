@@ -58,6 +58,7 @@ cache misses" — 4 KB pages, before read-ahead.
 | ダイヤ (751) | 13.4 MB | 156 KB |
 | エメラルド (4) | 72 KB | 72 KB |
 | りりまる + a quarter's date range | 13.9 MB | 208 KB |
+| りりまる, calendar open | 13.4 MB, heat-map ignoring the search | 1.1 MB — the strip's all-time game breakdown reads all of `clips_created_at_game` |
 
 LIKE fallbacks (terms under 3 characters) are untouched: they scan the whole
 table (≈13 MB) once, and later queries hit the cache.

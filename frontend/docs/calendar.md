@@ -59,13 +59,13 @@ archive, `calMinDate`…`calMaxDate`.
   (`queryDayCounts`), rebinned in JS on resize; re-queried only when the
   search / game filter, timezone, archive bounds or live-clip count change.
   Live clips are merged in through `filterLiveClips()`.
-  - FTS searches add `INDEXED BY clips_created_at`: SQLite's default plan
-    looks up every matching row to read `created_at` (≈1,850 4 KB pages for a
-    common term such as りりまる); scanning the index and probing the match
-    list costs ≈210 pages whatever the term — about the same as no filter.
-    With a game filter the default plan (`clips_game_created`) is cheaper
-    (≈90), so the hint is skipped. The index is checked in `sqlite_master` at
-    init because the raw dev DB may lack it.
+  - FTS searches add `INDEXED BY clips_created_at` (`byDayHint()`): SQLite's
+    default plan looks up every matching row to read `created_at` (≈1,850 4 KB
+    pages for a common term such as りりまる); scanning the index and probing
+    the match list costs ≈210 pages whatever the term — about the same as no
+    filter. With a game filter the default plan (`clips_game_created`) is
+    cheaper (≈90), so the hint is skipped. See "Query plans" in
+    `docs/search.md`.
   - LIKE fallback searches (terms under 3 characters) scan the table, but the
     result-count query already does that same scan, so the pages are cached.
 - **Calendar-view underline** (`rect.tl-view`): the year or month the calendar
@@ -106,8 +106,16 @@ else the latest month with data (`monthForYear`). **"Filter to <period>"**
 the filter it reads "✓ Filtered to …" and is disabled. All of these except the
 last are navigation only.
 
-**Year view**: all twelve mini-months; months without clips are dimmed and
-inert. Clicking anywhere on a card zooms into that month (navigation; the title
+**Heat-map and preview strip** follow the game and search filters, like the
+timeline: `queryDays()` counts clips per day over the viewed year or month
+(the date filter is shown, not applied), and the game preview strip under the
+calendar breaks down the hovered period, or by default the selection, by game.
+Both go through `buildWhere()`, so FTS searches get the same index plans.
+During a search, the default breakdown is computed here (`defaultPeriod()`)
+rather than taken from app.ts, whose per-game counts ignore the search.
+
+**Year view**: all twelve mini-months; months without clips (that match the
+filters) are dimmed and inert. Clicking anywhere on a card zooms into that month (navigation; the title
 is the keyboard-focusable button for the same thing). Hovering a card previews
 the month in the game strip.
 

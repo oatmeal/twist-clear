@@ -8,10 +8,11 @@ import {
   isoWeekNumber,
   todayStrInOffset,
   tzToSqlModifier,
-  localDateToUtcBound,
   utcTimestampToLocalDate,
 } from './lib/dateUtils';
 import { monthLabel, periodLabel, rangeKind, rangesOverlap, yearLabel } from './lib/dateRange';
+import { buildWhere, byDayHint, byGameHint, type BuildWhereOpts } from './lib/query';
+import { filterLiveClips } from './lib/liveFilter';
 import { t, lang } from './lib/i18n';
 
 // ── Raw timestamp storage ─────────────────────────────────────────────────
@@ -41,8 +42,13 @@ const _supportsHover = window.matchMedia('(hover: hover)').matches;
 interface GamePreviewEntry { id: string; name: string; name_ja: string; cnt: number; }
 interface PeriodGames { games: GamePreviewEntry[]; totalGames: number; }
 
-// Cache keyed by `"${utcFrom}|${utcTo}"` — avoids re-querying the same period.
+// DB-only per-game counts by period — avoids re-querying the same period.
+// Keyed by previewKey(); live clips are merged in at display time.
 const _previewCache = new Map<string, PeriodGames>();
+
+function previewKey(from: string, to: string, search: string): string {
+  return `${state.tzOffset}|${from}|${to}|${search}`;
+}
 
 // The default preview to revert to on mouseleave (current selection or nav position).
 let _defaultPreview: { label: string; data: PeriodGames } | null = null;
@@ -63,23 +69,29 @@ let _hovering = false;
  * Called by app.ts after every game count update. Sets the default preview
  * shown in the strip when nothing is hovered and no specific day/week selection
  * overrides it. Immediately updates the strip unless a hover is in progress.
+ * Ignored during a search: these counts come from the game dropdown's query,
+ * which doesn't apply it, so prefetchDefault() supplies the default instead.
  */
 export function setDefaultPreviewGames(
   games: GamePreviewEntry[],
   label: string,
 ): void {
+  if (state.searchQuery) return;
   const data: PeriodGames = { games, totalGames: games.length };
   _defaultPreview = { label, data };
   if (!_hovering) displayPreview(label, data);
 }
 
-/** Seed the preview cache from game-filter results already computed by app.ts. */
+/**
+ * Seed the preview cache from the game dropdown's per-game counts for the
+ * local-date range [from, to), already computed by app.ts (without a search).
+ */
 export function primePreviewCache(
-  utcFrom: string,
-  utcTo: string,
+  from: string,
+  to: string,
   rows: { id: string; name: string; name_ja: string; cnt: number }[],
 ): void {
-  const cacheKey = `${utcFrom}|${utcTo}`;
+  const cacheKey = previewKey(from, to, '');
   if (_previewCache.has(cacheKey)) return; // already populated; don't overwrite
   _previewCache.set(cacheKey, {
     games: rows.map(r => ({ id: r.id, name: r.name, name_ja: r.name_ja, cnt: r.cnt })),
@@ -96,38 +108,37 @@ function formatPreviewDate(dateStr: string): string {
     : d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
-// ── Bound helpers (local dates → UTC strings for preview queries) ──────────
+// ── Query filters ─────────────────────────────────────────────────────────
 
-function yearUtcBounds(y: number): [string, string] {
-  return [
-    localDateToUtcBound(`${y}-01-01`, state.tzOffset),
-    localDateToUtcBound(`${y + 1}-01-01`, state.tzOffset),
-  ];
+/**
+ * buildWhere() options for a calendar query over the local-date range
+ * [from, to): the current search and game filters, but that range in place
+ * of the date filter.
+ */
+function rangeWhereOpts(from: string, to: string, gameFilter = state.gameFilter): BuildWhereOpts {
+  return {
+    searchQuery: state.searchQuery,
+    gameFilter,
+    calDateFrom: from,
+    calDateTo:   to,
+    useFts:      state.useFts,
+    tzOffset:    state.tzOffset,
+    devCutoff:   state.devCutoff,
+    indexHints:  state.useIndexHints,
+  };
 }
 
-function monthUtcBounds(y: number, m: number): [string, string] {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return [
-    localDateToUtcBound(`${y}-${pad(m + 1)}-01`, state.tzOffset),
-    localDateToUtcBound(
-      m === 11 ? `${y + 1}-01-01` : `${y}-${pad(m + 2)}-01`,
-      state.tzOffset,
-    ),
-  ];
-}
-
-function weekUtcBounds(sundayStr: string): [string, string] {
-  return [
-    localDateToUtcBound(sundayStr, state.tzOffset),
-    localDateToUtcBound(addDays(sundayStr, 7), state.tzOffset),
-  ];
-}
-
-function dayUtcBounds(dateStr: string): [string, string] {
-  return [
-    localDateToUtcBound(dateStr, state.tzOffset),
-    localDateToUtcBound(addDays(dateStr, 1), state.tzOffset),
-  ];
+/** Live clips in the local-date range [from, to) matching the search and game filters. */
+function liveClipsIn(from: string, to: string, gameFilter = state.gameFilter) {
+  return filterLiveClips({
+    clips:        state.liveClips,
+    dbCutoffDate: state.dbCutoffDate,
+    calDateFrom:  from,
+    calDateTo:    to,
+    gameFilter,
+    searchQuery:  state.searchQuery,
+    tzOffset:     state.tzOffset,
+  });
 }
 
 // ── Preview DOM helpers ───────────────────────────────────────────────────
@@ -182,19 +193,23 @@ function displayPreview(label: string, data: PeriodGames): void {
 
 // ── Preview data fetching ─────────────────────────────────────────────────
 
-async function fetchPreviewData(utcFrom: string, utcTo: string): Promise<PeriodGames> {
-  const cacheKey = `${utcFrom}|${utcTo}`;
+/** Per-game counts in the local-date range [from, to), with the search (all games). */
+async function fetchPreviewData(from: string, to: string): Promise<PeriodGames> {
+  const cacheKey = previewKey(from, to, state.searchQuery);
   const cached = _previewCache.get(cacheKey);
   if (cached) return cached;
 
+  // All games: callers narrow to the game filter (see gameFiltered()).
+  const opts = rangeWhereOpts(from, to, '');
+  const w = buildWhere(opts);
   const rows = await q(
     `SELECT c.game_id, g.name, g.name_ja, COUNT(*) AS cnt
-     FROM clips c
+     FROM clips c ${byGameHint(w, opts)}
      JOIN games g ON g.id = c.game_id
-     WHERE c.created_at >= :from AND c.created_at < :to
+     ${w.where}
      GROUP BY c.game_id
      ORDER BY cnt DESC`,
-    { ':from': utcFrom, ':to': utcTo },
+    w.params,
   ) as { game_id: unknown; name: unknown; name_ja: unknown; cnt: unknown }[];
 
   const games: GamePreviewEntry[] = rows.map(r => ({
@@ -210,7 +225,23 @@ async function fetchPreviewData(utcFrom: string, utcTo: string): Promise<PeriodG
 
 // ── Preview show/revert ───────────────────────────────────────────────────
 
-async function showPreviewFor(utcFrom: string, utcTo: string, periodStr: string): Promise<void> {
+/**
+ * The breakdown the strip shows for [from, to): DB and live clips matching
+ * the search, narrowed to the game filter so counts agree with the heat-map.
+ */
+async function previewData(from: string, to: string): Promise<PeriodGames> {
+  const data = mergeLiveIntoPreview(await fetchPreviewData(from, to), from, to);
+  if (!state.gameFilter) return data;
+  const games = data.games.filter(g => g.id === state.gameFilter);
+  return { games, totalGames: games.length };
+}
+
+function labelWithCount(periodStr: string, data: PeriodGames): string {
+  const total = data.games.reduce((s, g) => s + g.cnt, 0);
+  return total > 0 ? `${periodStr} · ${t().clipCount(total)}` : periodStr;
+}
+
+async function showPreviewFor(from: string, to: string, periodStr: string): Promise<void> {
   _hovering = true;
   const seq = ++_hoverSeq;
   // Show strip and update label immediately — leave games list intact to avoid flicker
@@ -219,23 +250,9 @@ async function showPreviewFor(utcFrom: string, utcTo: string, periodStr: string)
   const labelEl = document.getElementById('cal-preview-label');
   if (labelEl) labelEl.textContent = periodStr;
 
-  const data = await fetchPreviewData(utcFrom, utcTo);
+  const data = await previewData(from, to);
   if (seq !== _hoverSeq) return; // superseded by another hover or mouseleave
-
-  const mergedData = mergeLiveIntoPreview(data, utcFrom, utcTo);
-
-  // When a game filter is active, restrict the preview to that game so hover
-  // counts are consistent with the heat-map (which also game-filters).
-  const displayData: PeriodGames = state.gameFilter
-    ? (() => {
-        const filtered = mergedData.games.filter(g => g.id === state.gameFilter);
-        return { games: filtered, totalGames: filtered.length };
-      })()
-    : mergedData;
-
-  const total = displayData.games.reduce((s, g) => s + g.cnt, 0);
-  const label = total > 0 ? `${periodStr} · ${t().clipCount(total)}` : periodStr;
-  displayPreview(label, displayData);
+  displayPreview(labelWithCount(periodStr, data), data);
 }
 
 function revertToDefault(): void {
@@ -253,82 +270,66 @@ function revertToDefault(): void {
 // ── Convenience wrappers for each period type ─────────────────────────────
 
 function showPreviewForYear(y: number): void {
-  const [from, to] = yearUtcBounds(y);
-  void showPreviewFor(from, to, String(y));
+  void showPreviewFor(...yearRange(y), String(y));
 }
 
 function showPreviewForMonth(y: number, m: number): void {
-  const [from, to] = monthUtcBounds(y, m);
-  void showPreviewFor(from, to, `${t().monthLong[m]!} ${y}`);
+  void showPreviewFor(...monthRange(y, m), `${t().monthLong[m]!} ${y}`);
 }
 
 function showPreviewForWeek(sundayStr: string): void {
-  const [from, to] = weekUtcBounds(sundayStr);
-  void showPreviewFor(from, to, t().weekLabel(sundayStr));
+  void showPreviewFor(sundayStr, addDays(sundayStr, 7), t().weekLabel(sundayStr));
 }
 
 function showPreviewForDay(dateStr: string): void {
-  const [from, to] = dayUtcBounds(dateStr);
-  void showPreviewFor(from, to, formatPreviewDate(dateStr));
+  void showPreviewFor(dateStr, addDays(dateStr, 1), formatPreviewDate(dateStr));
 }
 
 // ── Default prefetch ──────────────────────────────────────────────────────
 
 /**
- * Determines the "default" period shown in the strip when nothing is hovered:
- * - single-day selection           → that day
- * - week selection                 → that week
- * - calMonth (month view)          → that month
- * - else (year view)               → that year
- *
- * Fetches (or hits cache) and stores in _defaultPreview, then displays it.
- * Called fire-and-forget at the end of renderCalendar().
+ * The period the strip shows when nothing is hovered, when app.ts's default
+ * (pushed via setDefaultPreviewGames) doesn't do:
+ * - a single-day or week selection, no game filter → that day / week
+ * - any selection while a search is active → the selection, or the archive
+ * Else null: app.ts's default (game filter or date range, else all clips) stands.
+ */
+function defaultPeriod(): { from: string; to: string; label: string } | null {
+  const day = selectedDay();
+  const week = selectedWeek();
+  // With a game filter, app.ts's default already names the game and period.
+  if (day && !state.gameFilter) return { from: day, to: addDays(day, 1), label: formatPreviewDate(day) };
+  if (week && !state.gameFilter) return { from: week, to: addDays(week, 7), label: t().weekLabel(week) };
+  if (!state.searchQuery) return null;
+  const from = state.calDateFrom ?? state.calMinDate;
+  const to = state.calDateTo ?? (state.calMaxDate ? addDays(state.calMaxDate, 1) : null);
+  if (!from || !to) return null;
+  return { from, to, label: periodLabel(state.calDateFrom, state.calDateTo, lang) };
+}
+
+/**
+ * Fetches (or hits cache) the defaultPeriod() breakdown, stores it in
+ * _defaultPreview and displays it. Called fire-and-forget at the end of
+ * renderCalendar().
  */
 async function prefetchDefault(): Promise<void> {
   const seq = ++_defaultSeq;
-
-  const day = selectedDay();
-  const week = selectedWeek();
-  if (day && !state.gameFilter) {
-    // Single-day selection, no game filter: override with full day breakdown.
-    // When a game filter is active, app.ts already pushed the correct filtered
-    // default via setDefaultPreviewGames(); don't overwrite it here.
-    const [utcFrom, utcTo] = dayUtcBounds(day);
-    const periodStr = formatPreviewDate(day);
-    if (!_hovering) {
-      const strip = document.getElementById('cal-game-preview');
-      if (strip) strip.style.display = 'block';
-      const labelEl = document.getElementById('cal-preview-label');
-      if (labelEl) labelEl.textContent = periodStr;
-    }
-    const data = await fetchPreviewData(utcFrom, utcTo);
-    if (seq !== _defaultSeq) return;
-    const mergedData = mergeLiveIntoPreview(data, utcFrom, utcTo);
-    const total = mergedData.games.reduce((s, g) => s + g.cnt, 0);
-    const label = total > 0 ? `${periodStr} · ${t().clipCount(total)}` : periodStr;
-    _defaultPreview = { label, data: mergedData };
-    if (!_hovering) displayPreview(label, mergedData);
-  } else if (week && !state.gameFilter) {
-    // Week selection, no game filter: override with full week breakdown.
-    // Same reasoning as the single-day case above.
-    const [utcFrom, utcTo] = weekUtcBounds(week);
-    const periodStr = t().weekLabel(week);
-    if (!_hovering) {
-      const strip = document.getElementById('cal-game-preview');
-      if (strip) strip.style.display = 'block';
-      const labelEl = document.getElementById('cal-preview-label');
-      if (labelEl) labelEl.textContent = periodStr;
-    }
-    const data = await fetchPreviewData(utcFrom, utcTo);
-    if (seq !== _defaultSeq) return;
-    const mergedData = mergeLiveIntoPreview(data, utcFrom, utcTo);
-    const total = mergedData.games.reduce((s, g) => s + g.cnt, 0);
-    const label = total > 0 ? `${periodStr} · ${t().clipCount(total)}` : periodStr;
-    _defaultPreview = { label, data: mergedData };
-    if (!_hovering) displayPreview(label, mergedData);
+  const period = defaultPeriod();
+  if (!period) return;
+  if (!_hovering) {
+    const strip = document.getElementById('cal-game-preview');
+    if (strip) strip.style.display = 'block';
+    const labelEl = document.getElementById('cal-preview-label');
+    if (labelEl) labelEl.textContent = period.label || t().allClips;
   }
-  // else: no specific day/week — app.ts has already pushed the correct default
-  // via setDefaultPreviewGames(); nothing to do here.
+  const data = await previewData(period.from, period.to);
+  if (seq !== _defaultSeq) return;
+  // Name the filtered game, as app.ts's default does (data holds only that game).
+  const game = state.gameFilter ? data.games[0] : undefined;
+  const gameName = game ? (lang === 'ja' && game.name_ja ? game.name_ja : game.name) : '';
+  const label = labelWithCount([gameName, period.label].filter(Boolean).join(' · ') || t().allClips, data);
+  _defaultPreview = { label, data };
+  if (!_hovering) displayPreview(label, data);
 }
 
 // ── Heat color ────────────────────────────────────────────────────────────
@@ -572,38 +573,19 @@ export function syncDateInputs(): void {
   toEl.removeAttribute('max');
 }
 
-// ── Live clip counts ──────────────────────────────────────────────────────
-// These helpers aggregate in-memory live clips into the same bucketed formats
-// as the DB queries, so they can be merged into the heat-map counts.
-
-/** day → count for live clips falling in the given calendar year (local time). */
-function liveDayCountsForYear(year: number): Record<string, number> {
-  const counts: Record<string, number> = {};
-  for (const c of state.liveClips) {
-    if (state.dbCutoffDate && c.created_at <= state.dbCutoffDate) continue;
-    if (state.gameFilter && c.game_id !== state.gameFilter) continue;
-    const day = utcTimestampToLocalDate(c.created_at, state.tzOffset);
-    if (day.startsWith(`${year}-`)) {
-      counts[day] = (counts[day] ?? 0) + 1;
-    }
-  }
-  return counts;
-}
+// ── Live clips in the preview strip ───────────────────────────────────────
 
 /**
- * Merge in-memory live clips that fall in [utcFrom, utcTo) into a DB-only
- * PeriodGames result.  Returns `data` unchanged if there are no live clips
- * in the range.  The cache is intentionally left untouched so it stays
- * DB-only and can be re-merged whenever live clips update.
+ * Merge in-memory live clips in the local-date range [from, to) that match the
+ * search into a DB-only PeriodGames result. Returns `data` unchanged if there
+ * are none. The cache is intentionally left untouched so it stays DB-only and
+ * can be re-merged whenever live clips update.
  */
-function mergeLiveIntoPreview(data: PeriodGames, utcFrom: string, utcTo: string): PeriodGames {
+function mergeLiveIntoPreview(data: PeriodGames, from: string, to: string): PeriodGames {
   if (state.liveClips.length === 0) return data;
 
   const liveCounts = new Map<string, { name: string; count: number }>();
-  for (const c of state.liveClips) {
-    // ISO 8601 strings are lexicographically ordered — string comparison is correct.
-    if (state.dbCutoffDate && c.created_at <= state.dbCutoffDate) continue;
-    if (c.created_at < utcFrom || c.created_at >= utcTo) continue;
+  for (const c of liveClipsIn(from, to, '')) {
     const entry = liveCounts.get(c.game_id);
     if (entry) { entry.count++; }
     else        { liveCounts.set(c.game_id, { name: c.game_name, count: 1 }); }
@@ -619,22 +601,6 @@ function mergeLiveIntoPreview(data: PeriodGames, utcFrom: string, utcTo: string)
 
   const games = [...merged.values()].sort((a, b) => b.cnt - a.cnt);
   return { games, totalGames: games.length };
-}
-
-/** day → count for live clips falling in the given calendar month (local time). */
-function liveDayCountsForMonth(year: number, month: number): Record<string, number> {
-  const pad    = (n: number) => String(n).padStart(2, '0');
-  const prefix = `${year}-${pad(month + 1)}-`;
-  const counts: Record<string, number> = {};
-  for (const c of state.liveClips) {
-    if (state.dbCutoffDate && c.created_at <= state.dbCutoffDate) continue;
-    if (state.gameFilter && c.game_id !== state.gameFilter) continue;
-    const day = utcTimestampToLocalDate(c.created_at, state.tzOffset);
-    if (day.startsWith(prefix)) {
-      counts[day] = (counts[day] ?? 0) + 1;
-    }
-  }
-  return counts;
 }
 
 // ── Date-range helpers ────────────────────────────────────────────────────
@@ -720,40 +686,26 @@ function monthFullyInRange(year: number, month: number): boolean {
 
 // ── DB queries ────────────────────────────────────────────────────────────
 
-async function queryYearDays(year: number): Promise<{ day: string; cnt: number }[]> {
-  const mod  = tzToSqlModifier(state.tzOffset);
-  const from = localDateToUtcBound(`${year}-01-01`, state.tzOffset);
-  const to   = localDateToUtcBound(`${year + 1}-01-01`, state.tzOffset);
-  const gameClause = state.gameFilter ? ' AND game_id = ?' : '';
-  const params: (string | number)[] = [mod, from, to];
-  if (state.gameFilter) params.push(state.gameFilter);
-  return (await q(
-    `SELECT strftime('%Y-%m-%d', created_at, ?) AS day, COUNT(*) AS cnt
-     FROM clips
-     WHERE created_at >= ? AND created_at < ?${gameClause}
+/**
+ * Clips per local day in [from, to) matching the search and game filters,
+ * live clips included.
+ */
+async function queryDays(from: string, to: string): Promise<Record<string, number>> {
+  const opts = rangeWhereOpts(from, to);
+  const w = buildWhere(opts);
+  const rows = await q(
+    `SELECT strftime('%Y-%m-%d', c.created_at, :tzmod) AS day, COUNT(*) AS cnt
+     FROM clips c ${byDayHint(w, opts)} ${w.where}
      GROUP BY day`,
-    params,
-  )) as { day: string; cnt: number }[];
-}
-
-async function queryMonthDays(year: number, month: number): Promise<{ day: string; cnt: number }[]> {
-  const pad  = (n: number) => String(n).padStart(2, '0');
-  const from = localDateToUtcBound(`${year}-${pad(month + 1)}-01`, state.tzOffset);
-  const to   = localDateToUtcBound(
-    month === 11 ? `${year + 1}-01-01` : `${year}-${pad(month + 2)}-01`,
-    state.tzOffset,
+    { ...w.params, ':tzmod': tzToSqlModifier(state.tzOffset) },
   );
-  const mod  = tzToSqlModifier(state.tzOffset);
-  const gameClause = state.gameFilter ? ' AND game_id = ?' : '';
-  const params: (string | number)[] = [mod, from, to];
-  if (state.gameFilter) params.push(state.gameFilter);
-  return (await q(
-    `SELECT strftime('%Y-%m-%d', created_at, ?) AS day, COUNT(*) AS cnt
-     FROM clips
-     WHERE created_at >= ? AND created_at < ?${gameClause}
-     GROUP BY day`,
-    params,
-  )) as { day: string; cnt: number }[];
+  const counts: Record<string, number> = {};
+  for (const r of rows) counts[String(r['day'])] = Number(r['cnt']);
+  for (const c of liveClipsIn(from, to)) {
+    const day = utcTimestampToLocalDate(c.created_at, state.tzOffset);
+    counts[day] = (counts[day] ?? 0) + 1;
+  }
+  return counts;
 }
 
 // ── Main calendar dispatcher ──────────────────────────────────────────────
@@ -771,11 +723,6 @@ export async function renderCalendar(): Promise<void> {
   } else {
     await renderMonthView();
   }
-
-  // Show notice when a title search is active — calendar counts reflect the
-  // game filter but cannot reflect the text search (no efficient aggregate index).
-  const notice = document.getElementById('cal-search-notice');
-  if (notice) notice.style.display = state.searchQuery ? '' : 'none';
 
   renderHeader();
   void prefetchDefault(); // fire-and-forget: populate the game preview strip
@@ -822,23 +769,16 @@ async function renderYearView(): Promise<void> {
   document.getElementById('cal-month-view')!.style.display = 'none';
 
   const year = state.calYear;
-  const yearData = await queryYearDays(year);
+  const dayMap = await queryDays(...yearRange(year));
   // Navigated elsewhere while the query ran — a newer render owns the DOM.
   if (state.calYear !== year || state.calMonth !== null) return;
-  const dayMap = Object.fromEntries(yearData.map(r => [r.day, r.cnt]));
-
-  // Merge live clip counts (live clips are always newer than the DB cutoff,
-  // so they appear at the end and never overlap archived days).
-  for (const [day, cnt] of Object.entries(liveDayCountsForYear(year))) {
-    dayMap[day] = ((dayMap[day] as number | undefined) ?? 0) + cnt;
-  }
 
   const monthTotals = new Array<number>(12).fill(0);
   for (const [key, cnt] of Object.entries(dayMap)) {
-    monthTotals[parseInt(key.slice(5, 7), 10) - 1]! += cnt as number;
+    monthTotals[parseInt(key.slice(5, 7), 10) - 1]! += cnt;
   }
 
-  const dayCountsArr  = Object.values(dayMap) as number[];
+  const dayCountsArr  = Object.values(dayMap);
   const nonZeroDays   = dayCountsArr.filter(v => v > 0);
   const avgDay        = nonZeroDays.length > 0
     ? nonZeroDays.reduce((a, b) => a + b, 0) / nonZeroDays.length
@@ -887,7 +827,7 @@ async function renderYearView(): Promise<void> {
     }
     for (let day = 1; day <= totalDays; day++) {
       const key  = localDateStr(year, m, day);
-      const cnt  = (dayMap[key] as number | undefined) ?? 0;
+      const cnt  = dayMap[key] ?? 0;
       const cell = document.createElement('div');
       cell.className = 'mini-day';
       cell.dataset['date'] = key;
@@ -928,22 +868,16 @@ async function renderMonthView(): Promise<void> {
 async function renderMonthGrid(): Promise<void> {
   const year  = state.calYear;
   const month = state.calMonth!;
-  const monthData = await queryMonthDays(year, month);
+  const dayMap = await queryDays(...monthRange(year, month));
   // Navigated elsewhere while the query ran — a newer render owns the DOM.
   if (state.calYear !== year || state.calMonth !== month) return;
-  const dayMap    = Object.fromEntries(monthData.map(r => [r.day, r.cnt]));
-
-  // Merge live clip counts into day map.
-  for (const [day, cnt] of Object.entries(liveDayCountsForMonth(state.calYear, state.calMonth!))) {
-    dayMap[day] = ((dayMap[day] as number | undefined) ?? 0) + cnt;
-  }
 
   const totalDays  = daysInMonth(state.calYear, state.calMonth!);
   const firstDow   = firstDayOfMonth(state.calYear, state.calMonth!);
   const today      = todayStrInOffset(state.tzOffset);
   const totalSlots = Math.ceil((firstDow + totalDays) / 7) * 7;
 
-  const dayCountsArr  = Object.values(dayMap) as number[];
+  const dayCountsArr  = Object.values(dayMap);
   const nonZeroDays   = dayCountsArr.filter(v => v > 0);
   const avgDay        = nonZeroDays.length > 0
     ? nonZeroDays.reduce((a, b) => a + b, 0) / nonZeroDays.length
@@ -1001,7 +935,7 @@ async function renderMonthGrid(): Promise<void> {
       cell.className = 'month-day-cell empty';
     } else {
       const dateKey = localDateStr(state.calYear, state.calMonth!, day);
-      const cnt     = (dayMap[dateKey] as number | undefined) ?? 0;
+      const cnt     = dayMap[dateKey] ?? 0;
 
       const classes = ['month-day-cell'];
       if (dateKey === today)         classes.push('today');
@@ -1177,11 +1111,7 @@ function onCellPointerMove(e: PointerEvent): void {
   paintDragRange(range);
   if (_supportsHover) {
     const [from, to] = [range[0], addDays(range[1], 1)];
-    void showPreviewFor(
-      localDateToUtcBound(from, state.tzOffset),
-      localDateToUtcBound(to, state.tzOffset),
-      periodLabel(from, to, lang),
-    );
+    void showPreviewFor(from, to, periodLabel(from, to, lang));
   }
 }
 

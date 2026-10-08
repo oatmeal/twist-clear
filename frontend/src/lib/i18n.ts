@@ -108,7 +108,6 @@ export interface Translations {
   monthLong: readonly string[];
   dayOfWeek: readonly string[];
   // Calendar search notice
-  calSearchNotice: string;   // shown when a title search is active (counts don't reflect it)
   // Calendar view header
   calPrevYear: string;
   calNextYear: string;
@@ -230,7 +229,6 @@ const en: Translations = {
   monthLong: ['January', 'February', 'March', 'April', 'May', 'June',
               'July', 'August', 'September', 'October', 'November', 'December'],
   dayOfWeek: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
-  calSearchNotice: 'Calendar clip counts do not reflect the active title search',
   calPrevYear: 'Previous year',
   calNextYear: 'Next year',
   calPrevMonth: 'Previous month',
@@ -353,7 +351,6 @@ const ja: Translations = {
   monthShort: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'],
   monthLong: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'],
   dayOfWeek: ['日', '月', '火', '水', '木', '金', '土'],
-  calSearchNotice: 'カレンダーのクリップ数はタイトル検索を反映していません',
   calPrevYear: '前の年',
   calNextYear: '次の年',
   calPrevMonth: '前の月',
