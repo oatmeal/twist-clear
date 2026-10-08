@@ -1248,12 +1248,18 @@ function bindEvents(): void {
     void render();
   });
 
-  const gameSelect = document.getElementById('game-filter') as HTMLSelectElement;
-  gameSelect.addEventListener('change', e => {
-    state.setGameFilter((e.target as HTMLSelectElement).value);
+  // Shared by the dropdown and the game links on clips: the calendar
+  // heat-map is game-filtered too, so it must re-render alongside the grid.
+  const applyGameFilter = (gameId: string): void => {
+    state.setGameFilter(gameId);
     state.setCurrentPage(1);
     void render();
     if (state.currentView === 'calendar') void renderCalendar();
+  };
+
+  const gameSelect = document.getElementById('game-filter') as HTMLSelectElement;
+  gameSelect.addEventListener('change', e => {
+    applyGameFilter((e.target as HTMLSelectElement).value);
   });
 
   // ── Layout toggle ─────────────────────────────────────────────────────────
@@ -1294,11 +1300,7 @@ function bindEvents(): void {
     if (target.closest('.clip-game-link')) {
       const btn = target.closest<HTMLElement>('.clip-game-link');
       const gameId = btn?.dataset['gameId'] ?? '';
-      if (gameId) {
-        state.setGameFilter(gameId);
-        state.setCurrentPage(1);
-        void render();
-      }
+      if (gameId) applyGameFilter(gameId);
       return;
     }
     // List-view row: expand embed row below on click (except title link or game filter).

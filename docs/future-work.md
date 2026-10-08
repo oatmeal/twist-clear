@@ -21,11 +21,6 @@ ordered by impact. Remove items (and eventually this section) as they're done.
 
 ### Bugs
 
-- **Card game link doesn't refresh the calendar.** The `.clip-game-link`
-  click handler in `app.ts` sets the game filter and calls `render()` but not
-  `renderCalendar()` (the `#game-filter` change handler does both). With the
-  calendar open, the heat-map keeps all-games counts while the preview strip
-  shows the new game.
 - **Range tint hardcodes Twitch purple.** `inRangeBoxShadow()` and the
   full-month tint in `renderYearView()` use `rgba(145, 71, 255, …)` instead of
   `--accent`, so custom palettes don't match.
