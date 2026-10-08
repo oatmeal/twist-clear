@@ -24,7 +24,8 @@ src/
   auth.ts       # Twitch OAuth 2.0 implicit grant (token storage, logout)
   calendar.ts   # Calendar view — year → month → day/week drill-down
   db.ts         # sql.js-httpvfs worker init; exports async q() query helper
-  embed.ts      # Clip embed expand/collapse, prev/next navigation (grid + list)
+  embed.ts      # Clip embed expand/collapse, prev/next peek navigation (grid + list)
+  filterBar.ts  # Non-sticky filter bar + the tab that pins it back in when scrolled away
   state.ts      # All shared mutable state + explicit typed setters
   twitch.ts     # Helix API client for live clips (auto-paginates, resolves game names)
   lib/

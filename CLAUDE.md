@@ -20,6 +20,12 @@ don't wait to be asked:
 
 Always ensure tests and lint commands pass. (See below for specifics.)
 
+## Subagents
+
+Opus sessions may dispatch Sonnet subagents (`model: "sonnet"`) for any task
+they can help with — e.g. screenshot/visual QA sweeps, broad code searches,
+doc updates, mechanical refactors — to save tokens. No need to ask first.
+
 ---
 
 ## What this repo is

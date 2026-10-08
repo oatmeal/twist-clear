@@ -32,21 +32,25 @@ let _expandedRow: HTMLElement | null = null;
 // knows it's a card swap, not a standalone close, and skips the post-collapse render.
 let _expanding = false;
 let _insertedEmbedRow: HTMLElement | null = null;
-// Titles of the last clip on the previous page / first clip on the next page.
+
+/** What a prev/next peek button needs to show for a neighbouring clip. */
+export type PeekClip = { title: string; thumbnail_url: string };
+
+// The last clip on the previous page / first clip on the next page.
 // Set by app.ts render() after the adjacent-page prefetch; read here by
-// expandCard/expandRow to populate page-boundary nav button labels.
-let _prevPageLastTitle: string | null = null;
-let _nextPageFirstTitle: string | null = null;
+// expandCard/expandRow to populate the page-boundary peek buttons.
+let _prevPageLast: PeekClip | null = null;
+let _nextPageFirst: PeekClip | null = null;
 
 // ── Accessors for app.ts ──────────────────────────────────────────────────
 
 export function getExpandedCard(): HTMLElement | null { return _expandedCard; }
 export function getExpandedRow():  HTMLElement | null { return _expandedRow; }
 
-/** Called by render() after computing adjacent-page boundary titles. */
-export function setPageBoundaryTitles(prev: string | null, next: string | null): void {
-  _prevPageLastTitle = prev;
-  _nextPageFirstTitle = next;
+/** Called by render() after prefetching the adjacent-page boundary clips. */
+export function setPageBoundaryClips(prev: PeekClip | null, next: PeekClip | null): void {
+  _prevPageLast = prev;
+  _nextPageFirst = next;
 }
 
 /**
@@ -82,6 +86,76 @@ export function extractClipSlug(url: string): string | null {
   }
 }
 
+function embedSrc(slug: string): string {
+  const parent = encodeURIComponent(window.location.hostname || 'localhost');
+  return `https://clips.twitch.tv/embed?clip=${encodeURIComponent(slug)}&parent=${parent}&autoplay=false`;
+}
+
+function embedWrapHtml(slug: string): string {
+  return `<div class="clip-embed-wrap">` +
+    `<button class="clip-close-btn" aria-label="${escHtml(t().closeEmbed)}" type="button">&#x2715;</button>` +
+    `<iframe src="${escHtml(embedSrc(slug))}" class="clip-iframe" allowfullscreen scrolling="no"></iframe>` +
+    `</div>`;
+}
+
+/** Read a rendered card/row's title and thumbnail for use in a peek button. */
+function peekFromEl(el: HTMLElement | undefined): PeekClip | null {
+  if (!el) return null;
+  return {
+    title: el.querySelector('.clip-title-text')?.textContent?.trim() ?? '',
+    thumbnail_url: el.querySelector('.clip-thumb img')?.getAttribute('src') ?? '',
+  };
+}
+
+/** Neighbouring clips of item `idx` in `items`, falling back to the
+ *  prefetched page-boundary clips at either end of the page. */
+function neighbours(items: HTMLElement[], idx: number): {
+  prev: PeekClip | null; next: PeekClip | null;
+  prevDisabled: boolean; nextDisabled: boolean;
+} {
+  const totalPages = Math.ceil(state.totalClips / state.PAGE_SIZE);
+  return {
+    prev: peekFromEl(items[idx - 1]) ?? (idx === 0 ? _prevPageLast : null),
+    next: peekFromEl(items[idx + 1]) ?? (idx === items.length - 1 ? _nextPageFirst : null),
+    prevDisabled: idx <= 0 && state.currentPage <= 1,
+    nextDisabled: idx >= items.length - 1 && state.currentPage >= totalPages,
+  };
+}
+
+const CHEVRON_LEFT  = '<svg viewBox="0 0 12 12" aria-hidden="true"><polyline points="7.5 2 3.5 6 7.5 10"/></svg>';
+const CHEVRON_RIGHT = '<svg viewBox="0 0 12 12" aria-hidden="true"><polyline points="4.5 2 8.5 6 4.5 10"/></svg>';
+
+/**
+ * Prev/next "peek" button: a mini clip card (direction label, thumbnail with
+ * an arrow badge, title) so it reads as "the clip you'll go to" rather than
+ * an abstract arrow. Laid out beside the player on wide screens and below it
+ * on narrow ones (see .clip-peek in style.css). A disabled button stays in
+ * the DOM (visibility: hidden) so the player remains centred.
+ */
+function peekButtonHtml(dir: 'prev' | 'next', clip: PeekClip | null, disabled: boolean): string {
+  const tr = t();
+  const label = dir === 'prev' ? tr.prevClip : tr.nextClip;
+  const chevron = dir === 'prev' ? CHEVRON_LEFT : CHEVRON_RIGHT;
+  const aria = clip?.title ? `${label}: ${clip.title}` : label;
+  const img = clip?.thumbnail_url
+    ? `<img src="${escHtml(clip.thumbnail_url)}" alt="" loading="lazy">`
+    : '';
+  const dirLabel = dir === 'prev'
+    ? `${chevron}<span>${escHtml(label)}</span>`
+    : `<span>${escHtml(label)}</span>${chevron}`;
+  return `<button class="clip-peek clip-${dir}-btn" type="button" aria-label="${escHtml(aria)}"${disabled ? ' disabled' : ''}>` +
+    `<span class="clip-peek-dir">${dirLabel}</span>` +
+    `<span class="clip-peek-thumb">${img}<span class="clip-peek-arrow">${chevron}</span></span>` +
+    `<span class="clip-peek-title">${escHtml(clip?.title ?? '')}</span>` +
+    `</button>`;
+}
+
+function hideBrokenPeekImages(container: HTMLElement): void {
+  container.querySelectorAll<HTMLImageElement>('.clip-peek-thumb img').forEach(img => {
+    img.addEventListener('error', () => img.remove(), { once: true });
+  });
+}
+
 function _onDocClickOutside(e: MouseEvent): void {
   const target = e.target as Node;
   if (_expandedCard && !_expandedCard.contains(target)) {
@@ -100,10 +174,7 @@ export function collapseCard(card: HTMLElement): void {
   const embedWrap = card.querySelector<HTMLElement>('.clip-embed-wrap');
   if (embedWrap && savedThumb) embedWrap.replaceWith(savedThumb);
   _thumbCache.delete(card);
-  // Restore clip-info from nav row if present
-  const navRow = card.querySelector<HTMLElement>('.clip-nav-row');
-  const info = navRow?.querySelector<HTMLElement>('.clip-info');
-  if (navRow && info) navRow.replaceWith(info);
+  card.querySelectorAll('.clip-peek').forEach(el => el.remove());
   card.classList.remove('expanded');
   document.removeEventListener('click', _onDocClickOutside);
   _expandedCard = null;
@@ -124,54 +195,22 @@ export function expandCard(card: HTMLElement, skipScroll = false): void {
     return;
   }
 
-  const parent = encodeURIComponent(window.location.hostname || 'localhost');
-  const src = `https://clips.twitch.tv/embed?clip=${encodeURIComponent(slug)}&parent=${parent}&autoplay=false`;
-
   const thumb = card.querySelector<HTMLElement>('.clip-thumb');
   if (!thumb) return;
 
   _thumbCache.set(card, thumb);
 
-  const embedWrap = document.createElement('div');
-  embedWrap.className = 'clip-embed-wrap';
-  embedWrap.innerHTML =
-    `<button class="clip-close-btn" aria-label="${escHtml(t().closeEmbed)}" type="button">&#x2715;</button>` +
-    `<iframe src="${escHtml(src)}" class="clip-iframe" allowfullscreen scrolling="no"></iframe>`;
-
-  thumb.replaceWith(embedWrap);
-
-  // Wrap clip-info with prev/next navigation buttons
-  const info = card.querySelector<HTMLElement>('.clip-info');
-  if (info) {
-    const allCards = Array.from(card.parentElement?.querySelectorAll<HTMLElement>('.clip-card') ?? []);
-    const idx = allCards.indexOf(card);
-    const totalPages = Math.ceil(state.totalClips / state.PAGE_SIZE);
-    // Read adjacent titles: same-page neighbour from the DOM, page-boundary from prefetch cache.
-    const prevTitle =
-      allCards[idx - 1]?.querySelector<HTMLElement>('.clip-title-text')?.textContent?.trim()
-      ?? (idx === 0 ? _prevPageLastTitle : null)
-      ?? '';
-    const nextTitle =
-      allCards[idx + 1]?.querySelector<HTMLElement>('.clip-title-text')?.textContent?.trim()
-      ?? (idx === allCards.length - 1 ? _nextPageFirstTitle : null)
-      ?? '';
-    const navRow = document.createElement('div');
-    navRow.className = 'clip-nav-row';
-    const prevBtn = document.createElement('button');
-    prevBtn.className = 'clip-nav-btn clip-prev-btn';
-    prevBtn.type = 'button';
-    prevBtn.setAttribute('aria-label', t().prevClip);
-    prevBtn.disabled = idx <= 0 && state.currentPage <= 1;
-    prevBtn.innerHTML = `&#8592;<span class="clip-nav-title">${escHtml(prevTitle)}</span>`;
-    const nextBtn = document.createElement('button');
-    nextBtn.className = 'clip-nav-btn clip-next-btn';
-    nextBtn.type = 'button';
-    nextBtn.setAttribute('aria-label', t().nextClip);
-    nextBtn.disabled = idx >= allCards.length - 1 && state.currentPage >= totalPages;
-    nextBtn.innerHTML = `<span class="clip-nav-title">${escHtml(nextTitle)}</span>&#8594;`;
-    info.replaceWith(navRow);
-    navRow.append(prevBtn, info, nextBtn);
-  }
+  // Replace the thumbnail with [prev peek][player][next peek]; the expanded
+  // card is a CSS grid that places these (and .clip-info) responsively.
+  const allCards = Array.from(card.parentElement?.querySelectorAll<HTMLElement>('.clip-card') ?? []);
+  const n = neighbours(allCards, allCards.indexOf(card));
+  const tmp = document.createElement('div');
+  tmp.innerHTML =
+    peekButtonHtml('prev', n.prev, n.prevDisabled) +
+    embedWrapHtml(slug) +
+    peekButtonHtml('next', n.next, n.nextDisabled);
+  hideBrokenPeekImages(tmp);
+  thumb.replaceWith(...Array.from(tmp.children));
 
   card.classList.add('expanded');
   _expandedCard = card;
@@ -206,28 +245,9 @@ export function expandRow(row: HTMLElement, skipScroll = false): void {
     return;
   }
 
-  const parent = encodeURIComponent(window.location.hostname || 'localhost');
-  const src = `https://clips.twitch.tv/embed?clip=${encodeURIComponent(slug)}&parent=${parent}&autoplay=false`;
-
   const tbody = row.closest('tbody');
   const allRows = tbody ? Array.from(tbody.querySelectorAll<HTMLElement>('.clip-row')) : [];
-  const idx = allRows.indexOf(row);
-
-  // Read adjacent titles: same-page neighbour from the DOM, page-boundary from prefetch cache.
-  const prevTitle =
-    allRows[idx - 1]?.querySelector<HTMLElement>('.clip-title-text')?.textContent?.trim()
-    ?? (idx === 0 ? _prevPageLastTitle : null)
-    ?? '';
-  const nextTitle =
-    allRows[idx + 1]?.querySelector<HTMLElement>('.clip-title-text')?.textContent?.trim()
-    ?? (idx === allRows.length - 1 ? _nextPageFirstTitle : null)
-    ?? '';
-
-  const totalPagesRow = Math.ceil(state.totalClips / state.PAGE_SIZE);
-  const prevDisabled = idx <= 0 && state.currentPage <= 1;
-  const nextDisabled = idx >= allRows.length - 1 && state.currentPage >= totalPagesRow;
-  const prevArrow = idx <= 0 && state.currentPage > 1 ? '&#8592;' : '&#8593;';
-  const nextArrow = idx >= allRows.length - 1 && state.currentPage < totalPagesRow ? '&#8594;' : '&#8595;';
+  const n = neighbours(allRows, allRows.indexOf(row));
 
   // Count only visible cells — hidden cells (display:none from responsive CSS) must be excluded.
   const colCount = Array.from(row.querySelectorAll('td'))
@@ -237,14 +257,12 @@ export function expandRow(row: HTMLElement, skipScroll = false): void {
   const td = document.createElement('td');
   td.colSpan = colCount;
   td.innerHTML =
-    `<div class="clip-embed-wrap">` +
-    `<button class="clip-close-btn" aria-label="${escHtml(t().closeEmbed)}" type="button">&#x2715;</button>` +
-    `<iframe src="${escHtml(src)}" class="clip-iframe" allowfullscreen scrolling="no"></iframe>` +
-    `</div>` +
-    `<div class="clip-list-nav-row">` +
-    `<button class="clip-nav-btn clip-prev-btn" type="button" aria-label="${escHtml(t().prevClip)}"${prevDisabled ? ' disabled' : ''}><span class="clip-nav-title">${escHtml(prevTitle)}</span>${prevArrow}</button>` +
-    `<button class="clip-nav-btn clip-next-btn" type="button" aria-label="${escHtml(t().nextClip)}"${nextDisabled ? ' disabled' : ''}>${nextArrow}<span class="clip-nav-title">${escHtml(nextTitle)}</span></button>` +
+    `<div class="clip-stage">` +
+    peekButtonHtml('prev', n.prev, n.prevDisabled) +
+    embedWrapHtml(slug) +
+    peekButtonHtml('next', n.next, n.nextDisabled) +
     `</div>`;
+  hideBrokenPeekImages(td);
   embedRow.appendChild(td);
 
   row.insertAdjacentElement('afterend', embedRow);

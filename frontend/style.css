@@ -209,12 +209,91 @@ header .streamer-tag {
 }
 .banner-dismiss:hover { color: var(--text); }
 
-/* ── Controls bar ── */
+/* ── Controls bar ──
+   In normal flow (scrolls away with the page). .pinned makes it sticky again
+   after the user clicks the filter tab; see src/filterBar.ts. */
 #sticky-bar {
-  position: sticky;
-  top: 0;
+  position: relative;
   z-index: 10;
 }
+#sticky-bar.pinned {
+  position: sticky;
+  top: 0;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+  animation: bar-slide-in 0.18s ease-out;
+}
+@keyframes bar-slide-in {
+  from { transform: translateY(-100%); }
+  to   { transform: none; }
+}
+
+/* ── Filter tab ──
+   Hidden while the bar is in view. Once it scrolls away (.offscreen), a thin
+   rule across the top of the viewport with a tab hanging from it marks where
+   the folded-up bar lives. While pinned, the tab hangs below the bar instead
+   and its chevron flips to show "collapse". */
+.filter-tab {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 11;
+  align-items: center;
+  gap: 6px;
+  max-width: min(72vw, 520px);
+  padding: 4px 14px 5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.22);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.3;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+.filter-tab:hover { color: var(--text); border-color: var(--accent); }
+#sticky-bar.offscreen .filter-tab { display: flex; }
+#sticky-bar.offscreen::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: color-mix(in srgb, var(--accent) 45%, var(--border));
+  z-index: 11;
+  pointer-events: none;
+}
+#sticky-bar.pinned::before { display: none; }
+#sticky-bar.pinned .filter-tab { position: absolute; top: 100%; }
+.filter-tab-icon, .filter-tab-chevron { flex-shrink: 0; }
+.filter-tab-chevron { transition: transform 0.15s ease; }
+#sticky-bar.pinned .filter-tab-chevron { transform: rotate(180deg); }
+.filter-tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Active filters: the summary reads in the accent colour so it's clear the
+   results below are filtered. */
+#sticky-bar.has-filters .filter-tab-label { color: var(--accent-h); font-weight: 600; }
+/* New live clips waiting (the banner inside the bar is hidden while scrolled
+   away): a pulsing dot on the tab invites the user to open it. */
+.filter-tab-live {
+  display: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+#sticky-bar.has-live .filter-tab-live { display: inline-block; }
+@keyframes live-pulse { 50% { opacity: 0.35; } }
 #controls {
   display: none;
   padding: 12px 24px;
@@ -372,39 +451,9 @@ select:focus { border-color: var(--accent); }
 /* ── Controls row-break sentinels ──────────────────────────────────────────
    .controls-break    — always forces a new flex row (zero height, full width)
    .controls-break-md — zero-size on wide screens; expands to 100 % width on
-                        narrow screens (≤600 px) so game-filter gets its own row
-   Both carry .collapsible-filter so they vanish when the bar is collapsed. */
+                        narrow screens (≤600 px) so game-filter gets its own row */
 .controls-break    { flex: 0 0 100%; height: 0; }
 .controls-break-md { flex: 0 0 0;    height: 0; }
-
-/* ── Controls collapse toggle ───────────────────────────────────────────────
-   Hidden on wide screens; shown on narrow screens (≤600 px) as an unobtrusive
-   caret strip at the bottom of the controls bar. The button is last in DOM
-   order so it always occupies its own flex row when visible.
-   Caret shows the ACTION that will occur:
-     ▲ when expanded  → clicking will collapse (fold up)
-     ▼ when collapsed → clicking will expand  (unfold down)
-   The SVG polyline points downward by default (▼); we rotate it 180° in the
-   default (expanded) state so it shows ▲, and remove the rotation when
-   collapsed so it shows ▼. */
-.controls-toggle-btn {
-  display: none;
-  background: none;
-  border: none;
-  border-top: 1px solid var(--border);
-  color: var(--muted);
-  cursor: pointer;
-  align-items: center;
-  justify-content: center;
-  padding: 3px;
-  margin-top: 4px;
-  transition: color 0.12s;
-}
-.controls-toggle-btn:hover { color: var(--text); }
-/* Default (expanded): rotate ▼ → ▲ to show "collapse" action */
-.controls-toggle-btn svg { transform: rotate(180deg); transition: transform 0.15s ease; }
-/* Collapsed: restore ▼ to show "expand" action */
-#controls.controls-collapsed .controls-toggle-btn svg { transform: none; }
 
 /* ── Date filter group (calendar toggle + date inputs) ──────────────────────
    One flex item so calendar button and date pickers always share a row; only
@@ -585,7 +634,7 @@ select:focus { border-color: var(--accent); }
 /* min-width: 0 prevents the iframe's intrinsic minimum from forcing the table
    wider than 100%; overflow: hidden clips any residual bleed. */
 .clip-embed-row td {
-  padding: 0;
+  padding: 12px;
   background: var(--surface2);
   overflow: hidden;
   min-width: 0;
@@ -593,39 +642,6 @@ select:focus { border-color: var(--accent); }
   box-shadow: inset 3px 0 0 var(--accent);
   border-bottom: 2px solid color-mix(in srgb, var(--accent) 50%, var(--border));
 }
-.clip-embed-row .clip-embed-wrap {
-  max-width: 854px;
-  width: 100%;
-  margin: 0 auto;
-  position: relative;
-  aspect-ratio: 16 / 9;
-  background: #000;
-}
-
-/* Prev/next nav row below the embed in list view */
-.clip-list-nav-row {
-  display: flex;
-  justify-content: center;
-  gap: 0;
-  padding: 6px 12px;
-  background: var(--surface2);
-  border-top: 1px solid var(--border);
-}
-.clip-list-nav-row .clip-nav-btn {
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
-  border-radius: 4px;
-  flex: 1;
-  height: 36px;
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent-h);
-}
-.clip-list-nav-row .clip-nav-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 24%, transparent);
-  color: var(--accent-h);
-}
-/* Each button takes exactly half the row; arrows face inward at the centre seam */
-.clip-list-nav-row .clip-prev-btn { justify-content: flex-end; border-right: none; border-radius: 4px 0 0 4px; }
-.clip-list-nav-row .clip-next-btn { justify-content: flex-start; border-radius: 0 4px 4px 0; }
 
 /* Responsive list: swap separate columns for the combined meta cell on narrow screens */
 @media (max-width: 700px) {
@@ -781,17 +797,211 @@ main { padding: 24px; }
 }
 .clip-thumb img.broken { opacity: 0.2; }
 
-/* ── Expanded embed card ── */
+/* ── Expanded player (grid card + list embed row) ─────────────────────────
+   Both layouts hold [prev peek][player][next peek] — the grid card also has
+   its .clip-info — and are arranged by container width (#clips-grid is the
+   query container, so this tracks the space actually available):
+     narrow  (< 640px)   player / info / [prev | next]
+     medium  (640–1099)  player / [prev | info | next]
+     wide    (≥ 1100px)  [prev | player | next] / info — peeks fill the
+                         gutters that a 854px-max player leaves empty */
+#clips-grid { container: clips / inline-size; }
+
 .clip-card.expanded,
 .clip-card.expanded:hover {
   grid-column: 1 / -1;
   border-color: var(--accent);
   transform: none;
   background: var(--surface2);
+  cursor: default;
 }
-.clip-card.expanded .clip-embed-wrap {
+.clip-card.expanded,
+.clip-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas:
+    "embed embed"
+    "info  info"
+    "prev  next";
+  gap: 10px;
+}
+.clip-card.expanded { padding-bottom: 10px; }
+.clip-card.expanded .clip-embed-wrap,
+.clip-stage .clip-embed-wrap {
+  grid-area: embed;
+  width: 100%;
   max-width: 854px;
-  margin-inline: auto;
+  justify-self: center;
+}
+.clip-card.expanded .clip-info { grid-area: info; padding-bottom: 0; }
+.clip-card.expanded .clip-prev-btn { grid-area: prev; margin-left: 10px; }
+.clip-card.expanded .clip-next-btn { grid-area: next; margin-right: 10px; }
+.clip-stage .clip-prev-btn { grid-area: prev; }
+.clip-stage .clip-next-btn { grid-area: next; }
+/* List view has no info block (the clicked row above is the info) */
+.clip-stage { grid-template-areas: "embed embed" "prev next"; }
+
+@container clips (min-width: 640px) {
+  .clip-card.expanded {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
+    grid-template-areas:
+      "embed embed embed"
+      "prev  info  next";
+    align-items: center;
+  }
+}
+@container clips (min-width: 1100px) {
+  .clip-card.expanded,
+  .clip-stage {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 854px) minmax(0, 1fr);
+    grid-template-areas: "prev embed next";
+    column-gap: 20px;
+    align-items: center;
+  }
+  .clip-card.expanded {
+    grid-template-areas:
+      "prev  embed next"
+      ".     info  .";
+    padding: 16px 0 6px;
+  }
+  .clip-card.expanded .clip-info { padding: 2px 0 0; }
+  .clip-card.expanded .clip-prev-btn,
+  .clip-stage .clip-prev-btn { justify-self: end; margin: 0 0 0 16px; }
+  .clip-card.expanded .clip-next-btn,
+  .clip-stage .clip-next-btn { justify-self: start; margin: 0 16px 0 0; }
+}
+
+/* ── Prev / next peek button ──
+   A mini clip card: direction label, thumbnail with an arrow badge, title.
+   Stacked vertically by default (narrow: two side by side below the player;
+   wide: one in each gutter beside it) and horizontal — thumb beside text —
+   at medium widths where it shares a row with .clip-info. Title lines are
+   reserved so a pair of peeks always matches in height. Disabled = no
+   neighbour; kept in the layout but invisible so the player stays centred. */
+.clip-peek {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "dir" "thumb" "title";
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.clip-next-btn.clip-peek { text-align: right; }
+.clip-peek:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+.clip-peek:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.clip-peek:disabled { visibility: hidden; }
+
+.clip-peek-dir {
+  grid-area: dir;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--accent-h);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.clip-next-btn .clip-peek-dir { justify-content: flex-end; }
+.clip-peek svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+.clip-peek-thumb {
+  grid-area: thumb;
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--surface2);
+}
+.clip-peek-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* Arrow badge centred on the thumbnail — the carousel-style cue */
+.clip-peek-arrow {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, transform 0.15s;
+}
+.clip-peek:hover .clip-peek-arrow { background: var(--accent); transform: scale(1.08); }
+.clip-peek-title {
+  grid-area: title;
+  font-size: 12px;
+  line-height: 1.4;
+  min-height: calc(1.4em * 2);
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.clip-peek:hover .clip-peek-title { color: var(--text); }
+
+@container clips (min-width: 640px) and (max-width: 1099.98px) {
+  .clip-peek {
+    grid-template-columns: clamp(72px, 40%, 128px) minmax(0, 1fr);
+    grid-template-areas:
+      "thumb dir"
+      "thumb title";
+    align-content: center;
+    align-items: center;
+    gap: 2px 10px;
+  }
+  .clip-next-btn.clip-peek {
+    grid-template-columns: minmax(0, 1fr) clamp(72px, 40%, 128px);
+    grid-template-areas:
+      "dir   thumb"
+      "title thumb";
+  }
+  .clip-peek-arrow { width: 24px; height: 24px; }
+  .clip-peek-title { min-height: 0; }
+}
+@container clips (min-width: 1100px) {
+  .clip-peek {
+    gap: 8px;
+    width: 100%;
+    max-width: 240px;
+    padding: 10px;
+  }
+  .clip-next-btn.clip-peek { text-align: left; }
+  .clip-next-btn .clip-peek-dir { justify-content: flex-start; }
+  .clip-peek-dir { font-size: 13px; }
+  .clip-peek-arrow { width: 40px; height: 40px; }
+  .clip-peek-arrow svg { width: 16px; height: 16px; }
+  .clip-peek-title { -webkit-line-clamp: 3; line-clamp: 3; min-height: calc(1.4em * 3); }
 }
 
 .clip-embed-wrap {
@@ -830,47 +1040,6 @@ main { padding: 24px; }
   background: var(--accent);
   border-color: var(--accent);
 }
-
-/* ── Prev / next navigation row (below embedded video) ── */
-/* Three-column grid: equal-width side columns guarantee clip-info stays centred
-   regardless of how long the prev/next title text is. */
-.clip-nav-row {
-  display: grid;
-  grid-template-columns: minmax(40px, 28%) 1fr minmax(40px, 28%);
-  align-items: stretch;
-}
-.clip-nav-btn {
-  overflow: hidden;
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  border: none;
-  border-top: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
-  color: var(--accent-h);
-  cursor: pointer;
-  font-size: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s, color 0.15s;
-}
-.clip-nav-title {
-  display: inline-block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.8rem;
-  vertical-align: middle;
-  margin: 0 3px;
-}
-.clip-nav-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 24%, transparent);
-  color: var(--accent-h);
-}
-.clip-nav-btn:disabled {
-  opacity: 0.25;
-  cursor: default;
-}
-.clip-prev-btn { border-right: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border)); }
-.clip-next-btn { border-left: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border)); }
 
 .clip-play-icon {
   position: absolute;
@@ -1005,8 +1174,7 @@ header .streamer-tag a:hover {
      row 1 — search + sort
      row 2 — game-filter (fills full width)
      row 3 — date-filter-group + view-switcher + result-count
-             (view-switcher may wrap to row 4 on the very narrowest screens)
-     last  — collapse toggle strip (full-width, always at bottom) */
+             (view-switcher may wrap to row 4 on the very narrowest screens) */
 @media (max-width: 600px) {
   header    { padding: 10px 12px; }
   #controls { padding: 8px 12px; }
@@ -1026,13 +1194,6 @@ header .streamer-tag a:hover {
   .controls-break-md { flex-basis: 100%; }
   /* Game filter fills the full width of its row */
   #game-filter { flex: 1 1 0; min-width: 0; }
-  /* Collapse toggle: full-width strip at the bottom of the controls bar */
-  .controls-toggle-btn {
-    display: flex;
-    flex: 0 0 100%;
-  }
-  /* Collapsed state: hide everything below the search+sort row */
-  #controls.controls-collapsed .collapsible-filter { display: none; }
   /* Show short text labels on both view buttons — both labels keeps them
      symmetrical in width, preventing one button from unexpectedly wrapping. */
   .view-btn .view-btn-label { display: inline; }

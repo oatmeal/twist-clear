@@ -81,17 +81,17 @@
     <option value="date_asc">古い順</option>
   </select>
   <!-- Zero-size on wide screens; becomes full-width on narrow screens to push
-       game-filter onto its own row. Also hidden when collapsed. -->
-  <div class="controls-break-md collapsible-filter"></div>
-  <select id="game-filter" class="collapsible-filter">
+       game-filter onto its own row. -->
+  <div class="controls-break-md"></div>
+  <select id="game-filter">
     <option value="">すべてのゲーム</option>
   </select>
   <!-- Always-on row break: game-filter stays above the date/view row on all
-       screen sizes. Hidden when collapsed. -->
-  <div class="controls-break collapsible-filter"></div>
+       screen sizes. -->
+  <div class="controls-break"></div>
   <!-- Calendar toggle + date inputs: grouped so they stay on the same row and
        only split from the grid/list switcher on the very narrowest screens. -->
-  <div class="date-filter-group collapsible-filter">
+  <div class="date-filter-group">
     <button id="btn-view-cal" class="view-btn" aria-label="カレンダー" title="カレンダー"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="3" width="13" height="11" rx="1.5"/><line x1="1.5" y1="7" x2="14.5" y2="7"/><line x1="5" y1="1.5" x2="5" y2="4.5"/><line x1="11" y1="1.5" x2="11" y2="4.5"/></svg></button>
     <div class="date-range-filter">
       <input type="date" id="date-from-input" title="開始日">
@@ -102,22 +102,29 @@
   </div>
   <!-- Grid / list switcher: wraps below date-filter-group on very narrow
        screens, carrying result-count to the right on the same row. -->
-  <div class="view-switcher collapsible-filter">
+  <div class="view-switcher">
     <button id="btn-view-grid" class="view-btn active" aria-label="グリッド表示" title="グリッド表示">⊞<span class="view-btn-label">グリッド</span></button>
     <button id="btn-view-list" class="view-btn" aria-label="リスト表示" title="リスト表示">☰<span class="view-btn-label">リスト</span></button>
   </div>
-  <span id="result-count" class="collapsible-filter"></span>
-  <!-- Collapse toggle: shown only on narrow screens as an unobtrusive caret at
-       the bottom of the controls bar. Last in DOM so it always occupies its own
-       flex row. Caret direction shows the action that will occur (▼ = expand,
-       ▲ = collapse). -->
-  <button id="btn-controls-toggle" class="controls-toggle-btn" aria-label="フィルターを折りたたむ"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="2 4 6 8 10 4"/></svg></button>
+  <span id="result-count"></span>
 </div>
 <div id="live-clips-banner" style="display:none">
   <span id="live-clips-banner-text"></span>
   <button id="btn-show-live-clips" class="live-clips-show-btn"></button>
 </div>
+<!-- Filter tab: hangs from the top of the viewport once the bar has scrolled
+     away (#sticky-bar.offscreen); clicking pins the bar back in. While pinned
+     it hangs below the bar and collapses it. See src/filterBar.ts. -->
+<button id="filter-tab" class="filter-tab" type="button" aria-expanded="false" aria-controls="controls" aria-label="フィルターを展開する">
+  <svg class="filter-tab-icon" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><line x1="2" y1="4" x2="14" y2="4"/><line x1="4.5" y1="8" x2="11.5" y2="8"/><line x1="7" y1="12" x2="9" y2="12"/></svg>
+  <span id="filter-tab-label" class="filter-tab-label">フィルター</span>
+  <span class="filter-tab-live" aria-hidden="true"></span>
+  <svg class="filter-tab-chevron" width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="2 4 6 8 10 4"/></svg>
+</button>
 </div>
+<!-- Zero-height marker directly after the bar's flow position; observed by
+     filterBar.ts to detect when the bar has scrolled out of view. -->
+<div id="sticky-bar-sentinel"></div>
 
 <main>
   <div id="calendar-panel" style="display:none">
@@ -193,7 +200,7 @@
 
   <section class="help-section">
     <h3 id="help-browse-heading">クリップを見る</h3>
-    <p id="help-browse-desc">サムネイルをクリック（リスト表示では行をクリック）するとその場で再生できます。Escキーまたは外側をクリックで閉じます。</p>
+    <p id="help-browse-desc">サムネイルをクリック（リスト表示では行をクリック）するとその場で再生できます。プレイヤー横の「前のクリップ」「次のクリップ」または ← / → キーで前後のクリップに移動できます。Escキーまたは外側をクリックで閉じます。</p>
   </section>
 
   <section class="help-section">

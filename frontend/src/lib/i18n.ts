@@ -64,7 +64,8 @@ export interface Translations {
   // Help modal — share section
   helpShare: string;
   helpShareDesc: string;
-  // Controls bar collapse toggle (narrow screens)
+  // Filter tab (shown once the filter bar scrolls out of view)
+  filtersTab: string;
   controlsCollapse: string;
   controlsExpand: string;
   // View layout toggle
@@ -133,12 +134,13 @@ const en: Translations = {
   dismissBanner: 'Dismiss',
   loginBannerWithDate: (date) => `Clips up to ${date} are available on this site. Log in with Twitch to view newer ones.`,
   loginBannerNoDate: 'Some recent clips may not yet be available. Log in with Twitch to view the latest clips.',
+  filtersTab: 'Filters',
   controlsCollapse: 'Collapse filters',
   controlsExpand: 'Expand filters',
   searchHelpBtn: 'Help',
   helpTitle: 'How to use',
   helpBrowse: 'Watching clips',
-  helpBrowseDesc: 'Click a thumbnail (or any row in list view) to watch inline. Press Escape or click outside to close.',
+  helpBrowseDesc: 'Click a thumbnail (or any row in list view) to watch inline. Use the previous / next clip cards beside the player, or the ← / → keys, to move between clips. Press Escape or click outside to close.',
   helpLayout: 'Grid and list views',
   helpLayoutDesc: 'Toggle between grid (⊞) and list (☰) using the buttons in the filter bar. Grid shows thumbnails; list shows a compact table.',
   helpSort: 'Sorting',
@@ -231,12 +233,13 @@ const ja: Translations = {
   dismissBanner: '閉じる',
   loginBannerWithDate: (date) => `${date}までのクリップが見られます。それ以降の新着クリップを見るにはTwitchでログインしてください。`,
   loginBannerNoDate: '新着クリップが見られない場合があります。新着クリップを見るにはTwitchでログインすると見られます。',
+  filtersTab: 'フィルター',
   controlsCollapse: 'フィルターを折りたたむ',
   controlsExpand: 'フィルターを展開する',
   searchHelpBtn: 'ヘルプ',
   helpTitle: '使い方',
   helpBrowse: 'クリップを見る',
-  helpBrowseDesc: 'サムネイルをクリック（リスト表示では行をクリック）するとその場で再生できます。Escキーまたは外側をクリックで閉じます。',
+  helpBrowseDesc: 'サムネイルをクリック（リスト表示では行をクリック）するとその場で再生できます。プレイヤー横の「前のクリップ」「次のクリップ」または ← / → キーで前後のクリップに移動できます。Escキーまたは外側をクリックで閉じます。',
   helpLayout: 'グリッドとリスト表示',
   helpLayoutDesc: 'フィルターバーのボタンでグリッド（⊞）とリスト（☰）を切り替えられます。グリッドはサムネイル付き、リストはコンパクトな一覧表示です。',
   helpSort: '並び替え',

@@ -19,13 +19,14 @@ import {
 } from './calendar';
 import {
   initEmbed,
-  setPageBoundaryTitles,
+  setPageBoundaryClips,
   resetIfInGrid,
   expandCard, collapseCard,
   expandRow, collapseRow,
   navigateClip, navigateRow,
   getExpandedCard, getExpandedRow,
 } from './embed';
+import { initFilterBar, updateFilterTab } from './filterBar';
 import { setUseMeta, setClipLayout } from './state';
 import * as auth from './auth';
 import * as twitch from './twitch';
@@ -38,6 +39,7 @@ import {
 import type { ViewCountSortKey } from './lib/liveRank';
 import { clipCardHtml, clipListRowHtml, attachImgErrorHandlers } from './lib/clipHtml';
 import type { ClipItem } from './lib/clipHtml';
+import type { PeekClip } from './embed';
 
 // ── URL hash state ────────────────────────────────────────────────────────
 
@@ -433,12 +435,12 @@ function updateLiveBanner(): void {
   if (!banner) return;
   const count = _filteredLiveClips().length;
   const hasUnrendered = state.liveClips.length > _renderedLiveClipCount;
-  if (_liveRenderPending && count > 0 && hasUnrendered) {
-    if (bannerText) bannerText.textContent = t().newClipsBanner(count);
-    banner.style.display = 'flex';
-  } else {
-    banner.style.display = 'none';
-  }
+  const show = _liveRenderPending && count > 0 && hasUnrendered;
+  if (show && bannerText) bannerText.textContent = t().newClipsBanner(count);
+  banner.style.display = show ? 'flex' : 'none';
+  // The banner lives inside the filter bar, which is usually scrolled away;
+  // flag the bar so its collapsed tab can show a "new clips" dot.
+  document.getElementById('sticky-bar')?.classList.toggle('has-live', show);
 }
 
 /** Fetch clips newer than the DB cutoff and store in state. */
@@ -607,10 +609,12 @@ export async function render(): Promise<void> {
     _liveRenderPending = false;
   }
   updateLiveBanner();
-  // Adjacent-page boundary titles — computed below during the prefetch phase
-  // and passed to embed.ts so nav buttons can show a title hint.
-  let prevPageLastTitle: string | null = null;
-  let nextPageLastTitle: string | null = null;
+  // Adjacent-page boundary clips — computed below during the prefetch phase
+  // and passed to embed.ts so the prev/next peek buttons can show the clip.
+  let prevPageLast: PeekClip | null = null;
+  let nextPageFirst: PeekClip | null = null;
+  const toPeek = (c: { title?: unknown; thumbnail_url?: unknown } | undefined): PeekClip | null =>
+    c ? { title: String(c.title ?? ''), thumbnail_url: String(c.thumbnail_url ?? '') } : null;
 
   try {
     // Decide whether to merge live clips into the main grid.
@@ -771,9 +775,9 @@ export async function render(): Promise<void> {
       : [];
     if (ctrl.signal.aborted) return;
 
-    // ── Adjacent-page boundary title prefetch ───────────────────────────────
-    // Fetch the title of the one clip just before / after the current page so
-    // page-boundary nav buttons can show a title hint.  We already know enough
+    // ── Adjacent-page boundary clip prefetch ────────────────────────────────
+    // Fetch the title + thumbnail of the one clip just before / after the
+    // current page so page-boundary peek buttons can show it.  We already know enough
     // from the pagination math to avoid touching extra DB rows in most cases:
     // for date sorts, live clips in sortedLive may cover the boundary; for
     // view_count sorts, check rankedLive.  When it really is a DB row we need,
@@ -782,20 +786,20 @@ export async function render(): Promise<void> {
     if (state.currentPage > 1) {
       const prevPos = pageStart - 1;
       if (mergingDesc && prevPos < liveCount) {
-        prevPageLastTitle =sortedLive[prevPos]?.title ?? null;
+        prevPageLast = toPeek(sortedLive[prevPos]);
       } else if (mergingAsc && prevPos >= dbCount) {
-        prevPageLastTitle =sortedLive[prevPos - dbCount]?.title ?? null;
+        prevPageLast = toPeek(sortedLive[prevPos - dbCount]);
       } else if (mergingViewCount) {
         const live = rankedLive.find(r => r.mergedPos === prevPos);
         if (live) {
-          prevPageLastTitle =live.clip.title;
+          prevPageLast = toPeek(live.clip);
         } else if (vcPage!.dbOffset > 0) {
           const rows = await q(
-            `SELECT c.title FROM clips c ${where} ORDER BY ${ORDER[state.sortBy]} LIMIT 1 OFFSET ${vcPage!.dbOffset - 1}`,
+            `SELECT c.title, c.thumbnail_url FROM clips c ${where} ORDER BY ${ORDER[state.sortBy]} LIMIT 1 OFFSET ${vcPage!.dbOffset - 1}`,
             params,
           );
           if (ctrl.signal.aborted) return;
-          prevPageLastTitle =(rows[0]?.['title'] as string | undefined) ?? null;
+          prevPageLast = toPeek(rows[0]);
         }
       } else {
         // Non-merging or date sorts where the prev boundary is a DB clip.
@@ -804,32 +808,32 @@ export async function render(): Promise<void> {
         // For non-merging:                       DB offset = prevPos = dbOffset - 1.
         if (dbOffset > 0) {
           const rows = await q(
-            `SELECT c.title FROM clips c ${where} ORDER BY ${ORDER[state.sortBy]} LIMIT 1 OFFSET ${dbOffset - 1}`,
+            `SELECT c.title, c.thumbnail_url FROM clips c ${where} ORDER BY ${ORDER[state.sortBy]} LIMIT 1 OFFSET ${dbOffset - 1}`,
             params,
           );
           if (ctrl.signal.aborted) return;
-          prevPageLastTitle =(rows[0]?.['title'] as string | undefined) ?? null;
+          prevPageLast = toPeek(rows[0]);
         }
       }
     }
     if (state.currentPage < totalPages) {
       const nextPos = pageStart + state.PAGE_SIZE;
       if (mergingDesc && nextPos < liveCount) {
-        nextPageLastTitle =sortedLive[nextPos]?.title ?? null;
+        nextPageFirst = toPeek(sortedLive[nextPos]);
       } else if (mergingAsc && nextPos >= dbCount) {
-        nextPageLastTitle =sortedLive[nextPos - dbCount]?.title ?? null;
+        nextPageFirst = toPeek(sortedLive[nextPos - dbCount]);
       } else if (mergingViewCount) {
         const live = rankedLive.find(r => r.mergedPos === nextPos);
         if (live) {
-          nextPageLastTitle =live.clip.title;
+          nextPageFirst = toPeek(live.clip);
         } else {
           const nextDbOffset = vcPage!.dbOffset + vcPage!.dbOnPage;
           const rows = await q(
-            `SELECT c.title FROM clips c ${where} ORDER BY ${ORDER[state.sortBy]} LIMIT 1 OFFSET ${nextDbOffset}`,
+            `SELECT c.title, c.thumbnail_url FROM clips c ${where} ORDER BY ${ORDER[state.sortBy]} LIMIT 1 OFFSET ${nextDbOffset}`,
             params,
           );
           if (ctrl.signal.aborted) return;
-          nextPageLastTitle =(rows[0]?.['title'] as string | undefined) ?? null;
+          nextPageFirst = toPeek(rows[0]);
         }
       } else {
         // Non-merging or date sorts where the next boundary is a DB clip.
@@ -838,15 +842,15 @@ export async function render(): Promise<void> {
         // For non-merging:                       DB offset = nextPos = dbOffset + dbOnPage.
         const nextDbOffset = dbOffset + dbOnPage;
         const rows = await q(
-          `SELECT c.title FROM clips c ${where} ORDER BY ${ORDER[state.sortBy]} LIMIT 1 OFFSET ${nextDbOffset}`,
+          `SELECT c.title, c.thumbnail_url FROM clips c ${where} ORDER BY ${ORDER[state.sortBy]} LIMIT 1 OFFSET ${nextDbOffset}`,
           params,
         );
         if (ctrl.signal.aborted) return;
-        nextPageLastTitle =(rows[0]?.['title'] as string | undefined) ?? null;
+        nextPageFirst = toPeek(rows[0]);
       }
     }
     // ────────────────────────────────────────────────────────────────────────
-    setPageBoundaryTitles(prevPageLastTitle, nextPageLastTitle);
+    setPageBoundaryClips(prevPageLast, nextPageFirst);
 
     document.getElementById('result-count')!.textContent = t().resultCount(state.totalClips);
 
@@ -940,6 +944,7 @@ export async function render(): Promise<void> {
     }
 
     renderPagination();
+    updateFilterTab();
     pushHash();
   } catch (e) {
     if (ctrl.signal.aborted) return; // expected: a newer render() preempted us
@@ -1019,12 +1024,8 @@ function applyTranslations(): void {
   const listLabel = btnList?.querySelector('.view-btn-label') as HTMLElement | null;
   if (listLabel) listLabel.textContent = tr.viewListLabel;
 
-  // Controls collapse toggle: keep aria-label in sync with current state.
-  const controlsToggleBtn = document.getElementById('btn-controls-toggle') as HTMLButtonElement | null;
-  if (controlsToggleBtn) {
-    const isCollapsed = document.getElementById('controls')?.classList.contains('controls-collapsed') ?? false;
-    controlsToggleBtn.setAttribute('aria-label', isCollapsed ? tr.controlsExpand : tr.controlsCollapse);
-  }
+  // Filter tab (shown once the bar scrolls away): summary label + aria-label.
+  updateFilterTab();
 
   const loadingText = document.getElementById('loading-text');
   if (loadingText) loadingText.textContent = tr.loading;
@@ -1318,6 +1319,16 @@ function bindEvents(): void {
       const ec = getExpandedCard();
       if (ec) collapseCard(ec);
       else { const er = getExpandedRow(); if (er) collapseRow(er); }
+      return;
+    }
+    // ← / → step through clips while one is open. Ignored while typing in a
+    // control, and (unavoidably) while focus is inside the cross-origin player.
+    if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') &&
+        !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey &&
+        !(e.target as HTMLElement).closest('input, select, textarea')) {
+      const dir = e.key === 'ArrowLeft' ? 'prev' : 'next';
+      if (getExpandedRow()) { e.preventDefault(); void navigateRow(dir); }
+      else if (getExpandedCard()) { e.preventDefault(); void navigateClip(dir); }
     }
   });
 
@@ -1354,18 +1365,6 @@ function bindEvents(): void {
     document.getElementById('login-banner')!.style.display = 'none';
     document.getElementById('header-login')!.style.display = 'flex';
   });
-
-  // ── Controls bar collapse toggle ────────────────────────────────────────────
-  {
-    const toggleBtn  = document.getElementById('btn-controls-toggle') as HTMLButtonElement | null;
-    const controlsEl = document.getElementById('controls')!;
-    // No cross-session persistence: always start expanded so filters are
-    // visible on first load regardless of screen width or prior sessions.
-    toggleBtn?.addEventListener('click', () => {
-      const isCollapsed = controlsEl.classList.toggle('controls-collapsed');
-      toggleBtn.setAttribute('aria-label', isCollapsed ? t().controlsExpand : t().controlsCollapse);
-    });
-  }
 
   // ── Site description toggle (mobile) ────────────────────────────────────────
   {
@@ -1525,6 +1524,7 @@ export async function init(): Promise<void> {
     _broadcasterId = await setStreamerTag();
     renderFooter();
     bindEvents();
+    initFilterBar();
     syncAuthUI();
     // called in applyTranslations() above, but need to update after _dbScrapeDate and
     // _dbCutoffDate are available
