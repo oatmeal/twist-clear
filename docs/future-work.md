@@ -12,6 +12,41 @@ Deferred items with rationale. See the relevant source files for implementation 
 - custom `site_heading` HTML (e.g. clipmaru's animated icon) can overlap the header buttons at ≤390px; `overflow: hidden` was deliberately removed from the header, so a fix needs to keep decorations unclipped.
 ---
 
+## Timeline & calendar follow-ups
+
+The `timeline-overview` branch settled the review's navigation-vs-selection
+issue (below): navigation never changes the date filter, selecting moves the
+view only when the selection is off-screen, and a timeline overview in the
+filter bar always shows — and edits — the filter. Design and code walkthrough:
+`frontend/docs/calendar.md`. Open items, roughly by priority:
+
+- **Evaluate the year/month flow.** The current experiment: an explicit
+  Year | Month toggle, ‹ › that step the view, a "Filter to <period>" button
+  for selecting the whole month / year on screen, clicking a year-view card to
+  zoom in, and drag / Shift-click for ranges. Still being tried out — in
+  particular whether "Filter to …" is the right way to pick a whole month
+  (previously clicking the month itself did), and whether stepping a
+  selected day by keyboard on the timeline band is enough of a replacement for
+  the old day ‹ › arrows.
+- **Range selection on touch.** A touch drag must scroll the page, so phones
+  can only tap single days / weeks; ranges need the timeline (≈ a month per
+  4 px there) or the date inputs. Option: drag handles on the end cells of the
+  selected range in the month grid, mirroring the timeline's handles (with
+  `touch-action: none` on the handles only).
+- **Calendar heat-map ignores search** while the timeline follows it. The
+  timeline's trick — `INDEXED BY clips_created_at` for FTS matches, see
+  `queryDayCounts()` in `timeline.ts` — would make `queryYearDays` /
+  `queryMonthDays` cheap with a search too; then drop `#cal-search-notice`.
+- **Result-count query for broad searches.** `SELECT COUNT(*) … WHERE c.rowid
+  IN (fts match)` reads ≈1,850 pages (≈7 MB) for a common term like りりまる;
+  the same `INDEXED BY clips_created_at` form reads ≈210 (measured with the
+  sqlite3 CLI's `.stats`). Confirm in the browser first — sql.js-httpvfs
+  read-ahead changes actual bytes fetched.
+- **Fold the date inputs into the timeline**, e.g. editable start / end labels
+  on the band, now that the band shows the filter at all times.
+
+---
+
 ## Calendar & filter UX review (October 2026)
 
 A usability review of the calendar panel and filter bar, done on the
@@ -20,60 +55,25 @@ at 1400×900 (EN) and 390×844 touch (JA). Within each group, items are roughly
 ordered by impact. Remove items (and eventually this section) as they're done.
 The bugs it found (duplicated year strip, stale heat-map after a card's game
 link, hardcoded selection tint, search-only empty-state copy, ungrouped
-`clipCount`, duplicate `.view-btn` CSS) have been fixed.
-
-### Navigation vs. selection semantics (highest-impact UX issue)
-
-Calendar controls fall into two modes that look identical:
-
-- *Select* (changes the date filter): strip pills, mini-month cards, days,
-  week numbers, breadcrumb crumbs, and the **day** ‹ › arrows.
-- *Navigate only*: the **year/month** ‹ › arrows and the year/month `<select>`s.
-
-Observed: select June 2024, press the month › → the breadcrumb reads
-"2024 › July" while the grid still shows June's 317 clips. Choosing February
-from the month select while a July day is selected shows February with July's
-results. Also:
-
-- `.active` (navigation position) and `.in-range` (filter) pills are styled
-  identically (accent border), so the viewed and the selected month are both
-  outlined.
-- The breadcrumb reads like a filter summary but reflects navigation; the
-  current-level crumb is a hidden "select this period" action.
-- Typing a range in the date inputs doesn't move the calendar (it stays on
-  2026 after typing May 2021): `deriveNavigationPosition()` only runs when the
-  panel opens.
-
-Recommendation: a single ‹ › pair that steps the *selection* at its current
-granularity (day/week/month/year), replacing the three nav groups (which wrap
-to two rows on phones); show the selection as a separate chip
-("June 2024 · 317 clips ✕"); style viewed vs. selected differently; re-derive
-the navigation position when the date inputs change. "Calendar:
-navigation-only level changes" below asks for the opposite (navigating without
-selecting) — reconcile the two when doing this.
-
-Refactor alongside: `setCal…() → syncDateInputs() → renderCalendar() →
-setCurrentPage(1) → callRender()` is repeated ~12 times in `calendar.ts`; one
-`applyDateSelection(…)` helper would keep the semantics in one place.
+`clipCount`, duplicate `.view-btn` CSS) have been fixed. Its top issue —
+navigation and selection controls looking identical, so the view and the
+filter drifted apart — was addressed by the timeline-overview work above
+(single `applyDateSelection()` path, separate view header, year/month strips
+and breadcrumb removed), as were: range selection (mouse), zero-clip months
+shifting slots in the year view, strips wrapping on phones, and unlabelled ‹ ›
+buttons.
 
 ### Discoverability
 
-- Mini-month day squares look clickable, but clicking anywhere on the card
-  selects the month. Make a day select that day (and drill into the month
-  view); keep the card title for selecting the month.
 - Week selection is only via an unlabelled gutter of ISO week numbers
   (Monday-based numbers on Sunday-start rows); the only hint is a tooltip.
   Highlight the whole row on gutter hover and add a "Wk" / "週" header, or
   replace the numbers with a select-row icon.
-- No arbitrary range selection in the calendar — only one day/week/month/year;
-  custom ranges need the native date inputs. Add click-start /
-  shift-click-end range selection in the month view.
-- Zero-clip days and months are clickable and lead to an empty result. The year
-  view *hides* zero-clip months, so the rest shift slots (2019 shows OCT in the
-  January position). Render empty months as dimmed, inert placeholders instead.
+- Zero-clip days in the month view are still selectable on their own (fine as
+  range ends, but a single click gives an empty result); consider dimming them.
 - The calendar toggle is an unlabelled 35×29 icon with no visible link to the
-  date fields. Consider opening the panel when a date field is focused, and a
-  text label on wide screens (the date row has room).
+  date fields (clicking the timeline now also opens it). Consider opening the
+  panel when a date field is focused, and a text label on wide screens.
 - Preview-strip game rows aren't clickable; clicking one should apply that
   game filter.
 - Card game names are muted 12 px text with only a hover colour change — no
@@ -91,34 +91,58 @@ setCurrentPage(1) → callRender()` is repeated ~12 times in `calendar.ts`; one
 ### Layout & visual
 
 - Calendar height: the year view is ~550–850 px tall at 1400 px wide (42 px
-  mini-day squares), pushing the clips below the fold. On a 390×844 phone the
-  panel is ~806 px tall and the grid starts at y≈1220; after tapping a day the
-  only visible change is the result count. Options: a GitHub-style
-  contribution strip for the year (~120 px), 6-column mini-months on wide
-  screens, and on phones a "Show N clips ↓" affordance (or auto-collapse to a
-  one-line summary) after a selection.
+  mini-day squares), pushing the clips below the fold; on a 390×844 phone the
+  grid starts far down the page and after tapping a day the only visible
+  change is the result count. The timeline now covers whole-archive density,
+  so options include 6-column mini-months on wide screens and, on phones, a
+  "Show N clips ↓" affordance (or auto-collapse) after a selection.
 - The in-range tint muddies the heat-map: selecting a whole month or year tints
   every cell, turning teal blue-grey and empty pinks lavender — exactly when the
   user wants to read that period's density. The perimeter border already shows
-  the selection; drop the fill, or dim out-of-range cells instead.
+  the selection; drop the fill, or dim out-of-range cells instead (as the
+  timeline does).
 - The selected day is only a 2 px outline over a tinted cell and reads like
   hover. Use a stronger marker (e.g. a filled accent day-number badge).
 - The preview strip is `position: sticky; bottom: 0` and covers ~20 % of a
   phone viewport; on `(hover: none)` devices it only duplicates the game
-  dropdown. Make it non-sticky or one line there.
-- On phones the month strip wraps 8+4 and the year strip 6+2 (with stretched
-  pills); use a fixed grid (e.g. 6 columns) or a horizontal scroller.
+  dropdown. Make it non-sticky or one line there. (See also "Calendar preview
+  strip: jumpy height, flashing, placement" below.)
 - The clear-dates ✕ is 22×19 px (below the 24 px minimum target) and is shown
   even when no dates are set.
 
 ### Accessibility
 
-- In the calendar only the nav buttons and selects are focusable; days, week
-  numbers, mini-month cards, strip pills and breadcrumb crumbs are `div`/`span`
-  elements with click handlers. Use `<button>`s (or a roving-tabindex grid with
+- Days, week numbers and mini-month cards are `div`s handled by pointer events;
+  only the header controls, the mini-month title buttons and the timeline's
+  band / handles are focusable. Use `<button>`s (or a roving-tabindex grid with
   arrow keys) and `aria-pressed` / `aria-current` for the selection.
-- The ‹ › nav buttons have no `aria-label`.
 - Hover previews should also appear on keyboard focus.
+
+---
+
+## Calendar preview strip: jumpy height, flashing, placement
+
+Hovering around the calendar is distracting:
+
+- **Height changes constantly.** The strip shows 0–5 game rows plus a "+N
+  more" line, so its height follows whatever is hovered; because it is
+  `position: sticky; bottom: 0`, the jump happens right under the cursor's
+  line of sight. Reserving the full height (5 rows + the "more" line) would
+  stop it.
+- **It flashes on cell borders.** Each cell has its own `mouseenter` /
+  `mouseleave`; crossing the 1 px border between cells (or the 2 px gap
+  between mini-days) fires `mouseleave` → `revertToDefault()`, which swaps in
+  the selection's breakdown for a frame before the next cell's hover preview
+  (an async query) replaces it. A delegated `pointermove` on the grid that
+  finds the cell under the pointer, plus a short delay before reverting,
+  would remove the flash.
+- **Placement.** It may work better as a tooltip anchored to the hovered
+  cell (less eye travel), but a tooltip covers the heat-map being read, and
+  on touch devices there is no hover — the strip is then the only place the
+  selection's game breakdown appears (it duplicates the game dropdown). The
+  timeline's hover tooltip could also carry a top-games line. Decide this
+  together with the "preview strip is sticky and covers ~20 % of a phone
+  viewport" item in the review above.
 
 ---
 
@@ -172,27 +196,6 @@ all others at reduced opacity.
 Deferred: the current behaviour (filtered strip consistent with the heat-map) is
 already an improvement. The visual treatment of de-emphasised bars requires CSS
 design work.
-
----
-
-## Calendar: navigation-only level changes without updating the filter
-
-Clicking a year/month/day/week in the calendar always applies the corresponding
-date filter ("click = select" semantics). It would be nice to also be able to
-navigate *into* or *out of* a level without changing the active filter — e.g.
-drilling into a month's heat-map to explore clip density before committing to a
-new selection.
-
-(The year/month arrows and selects already navigate without selecting, and the
-October 2026 review above found that mix confusing — see "Navigation vs.
-selection semantics" there before adding more navigation-only paths.)
-
-Possible approaches: a modifier key (e.g. Shift+click) that navigates without
-selecting; or a dedicated "expand" affordance within the calendar panel.
-Breadcrumb clicks already update the filter when navigating back up; they could
-also have a navigation-only mode.
-
-Deferred because click = select is simple and covers most use cases.
 
 ---
 

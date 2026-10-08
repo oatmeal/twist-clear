@@ -11,6 +11,7 @@ import {
   localDateToUtcBound,
   utcTimestampToLocalDate,
 } from './lib/dateUtils';
+import { monthLabel, periodLabel, rangeKind, rangesOverlap, yearLabel } from './lib/dateRange';
 import { t, lang } from './lib/i18n';
 
 // ── Raw timestamp storage ─────────────────────────────────────────────────
@@ -275,8 +276,8 @@ function showPreviewForDay(dateStr: string): void {
 
 /**
  * Determines the "default" period shown in the strip when nothing is hovered:
- * - calDay (single-day selection)  → that day
- * - calWeek (week selection)       → that week
+ * - single-day selection           → that day
+ * - week selection                 → that week
  * - calMonth (month view)          → that month
  * - else (year view)               → that year
  *
@@ -286,12 +287,14 @@ function showPreviewForDay(dateStr: string): void {
 async function prefetchDefault(): Promise<void> {
   const seq = ++_defaultSeq;
 
-  if (state.calDay && !state.gameFilter) {
+  const day = selectedDay();
+  const week = selectedWeek();
+  if (day && !state.gameFilter) {
     // Single-day selection, no game filter: override with full day breakdown.
     // When a game filter is active, app.ts already pushed the correct filtered
     // default via setDefaultPreviewGames(); don't overwrite it here.
-    const [utcFrom, utcTo] = dayUtcBounds(state.calDay);
-    const periodStr = formatPreviewDate(state.calDay);
+    const [utcFrom, utcTo] = dayUtcBounds(day);
+    const periodStr = formatPreviewDate(day);
     if (!_hovering) {
       const strip = document.getElementById('cal-game-preview');
       if (strip) strip.style.display = 'block';
@@ -305,11 +308,11 @@ async function prefetchDefault(): Promise<void> {
     const label = total > 0 ? `${periodStr} · ${t().clipCount(total)}` : periodStr;
     _defaultPreview = { label, data: mergedData };
     if (!_hovering) displayPreview(label, mergedData);
-  } else if (state.calWeek && !state.gameFilter) {
+  } else if (week && !state.gameFilter) {
     // Week selection, no game filter: override with full week breakdown.
-    // Same reasoning as calDay above.
-    const [utcFrom, utcTo] = weekUtcBounds(state.calWeek);
-    const periodStr = t().weekLabel(state.calWeek);
+    // Same reasoning as the single-day case above.
+    const [utcFrom, utcTo] = weekUtcBounds(week);
+    const periodStr = t().weekLabel(week);
     if (!_hovering) {
       const strip = document.getElementById('cal-game-preview');
       if (strip) strip.style.display = 'block';
@@ -364,29 +367,186 @@ function heatLevelRelative(cnt: number, thresholds: [number, number, number]): 0
   return 4;
 }
 
-// ── Date filter helpers ───────────────────────────────────────────────────
+// ── Selection ─────────────────────────────────────────────────────────────
+// The date filter (calDateFrom / calDateTo) is the selection. Everything that
+// changes it goes through applyDateSelection(). Navigation (the header's ‹ ›,
+// the Year / Month toggle, clicking the timeline) only moves the view
+// (calYear / calMonth) and never touches the filter.
 
-function setYearFilter(y: number): void {
-  state.setCalDateFrom(`${y}-01-01`);
-  state.setCalDateTo(`${y + 1}-01-01`);
-  syncDateInputs();
+function pad2(n: number): string {
+  return String(n).padStart(2, '0');
 }
 
-function setMonthFilter(y: number, m: number): void {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  state.setCalDateFrom(`${y}-${pad(m + 1)}-01`);
-  state.setCalDateTo(
-    m === 11 ? `${y + 1}-01-01` : `${y}-${pad(m + 2)}-01`,
-  );
+function yearRange(y: number): [string, string] {
+  return [`${y}-01-01`, `${y + 1}-01-01`];
+}
+
+function monthRange(y: number, m: number): [string, string] {
+  return [`${y}-${pad2(m + 1)}-01`, m === 11 ? `${y + 1}-01-01` : `${y}-${pad2(m + 2)}-01`];
+}
+
+/** The selected day, when the selection is exactly one day. */
+function selectedDay(): string | null {
+  return rangeKind(state.calDateFrom, state.calDateTo) === 'day' ? state.calDateFrom : null;
+}
+
+/** The selected week's Sunday, when the selection is exactly one week. */
+function selectedWeek(): string | null {
+  return rangeKind(state.calDateFrom, state.calDateTo) === 'week' ? state.calDateFrom : null;
+}
+
+/**
+ * Set the date filter and re-render. If the calendar is open and the new
+ * selection lies entirely outside what it shows (e.g. typed into the date
+ * inputs or dragged on the timeline), the view moves to it at the current
+ * zoom level; otherwise the view stays put.
+ */
+export function applyDateSelection(from: string | null, to: string | null): void {
+  state.setCalDateFrom(from);
+  state.setCalDateTo(to);
   syncDateInputs();
+  if (state.currentView === 'calendar') {
+    const [vFrom, vTo] = viewRange();
+    if ((from !== null || to !== null) && !rangesOverlap(from, to, vFrom, vTo)) {
+      moveViewTo(from ?? addDays(to!, -1));
+    }
+    void renderCalendar();
+  }
+  state.setCurrentPage(1);
+  callRender();
+}
+
+function selectDay(dateStr: string): void {
+  applyDateSelection(dateStr, addDays(dateStr, 1));
+}
+
+function selectWeek(sundayStr: string): void {
+  applyDateSelection(sundayStr, addDays(sundayStr, 7));
+}
+
+/**
+ * Shift-click: extend the selection to include day — moving whichever end is
+ * on day's side — or select just day if nothing is selected.
+ */
+function extendSelectionTo(day: string): void {
+  const { calDateFrom: from, calDateTo: to } = state;
+  if (from === null || to === null) { selectDay(day); return; }
+  if (day < from) applyDateSelection(day, to);
+  else applyDateSelection(from, addDays(day, 1));
+}
+
+/** "Filter to <viewed period>": select exactly the year / month on screen. */
+function selectView(): void {
+  const [from, to] = viewRange();
+  applyDateSelection(from, to);
 }
 
 export function clearCalDateFilter(): void {
-  state.setCalDay(null);
-  state.setCalWeek(null);
   state.setCalDateFrom(null);
   state.setCalDateTo(null);
   syncDateInputs();
+}
+
+// ── View (navigation) ─────────────────────────────────────────────────────
+// calMonth === null means the year view of calYear.
+
+// The month to return to when zooming back in from the year view.
+let _lastMonth: number | null = null;
+
+/** [from, to) of the period on screen. */
+function viewRange(): [string, string] {
+  return state.calMonth === null
+    ? yearRange(state.calYear)
+    : monthRange(state.calYear, state.calMonth);
+}
+
+/** The period the calendar shows, or null while the panel is closed. */
+export function calendarViewPeriod(): { start: string; end: string } | null {
+  if (state.currentView !== 'calendar') return null;
+  const [start, end] = viewRange();
+  return { start, end };
+}
+
+/** Archive bounds as [year, 0-based month] pairs. */
+function archiveBounds(): { minY: number; minM: number; maxY: number; maxM: number } {
+  const [minY, minM] = state.calMinDate ? state.calMinDate.split('-').map(Number) as [number, number] : [0, 1];
+  const [maxY, maxM] = state.calMaxDate ? state.calMaxDate.split('-').map(Number) as [number, number] : [9999, 12];
+  return { minY, minM: minM - 1, maxY, maxM: maxM - 1 };
+}
+
+/** Move the view to the year / month containing date, keeping the zoom level. */
+function moveViewTo(date: string): void {
+  let d = date;
+  if (state.calMinDate && d < state.calMinDate) d = state.calMinDate;
+  if (state.calMaxDate && d > state.calMaxDate) d = state.calMaxDate;
+  state.setCalYear(Number(d.slice(0, 4)));
+  if (state.calMonth !== null) state.setCalMonth(Number(d.slice(5, 7)) - 1);
+}
+
+function canStep(dir: -1 | 1): boolean {
+  const b = archiveBounds();
+  if (state.calMonth === null) return dir < 0 ? state.calYear > b.minY : state.calYear < b.maxY;
+  const idx = state.calYear * 12 + state.calMonth;
+  return dir < 0 ? idx > b.minY * 12 + b.minM : idx < b.maxY * 12 + b.maxM;
+}
+
+/** The [year, month | null] that stepping in dir would show. */
+function steppedView(dir: -1 | 1): [number, number | null] {
+  if (state.calMonth === null) return [state.calYear + dir, null];
+  const idx = state.calYear * 12 + state.calMonth + dir;
+  return [Math.floor(idx / 12), idx % 12];
+}
+
+function stepView(dir: -1 | 1): void {
+  if (!canStep(dir)) return;
+  const [y, m] = steppedView(dir);
+  state.setCalYear(y);
+  state.setCalMonth(m);
+  navigate();
+}
+
+/** Month to open when zooming into year y: the selection's, the last viewed, or the latest with clips. */
+function monthForYear(y: number): number {
+  const from = state.calDateFrom;
+  if (from && Number(from.slice(0, 4)) === y) return Number(from.slice(5, 7)) - 1;
+  const b = archiveBounds();
+  let m = _lastMonth ?? (y === b.maxY ? b.maxM : 0);
+  if (y === b.minY && m < b.minM) m = b.minM;
+  if (y === b.maxY && m > b.maxM) m = b.maxM;
+  return m;
+}
+
+function setLevel(level: 'year' | 'month'): void {
+  if ((level === 'year') === (state.calMonth === null)) return;
+  if (level === 'year') {
+    _lastMonth = state.calMonth;
+    state.setCalMonth(null);
+  } else {
+    state.setCalMonth(monthForYear(state.calYear));
+  }
+  navigate();
+}
+
+function zoomToMonth(m: number): void {
+  state.setCalMonth(m);
+  navigate();
+}
+
+/** Re-render after a navigation-only change; the filter and results are untouched. */
+function navigate(): void {
+  if (state.calMonth !== null) _lastMonth = state.calMonth;
+  void renderCalendar();
+  callRender(); // keeps the URL hash and the timeline's view underline in sync
+}
+
+/**
+ * Show date in the calendar (from a click on the timeline), opening the panel
+ * if it's closed. Keeps the current zoom level.
+ */
+export function showDateInCalendar(date: string): void {
+  moveViewTo(date);
+  if (state.currentView === 'calendar') navigate();
+  else openPanel();
 }
 
 export function syncDateInputs(): void {
@@ -425,33 +585,6 @@ function liveDayCountsForYear(year: number): Record<string, number> {
     const day = utcTimestampToLocalDate(c.created_at, state.tzOffset);
     if (day.startsWith(`${year}-`)) {
       counts[day] = (counts[day] ?? 0) + 1;
-    }
-  }
-  return counts;
-}
-
-/** YYYY → count for live clips, keyed by year (local time). */
-function liveYearCounts(): Record<string, number> {
-  const counts: Record<string, number> = {};
-  for (const c of state.liveClips) {
-    if (state.dbCutoffDate && c.created_at <= state.dbCutoffDate) continue;
-    if (state.gameFilter && c.game_id !== state.gameFilter) continue;
-    const yr = utcTimestampToLocalDate(c.created_at, state.tzOffset).slice(0, 4);
-    counts[yr] = (counts[yr] ?? 0) + 1;
-  }
-  return counts;
-}
-
-/** YYYY-MM → count for live clips falling in the given calendar year (local time). */
-function liveMonthCountsForYear(year: number): Record<string, number> {
-  const counts: Record<string, number> = {};
-  for (const c of state.liveClips) {
-    if (state.dbCutoffDate && c.created_at <= state.dbCutoffDate) continue;
-    if (state.gameFilter && c.game_id !== state.gameFilter) continue;
-    const day = utcTimestampToLocalDate(c.created_at, state.tzOffset);
-    if (day.startsWith(`${year}-`)) {
-      const month = day.slice(0, 7);
-      counts[month] = (counts[month] ?? 0) + 1;
     }
   }
   return counts;
@@ -585,39 +718,6 @@ function monthFullyInRange(year: number, month: number): boolean {
   return true;
 }
 
-/**
- * True when the calendar year overlaps the active filter range at all.
- * Used to highlight year-strip pills that touch the selection.
- * Open ends are clamped to the loaded data bounds.
- */
-function yearOverlapsRange(year: number): boolean {
-  const { from, to } = effectiveRangeBounds();
-  if (!from && !to) return false;
-  const yStart = `${year}-01-01`;
-  const yEnd   = `${year + 1}-01-01`;
-  if (from && to) return from < yEnd && to > yStart;
-  if (from)       return yEnd  > from;
-  if (to)         return yStart < to;
-  return false;
-}
-
-/**
- * True when the calendar month (0-based) overlaps the active filter range at all.
- * Used to highlight year-strip pills that touch the selection.
- * Open ends are clamped to the loaded data bounds.
- */
-function monthOverlapsRange(year: number, month: number): boolean {
-  const { from, to } = effectiveRangeBounds();
-  if (!from && !to) return false;
-  const pad    = (n: number) => String(n).padStart(2, '0');
-  const mStart = `${year}-${pad(month + 1)}-01`;
-  const mEnd   = month === 11 ? `${year + 1}-01-01` : `${year}-${pad(month + 2)}-01`;
-  if (from && to) return from < mEnd && to > mStart;
-  if (from)       return mEnd  > from;
-  if (to)         return mStart < to;
-  return false;
-}
-
 // ── DB queries ────────────────────────────────────────────────────────────
 
 async function queryYearDays(year: number): Promise<{ day: string; cnt: number }[]> {
@@ -656,39 +756,6 @@ async function queryMonthDays(year: number, month: number): Promise<{ day: strin
   )) as { day: string; cnt: number }[];
 }
 
-async function queryYearMonthTotals(year: number): Promise<{ month: string; cnt: number }[]> {
-  const mod  = tzToSqlModifier(state.tzOffset);
-  const from = localDateToUtcBound(`${year}-01-01`, state.tzOffset);
-  const to   = localDateToUtcBound(`${year + 1}-01-01`, state.tzOffset);
-  const gameClause = state.gameFilter ? ' AND game_id = ?' : '';
-  const params: (string | number)[] = [mod, from, to];
-  if (state.gameFilter) params.push(state.gameFilter);
-  return (await q(
-    `SELECT strftime('%Y-%m', created_at, ?) AS month, COUNT(*) AS cnt
-     FROM clips
-     WHERE created_at >= ? AND created_at < ?${gameClause}
-     GROUP BY month`,
-    params,
-  )) as { month: string; cnt: number }[];
-}
-
-async function queryAllYearTotals(): Promise<{ year: string; cnt: number }[]> {
-  if (!state.calMinDate || !state.calMaxDate) return [];
-  const mod  = tzToSqlModifier(state.tzOffset);
-  const from = localDateToUtcBound(`${state.calMinDate.slice(0, 4)}-01-01`, state.tzOffset);
-  const to   = localDateToUtcBound(`${Number(state.calMaxDate.slice(0, 4)) + 1}-01-01`, state.tzOffset);
-  const gameClause = state.gameFilter ? ' AND game_id = ?' : '';
-  const params: (string | number)[] = [mod, from, to];
-  if (state.gameFilter) params.push(state.gameFilter);
-  return (await q(
-    `SELECT strftime('%Y', created_at, ?) AS year, COUNT(*) AS cnt
-     FROM clips
-     WHERE created_at >= ? AND created_at < ?${gameClause}
-     GROUP BY year`,
-    params,
-  )) as { year: string; cnt: number }[];
-}
-
 // ── Main calendar dispatcher ──────────────────────────────────────────────
 
 export async function renderCalendar(): Promise<void> {
@@ -710,143 +777,59 @@ export async function renderCalendar(): Promise<void> {
   const notice = document.getElementById('cal-search-notice');
   if (notice) notice.style.display = state.searchQuery ? '' : 'none';
 
-  renderNavControls();
+  renderHeader();
   void prefetchDefault(); // fire-and-forget: populate the game preview strip
 }
 
-function renderNavControls(): void {
-  const ySel = document.getElementById('cal-year-select') as HTMLSelectElement | null;
-  if (ySel) ySel.value = String(state.calYear);
+function renderHeader(): void {
+  const tr = t();
+  const isYear = state.calMonth === null;
+  const label = isYear ? yearLabel(state.calYear, lang) : monthLabel(state.calYear, state.calMonth!, lang);
+  document.getElementById('cal-title')!.textContent = label;
 
-  const [mnY, mnM] = state.calMinDate ? state.calMinDate.split('-').map(Number) as [number, number] : [0, 1];
-  const [mxY, mxM] = state.calMaxDate ? state.calMaxDate.split('-').map(Number) as [number, number] : [9999, 12];
+  const prev = document.getElementById('cal-prev') as HTMLButtonElement;
+  const next = document.getElementById('cal-next') as HTMLButtonElement;
+  prev.disabled = !canStep(-1);
+  next.disabled = !canStep(1);
+  prev.title = isYear ? tr.calPrevYear : tr.calPrevMonth;
+  next.title = isYear ? tr.calNextYear : tr.calNextMonth;
+  prev.setAttribute('aria-label', prev.title);
+  next.setAttribute('aria-label', next.title);
 
-  (document.getElementById('cal-prev-year') as HTMLButtonElement).disabled = (state.calYear <= mnY);
-  (document.getElementById('cal-next-year') as HTMLButtonElement).disabled = (state.calYear >= mxY);
+  const levelGroup = document.getElementById('cal-level')!;
+  levelGroup.setAttribute('aria-label', tr.calLevelGroup);
+  const levelYear  = document.getElementById('cal-level-year')!;
+  const levelMonth = document.getElementById('cal-level-month')!;
+  levelYear.textContent  = tr.calLevelYear;
+  levelMonth.textContent = tr.calLevelMonth;
+  levelYear.setAttribute('aria-pressed', String(isYear));
+  levelMonth.setAttribute('aria-pressed', String(!isYear));
 
-  const monthNav = document.getElementById('cal-month-nav')!;
-  const dayNav   = document.getElementById('cal-day-nav')!;
+  document.getElementById('cal-hint')!.textContent = isYear ? tr.calHintYear : tr.calHintMonth;
 
-  if (state.calMonth !== null) {
-    const mSel = document.getElementById('cal-month-select') as HTMLSelectElement | null;
-    if (mSel) {
-      mSel.value = String(state.calMonth);
-      Array.from(mSel.options).forEach((opt, i) => {
-        opt.disabled = (state.calYear === mnY && i < mnM - 1)
-                    || (state.calYear === mxY && i > mxM - 1);
-      });
-    }
-
-    (document.getElementById('cal-prev-month') as HTMLButtonElement).disabled =
-      (state.calYear <= mnY && state.calMonth <= mnM - 1);
-    (document.getElementById('cal-next-month') as HTMLButtonElement).disabled =
-      (state.calYear >= mxY && state.calMonth >= mxM - 1);
-
-    monthNav.style.display = 'flex';
-
-    if (state.calDay !== null) {
-      const dSel = document.getElementById('cal-day-select') as HTMLSelectElement | null;
-      if (dSel) {
-        const total = daysInMonth(state.calYear, state.calMonth);
-        dSel.innerHTML = '';
-        for (let d = 1; d <= total; d++) {
-          const dateKey = localDateStr(state.calYear, state.calMonth, d);
-          const opt = document.createElement('option');
-          opt.value = String(d);
-          opt.textContent = String(d);
-          opt.disabled = !!(state.calMinDate && dateKey < state.calMinDate)
-                      || !!(state.calMaxDate && dateKey > state.calMaxDate);
-          dSel.appendChild(opt);
-        }
-        const dd = state.calDay.split('-')[2];
-        dSel.value = String(parseInt(dd!, 10));
-      }
-
-      (document.getElementById('cal-prev-day') as HTMLButtonElement).disabled =
-        !!(state.calMinDate && state.calDay <= state.calMinDate);
-      (document.getElementById('cal-next-day') as HTMLButtonElement).disabled =
-        !!(state.calMaxDate && state.calDay >= state.calMaxDate);
-
-      dayNav.style.display = 'flex';
-    } else {
-      dayNav.style.display = 'none';
-    }
-  } else {
-    monthNav.style.display = 'none';
-    dayNav.style.display = 'none';
-  }
+  const [vFrom, vTo] = viewRange();
+  const selected = state.calDateFrom === vFrom && state.calDateTo === vTo;
+  const btn = document.getElementById('cal-select-view') as HTMLButtonElement;
+  btn.textContent = selected ? tr.calFilteredTo(label) : tr.calFilterTo(label);
+  btn.disabled = selected;
+  btn.classList.toggle('active', selected);
 }
 
 // ── Year view ─────────────────────────────────────────────────────────────
 
-async function renderAllYearsStrip(): Promise<void> {
-  const strip = document.getElementById('cal-all-years-strip')!;
-
-  if (!state.calMinDate || !state.calMaxDate) { strip.innerHTML = ''; return; }
-
-  const totals  = await queryAllYearTotals();
-  // Clear only after the await: renderCalendar() calls can overlap, and
-  // clearing before it let each one append a full set of pills.
-  strip.innerHTML = '';
-  const yearMap = Object.fromEntries(totals.map(r => [r.year, r.cnt]));
-
-  // Merge live clip counts.
-  for (const [yr, cnt] of Object.entries(liveYearCounts())) {
-    yearMap[yr] = ((yearMap[yr] as number | undefined) ?? 0) + cnt;
-  }
-
-  const minYear = Number(state.calMinDate.slice(0, 4));
-  const maxYear = Number(state.calMaxDate.slice(0, 4));
-
-  const allYearCounts = Array.from(
-    { length: maxYear - minYear + 1 },
-    (_, i) => (yearMap[String(minYear + i)] as number | undefined) ?? 0,
-  );
-  const yearThresholds = computeHeatThresholds(allYearCounts);
-
-  for (let y = minYear; y <= maxYear; y++) {
-    const cnt   = (yearMap[String(y)] as number | undefined) ?? 0;
-    const level = heatLevelRelative(cnt, yearThresholds);
-    const el = document.createElement('div');
-    const classes = ['strip-year'];
-    if (y === state.calYear)  classes.push('active');
-    if (yearOverlapsRange(y)) classes.push('in-range');
-    el.className = classes.join(' ');
-    el.textContent = String(y);
-    el.title = t().monthTooltip(String(y), cnt);
-    el.style.background = `var(--cal-${level})`;
-    el.dataset.heat = String(level);
-
-    el.addEventListener('click', () => {
-      state.setCalYear(y);
-      state.setCalMonth(null);
-      state.setCalDay(null);
-      state.setCalWeek(null);
-      setYearFilter(y);
-      void renderCalendar();
-      state.setCurrentPage(1);
-      callRender();
-    });
-    if (_supportsHover) {
-      el.addEventListener('mouseenter', () => showPreviewForYear(y));
-      el.addEventListener('mouseleave', revertToDefault);
-    }
-    strip.appendChild(el);
-  }
-}
-
 async function renderYearView(): Promise<void> {
-  document.getElementById('cal-all-years-strip')!.style.display = '';
-  document.getElementById('cal-year-view')!.style.display        = 'grid';
-  document.getElementById('cal-month-view')!.style.display       = 'none';
-  renderBreadcrumb();
+  document.getElementById('cal-year-view')!.style.display  = 'grid';
+  document.getElementById('cal-month-view')!.style.display = 'none';
 
-  const [yearData] = await Promise.all([queryYearDays(state.calYear), renderAllYearsStrip()]);
+  const year = state.calYear;
+  const yearData = await queryYearDays(year);
+  // Navigated elsewhere while the query ran — a newer render owns the DOM.
+  if (state.calYear !== year || state.calMonth !== null) return;
   const dayMap = Object.fromEntries(yearData.map(r => [r.day, r.cnt]));
 
   // Merge live clip counts (live clips are always newer than the DB cutoff,
   // so they appear at the end and never overlap archived days).
-  for (const [day, cnt] of Object.entries(liveDayCountsForYear(state.calYear))) {
+  for (const [day, cnt] of Object.entries(liveDayCountsForYear(year))) {
     dayMap[day] = ((dayMap[day] as number | undefined) ?? 0) + cnt;
   }
 
@@ -865,20 +848,33 @@ async function renderYearView(): Promise<void> {
   const container = document.getElementById('cal-year-view')!;
   container.innerHTML = '';
 
+  // All twelve months, so each keeps its slot; months without clips are
+  // dimmed and inert rather than hidden.
   for (let m = 0; m < 12; m++) {
-    if ((monthTotals[m] ?? 0) === 0) continue;
-    const totalDays = daysInMonth(state.calYear, m);
-    const firstDow  = firstDayOfMonth(state.calYear, m);
+    const total     = monthTotals[m] ?? 0;
+    const totalDays = daysInMonth(year, m);
+    const firstDow  = firstDayOfMonth(year, m);
 
     // Pre-compute for use in both the card className and the mini-day loop.
-    const isFullMonth = monthFullyInRange(state.calYear, m);
+    const isFullMonth = monthFullyInRange(year, m);
 
+    // Clicking anywhere on a card zooms into that month (navigation only);
+    // dragging across its days selects a range — see onCellPointerDown().
     const card = document.createElement('div');
-    card.className = 'mini-month' + (isFullMonth ? ' in-range' : '');
+    card.className = 'mini-month' + (isFullMonth ? ' in-range' : '') + (total === 0 ? ' is-empty' : '');
+    card.dataset['month'] = String(m);
 
-    const title = document.createElement('div');
+    // The title is the card's keyboard-accessible zoom control.
+    const title = document.createElement('button');
+    title.type = 'button';
     title.className = 'mini-month-title';
     title.textContent = t().monthShort[m]!;
+    if (total === 0) {
+      title.disabled = true;
+    } else {
+      card.title = t().calOpenMonth(monthLabel(year, m, lang));
+      title.addEventListener('click', () => zoomToMonth(m));
+    }
     card.appendChild(title);
 
     const grid = document.createElement('div');
@@ -890,10 +886,11 @@ async function renderYearView(): Promise<void> {
       grid.appendChild(cell);
     }
     for (let day = 1; day <= totalDays; day++) {
-      const key  = localDateStr(state.calYear, m, day);
+      const key  = localDateStr(year, m, day);
       const cnt  = (dayMap[key] as number | undefined) ?? 0;
       const cell = document.createElement('div');
       cell.className = 'mini-day';
+      cell.dataset['date'] = key;
       const miniDayLevel = dayThresholds ? heatLevelRelative(cnt, dayThresholds) : heatLevel(cnt);
       cell.style.background = `var(--cal-${miniDayLevel})`;
       if (isInRange(key)) {
@@ -912,17 +909,8 @@ async function renderYearView(): Promise<void> {
     }
 
     card.appendChild(grid);
-    card.addEventListener('click', () => {
-      state.setCalMonth(m);
-      state.setCalDay(null);
-      state.setCalWeek(null);
-      setMonthFilter(state.calYear, m);
-      void renderCalendar();
-      state.setCurrentPage(1);
-      callRender();
-    });
-    if (_supportsHover) {
-      card.addEventListener('mouseenter', () => showPreviewForMonth(state.calYear, m));
+    if (_supportsHover && total > 0) {
+      card.addEventListener('mouseenter', () => showPreviewForMonth(year, m));
       card.addEventListener('mouseleave', revertToDefault);
     }
     container.appendChild(card);
@@ -932,65 +920,17 @@ async function renderYearView(): Promise<void> {
 // ── Month view ────────────────────────────────────────────────────────────
 
 async function renderMonthView(): Promise<void> {
-  document.getElementById('cal-all-years-strip')!.style.display = 'none';
-  document.getElementById('cal-year-view')!.style.display        = 'none';
-  document.getElementById('cal-month-view')!.style.display       = 'block';
-  renderBreadcrumb();
-  await Promise.all([renderYearStrip(), renderMonthGrid()]);
-}
-
-async function renderYearStrip(): Promise<void> {
-  const totals   = await queryYearMonthTotals(state.calYear);
-  const monthMap = Object.fromEntries(totals.map(r => [r.month, r.cnt]));
-
-  // Merge live clip counts into month totals.
-  for (const [month, cnt] of Object.entries(liveMonthCountsForYear(state.calYear))) {
-    monthMap[month] = ((monthMap[month] as number | undefined) ?? 0) + cnt;
-  }
-
-  const strip = document.getElementById('cal-year-strip')!;
-  strip.innerHTML = '';
-
-  const allMonthCounts = Array.from(
-    { length: 12 },
-    (_, m) => (monthMap[`${state.calYear}-${String(m + 1).padStart(2, '0')}`] as number | undefined) ?? 0,
-  );
-  const monthThresholds = computeHeatThresholds(allMonthCounts);
-
-  for (let m = 0; m < 12; m++) {
-    const key   = `${state.calYear}-${String(m + 1).padStart(2, '0')}`;
-    const cnt   = (monthMap[key] as number | undefined) ?? 0;
-    const level = heatLevelRelative(cnt, monthThresholds);
-
-    const el = document.createElement('div');
-    const classes = ['strip-month'];
-    if (m === state.calMonth)               classes.push('active');
-    if (monthOverlapsRange(state.calYear, m)) classes.push('in-range');
-    el.className = classes.join(' ');
-    el.textContent = t().monthShort[m]!;
-    el.title = t().monthTooltip(t().monthLong[m]!, cnt);
-    el.style.background = `var(--cal-${level})`;
-    el.dataset.heat = String(level);
-
-    el.addEventListener('click', () => {
-      state.setCalMonth(m);
-      state.setCalDay(null);
-      state.setCalWeek(null);
-      setMonthFilter(state.calYear, m);
-      void renderCalendar();
-      state.setCurrentPage(1);
-      callRender();
-    });
-    if (_supportsHover) {
-      el.addEventListener('mouseenter', () => showPreviewForMonth(state.calYear, m));
-      el.addEventListener('mouseleave', revertToDefault);
-    }
-    strip.appendChild(el);
-  }
+  document.getElementById('cal-year-view')!.style.display  = 'none';
+  document.getElementById('cal-month-view')!.style.display = 'block';
+  await renderMonthGrid();
 }
 
 async function renderMonthGrid(): Promise<void> {
-  const monthData = await queryMonthDays(state.calYear, state.calMonth!);
+  const year  = state.calYear;
+  const month = state.calMonth!;
+  const monthData = await queryMonthDays(year, month);
+  // Navigated elsewhere while the query ran — a newer render owns the DOM.
+  if (state.calYear !== year || state.calMonth !== month) return;
   const dayMap    = Object.fromEntries(monthData.map(r => [r.day, r.cnt]));
 
   // Merge live clip counts into day map.
@@ -1044,7 +984,7 @@ async function renderMonthGrid(): Promise<void> {
       const weekNum   = isoWeekNumber(addDays(rowSunday, 1));
 
       const weekBtn = document.createElement('div');
-      weekBtn.className = 'week-number-btn' + (state.calWeek === rowSunday ? ' selected' : '');
+      weekBtn.className = 'week-number-btn' + (selectedWeek() === rowSunday ? ' selected' : '');
       weekBtn.textContent = String(weekNum);
       weekBtn.title = t().selectWeek(weekNum, rowSunday);
       weekBtn.addEventListener('click', () => selectWeek(rowSunday));
@@ -1065,7 +1005,7 @@ async function renderMonthGrid(): Promise<void> {
 
       const classes = ['month-day-cell'];
       if (dateKey === today)         classes.push('today');
-      if (dateKey === state.calDay)  classes.push('selected');
+      if (dateKey === selectedDay()) classes.push('selected');
       cell.className = classes.join(' ');
       const dayLevel = dayThresholds ? heatLevelRelative(cnt, dayThresholds) : heatLevel(cnt);
       cell.style.background = `var(--cal-${dayLevel})`;
@@ -1090,125 +1030,16 @@ async function renderMonthGrid(): Promise<void> {
         cell.appendChild(cntEl);
       }
 
-      cell.addEventListener('click', () => selectDay(dateKey));
+      cell.dataset['date'] = dateKey; // click / drag: see onCellPointerDown()
       if (_supportsHover) {
-        cell.addEventListener('mouseenter', () => showPreviewForDay(dateKey));
-        cell.addEventListener('mouseleave', revertToDefault);
+        // While drag-selecting, the strip previews the dragged range instead.
+        cell.addEventListener('mouseenter', () => { if (!_press?.range) showPreviewForDay(dateKey); });
+        cell.addEventListener('mouseleave', () => { if (!_press?.range) revertToDefault(); });
       }
     }
 
     currentRow!.appendChild(cell);
   }
-}
-
-// ── Breadcrumb ────────────────────────────────────────────────────────────
-
-function renderBreadcrumb(): void {
-  const bc    = document.getElementById('cal-breadcrumb')!;
-  const parts: string[] = [];
-
-  if (state.calMonth === null) {
-    parts.push(`<span class="crumb" data-action="year-self">${state.calYear}</span>`);
-  } else {
-    parts.push(`<span class="crumb" data-action="year">${state.calYear}</span>`);
-  }
-
-  if (state.calMonth !== null) {
-    parts.push(`<span class="sep">›</span>`);
-    if (state.calDay === null && state.calWeek === null) {
-      parts.push(`<span class="crumb" data-action="month-self">${t().monthLong[state.calMonth]!}</span>`);
-    } else {
-      parts.push(`<span class="crumb" data-action="month">${t().monthLong[state.calMonth]!}</span>`);
-    }
-  }
-
-  if (state.calDay !== null) {
-    const dd = state.calDay.split('-')[2];
-    parts.push(`<span class="sep">›</span>`);
-    parts.push(`<span class="crumb-current">${parseInt(dd!, 10)}</span>`);
-  } else if (state.calWeek !== null) {
-    parts.push(`<span class="sep">›</span>`);
-    parts.push(`<span class="crumb-current">${t().weekLabel(state.calWeek!)}</span>`);
-  }
-
-  bc.innerHTML = parts.join('');
-
-  bc.querySelector('[data-action="year"]')?.addEventListener('click', () => {
-    state.setCalMonth(null);
-    state.setCalDay(null);
-    state.setCalWeek(null);
-    setYearFilter(state.calYear);
-    void renderCalendar();
-    state.setCurrentPage(1);
-    callRender();
-  });
-  if (_supportsHover) {
-    const yearCrumb = bc.querySelector<HTMLElement>('[data-action="year"]');
-    yearCrumb?.addEventListener('mouseenter', () => showPreviewForYear(state.calYear));
-    yearCrumb?.addEventListener('mouseleave', revertToDefault);
-  }
-
-  bc.querySelector('[data-action="year-self"]')?.addEventListener('click', () => {
-    setYearFilter(state.calYear);
-    void renderCalendar();
-    state.setCurrentPage(1);
-    callRender();
-  });
-  if (_supportsHover) {
-    const yearSelfCrumb = bc.querySelector<HTMLElement>('[data-action="year-self"]');
-    yearSelfCrumb?.addEventListener('mouseenter', () => showPreviewForYear(state.calYear));
-    yearSelfCrumb?.addEventListener('mouseleave', revertToDefault);
-  }
-
-  bc.querySelector('[data-action="month"]')?.addEventListener('click', () => {
-    state.setCalDay(null);
-    state.setCalWeek(null);
-    setMonthFilter(state.calYear, state.calMonth!);
-    void renderCalendar();
-    state.setCurrentPage(1);
-    callRender();
-  });
-  if (_supportsHover) {
-    const monthCrumb = bc.querySelector<HTMLElement>('[data-action="month"]');
-    monthCrumb?.addEventListener('mouseenter', () => showPreviewForMonth(state.calYear, state.calMonth!));
-    monthCrumb?.addEventListener('mouseleave', revertToDefault);
-  }
-
-  bc.querySelector('[data-action="month-self"]')?.addEventListener('click', () => {
-    setMonthFilter(state.calYear, state.calMonth!);
-    void renderCalendar();
-    state.setCurrentPage(1);
-    callRender();
-  });
-  if (_supportsHover) {
-    const monthSelfCrumb = bc.querySelector<HTMLElement>('[data-action="month-self"]');
-    monthSelfCrumb?.addEventListener('mouseenter', () => showPreviewForMonth(state.calYear, state.calMonth!));
-    monthSelfCrumb?.addEventListener('mouseleave', revertToDefault);
-  }
-}
-
-// ── Selection ─────────────────────────────────────────────────────────────
-
-function selectDay(dateStr: string): void {
-  state.setCalDay(dateStr);
-  state.setCalWeek(null);
-  state.setCalDateFrom(dateStr);
-  state.setCalDateTo(addDays(dateStr, 1));
-  syncDateInputs();
-  void renderCalendar();
-  state.setCurrentPage(1);
-  callRender();
-}
-
-function selectWeek(weekMonStr: string): void {
-  state.setCalWeek(weekMonStr);
-  state.setCalDay(null);
-  state.setCalDateFrom(weekMonStr);
-  state.setCalDateTo(addDays(weekMonStr, 7));
-  syncDateInputs();
-  void renderCalendar();
-  state.setCurrentPage(1);
-  callRender();
 }
 
 // ── View switching ────────────────────────────────────────────────────────
@@ -1220,8 +1051,6 @@ function selectWeek(weekMonStr: string): void {
  * - Filter span > 62 days → year view for the midpoint year
  *
  * Called when the user opens the calendar panel so it lands somewhere relevant.
- * Resets calDay / calWeek because they were associated with the previous
- * navigation session, not the current filter.
  */
 function deriveNavigationPosition(): void {
   const from = state.calDateFrom;
@@ -1234,8 +1063,6 @@ function deriveNavigationPosition(): void {
       : new Date().getFullYear();
     state.setCalYear(maxY);
     state.setCalMonth(null);
-    state.setCalDay(null);
-    state.setCalWeek(null);
     return;
   }
 
@@ -1259,126 +1086,133 @@ function deriveNavigationPosition(): void {
     // ≤ 2 months: month view for the start of the range.
     state.setCalYear(fromYear);
     state.setCalMonth(fromMonth);
-    state.setCalDay(null);
-    state.setCalWeek(null);
   } else {
     // > 2 months: year view for the midpoint year.
     const midYear = new Date((f + t) / 2).getUTCFullYear();
     state.setCalYear(midYear);
     state.setCalMonth(null);
-    state.setCalDay(null);
-    state.setCalWeek(null);
   }
+}
+
+function openPanel(): void {
+  state.setCurrentView('calendar');
+  document.getElementById('btn-view-cal')!.classList.add('active');
+  if (state.calMonth !== null) _lastMonth = state.calMonth;
+  void renderCalendar();
+  callRender();
 }
 
 export function switchView(view: 'grid' | 'calendar'): void {
-  state.setCurrentView(view);
-
-  const calBtn   = document.getElementById('btn-view-cal')!;
-  const calPanel = document.getElementById('calendar-panel')!;
-
   if (view === 'grid') {
-    calBtn.classList.remove('active');
-    calPanel.style.display = 'none';
-    state.setCurrentPage(1);
+    state.setCurrentView('grid');
+    document.getElementById('btn-view-cal')!.classList.remove('active');
+    document.getElementById('calendar-panel')!.style.display = 'none';
     callRender();
   } else {
-    calBtn.classList.add('active');
     deriveNavigationPosition();
-    void renderCalendar();
-    state.setCurrentPage(1);
-    callRender();
+    openPanel();
   }
 }
 
-// ── Year / month / day navigation ─────────────────────────────────────────
+// ── Day cells: click, drag, shift-click ───────────────────────────────────
+// Delegated from #cal-month-grid and #cal-year-view (cells carry data-date).
+//   Month view: click a day to select it.
+//   Year view:  click a month card to zoom into it.
+//   Both (mouse): drag across days to select a range; Shift-click extends the
+//   selection to the clicked day, also across months.
+// Touch only taps: a touch drag scrolls the page as usual.
 
-function prevYear(): void {
-  const minY = state.calMinDate ? parseInt(state.calMinDate.slice(0, 4), 10) : 0;
-  if (state.calYear <= minY) return;
-  state.setCalYear(state.calYear - 1);
-  state.setCalMonth(null);
-  state.setCalDay(null);
-  state.setCalWeek(null);
-  void renderCalendar();
-  state.setCurrentPage(1);
-  callRender();
+interface CellPress {
+  container: HTMLElement;
+  anchor: string | null;   // day under the press, if any
+  month: number | null;    // year view: month card under the press
+  x0: number;
+  y0: number;
+  mouse: boolean;
+  range: [string, string] | null;  // inclusive, once dragging
 }
 
-function nextYear(): void {
-  const maxY = state.calMaxDate ? parseInt(state.calMaxDate.slice(0, 4), 10) : 9999;
-  if (state.calYear >= maxY) return;
-  state.setCalYear(state.calYear + 1);
-  state.setCalMonth(null);
-  state.setCalDay(null);
-  state.setCalWeek(null);
-  void renderCalendar();
-  state.setCurrentPage(1);
-  callRender();
+let _press: CellPress | null = null;
+
+function dateUnder(x: number, y: number): string | null {
+  const el = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-date]');
+  return el && _press?.container.contains(el) ? el.dataset['date']! : null;
 }
 
-function prevMonth(): void {
-  const [mnY, mnM] = state.calMinDate ? state.calMinDate.split('-').map(Number) as [number, number] : [0, 1];
-  if (state.calYear <= mnY && state.calMonth! <= mnM - 1) return;
-  if (state.calMonth === 0) { state.setCalMonth(11); state.setCalYear(state.calYear - 1); }
-  else                       { state.setCalMonth(state.calMonth! - 1); }
-  state.setCalDay(null);
-  state.setCalWeek(null);
-  void renderCalendar();
-  state.setCurrentPage(1);
-  callRender();
+function paintDragRange(range: [string, string] | null): void {
+  _press?.container.querySelectorAll<HTMLElement>('[data-date]').forEach(el => {
+    const d = el.dataset['date']!;
+    el.classList.toggle('drag-sel', range !== null && d >= range[0] && d <= range[1]);
+  });
 }
 
-function nextMonth(): void {
-  const [mxY, mxM] = state.calMaxDate ? state.calMaxDate.split('-').map(Number) as [number, number] : [9999, 12];
-  if (state.calYear >= mxY && state.calMonth! >= mxM - 1) return;
-  if (state.calMonth === 11) { state.setCalMonth(0); state.setCalYear(state.calYear + 1); }
-  else                        { state.setCalMonth(state.calMonth! + 1); }
-  state.setCalDay(null);
-  state.setCalWeek(null);
-  void renderCalendar();
-  state.setCurrentPage(1);
-  callRender();
+function onCellPointerDown(e: PointerEvent): void {
+  if (e.button !== 0) return;
+  const target = e.target as HTMLElement;
+  // The mini-month title button handles its own clicks (and keyboard).
+  if (target.closest('.mini-month-title')) return;
+  const card = target.closest<HTMLElement>('.mini-month');
+  _press = {
+    container: e.currentTarget as HTMLElement,
+    anchor: target.closest<HTMLElement>('[data-date]')?.dataset['date'] ?? null,
+    month: card && !card.classList.contains('is-empty') ? Number(card.dataset['month']) : null,
+    x0: e.clientX,
+    y0: e.clientY,
+    mouse: e.pointerType !== 'touch',
+    range: null,
+  };
+  window.addEventListener('pointermove', onCellPointerMove);
+  window.addEventListener('pointerup', onCellPointerUp);
+  window.addEventListener('pointercancel', endCellPress);
 }
 
-function prevDay(): void {
-  if (state.calMinDate && state.calDay! <= state.calMinDate) return;
-  const newDay = addDays(state.calDay!, -1);
-  const parts = newDay.split('-').map(Number) as [number, number, number];
-  state.setCalYear(parts[0]);
-  state.setCalMonth(parts[1] - 1); // 0-based
-  selectDay(newDay);
+function onCellPointerMove(e: PointerEvent): void {
+  const p = _press;
+  if (!p || !p.mouse || !p.anchor) return;
+  if (!p.range && Math.hypot(e.clientX - p.x0, e.clientY - p.y0) <= 4) return;
+  const cur = dateUnder(e.clientX, e.clientY) ?? p.range?.[1] ?? p.anchor;
+  const range: [string, string] = p.anchor <= cur ? [p.anchor, cur] : [cur, p.anchor];
+  if (p.range && p.range[0] === range[0] && p.range[1] === range[1]) return;
+  p.range = range;
+  paintDragRange(range);
+  if (_supportsHover) {
+    const [from, to] = [range[0], addDays(range[1], 1)];
+    void showPreviewFor(
+      localDateToUtcBound(from, state.tzOffset),
+      localDateToUtcBound(to, state.tzOffset),
+      periodLabel(from, to, lang),
+    );
+  }
 }
 
-function nextDay(): void {
-  if (state.calMaxDate && state.calDay! >= state.calMaxDate) return;
-  const newDay = addDays(state.calDay!, 1);
-  const parts = newDay.split('-').map(Number) as [number, number, number];
-  state.setCalYear(parts[0]);
-  state.setCalMonth(parts[1] - 1); // 0-based
-  selectDay(newDay);
+function onCellPointerUp(e: PointerEvent): void {
+  const p = _press;
+  endCellPress();
+  if (!p) return;
+  if (p.range) {
+    applyDateSelection(p.range[0], addDays(p.range[1], 1));
+  } else if (e.shiftKey && p.anchor) {
+    extendSelectionTo(p.anchor);
+  } else if (p.month !== null) {
+    zoomToMonth(p.month);                       // year view
+  } else if (p.anchor && state.calMonth !== null) {
+    selectDay(p.anchor);                        // month view
+  }
+}
+
+function endCellPress(): void {
+  paintDragRange(null);
+  _press = null;
+  window.removeEventListener('pointermove', onCellPointerMove);
+  window.removeEventListener('pointerup', onCellPointerUp);
+  window.removeEventListener('pointercancel', endCellPress);
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────
 
-/** Rebuild the month <select> options in the current language (call after lang change). */
-export function rebuildMonthSelect(): void {
-  const mSel = document.getElementById('cal-month-select') as HTMLSelectElement | null;
-  if (!mSel) return;
-  const currentVal = mSel.value;
-  mSel.innerHTML = '';
-  t().monthLong.forEach((name, i) => {
-    const opt = document.createElement('option');
-    opt.value = String(i);
-    opt.textContent = name;
-    mSel.appendChild(opt);
-  });
-  mSel.value = currentVal;
-}
-
 /**
  * Recomputes calMinDate / calMaxDate from the stored raw timestamps using the
- * current timezone offset, then rebuilds the year-select option list.
+ * current timezone offset.
  * Called on init and whenever the user changes timezone.
  */
 export function recomputeDateBounds(tzOff: number): void {
@@ -1395,19 +1229,6 @@ export function recomputeDateBounds(tzOff: number): void {
   // Clamp calYear to the new valid range.
   if (state.calYear > maxY) state.setCalYear(maxY);
   else if (state.calYear < minY) state.setCalYear(minY);
-
-  // Rebuild the year select options.
-  const ySel = document.getElementById('cal-year-select') as HTMLSelectElement | null;
-  if (ySel) {
-    ySel.innerHTML = '';
-    for (let y = maxY; y >= minY; y--) {
-      const opt = document.createElement('option');
-      opt.value = String(y);
-      opt.textContent = String(y);
-      ySel.appendChild(opt);
-    }
-    ySel.value = String(state.calYear);
-  }
 }
 
 /** Called by app.ts when the user changes the timezone setting. */
@@ -1479,61 +1300,14 @@ export async function initCalendar(onRender: () => Promise<void>): Promise<void>
 
   syncDateInputs();
 
-  const ySel = document.getElementById('cal-year-select') as HTMLSelectElement;
-  ySel.addEventListener('change', () => {
-    state.setCalYear(parseInt(ySel.value, 10));
-    state.setCalMonth(null);
-    state.setCalDay(null);
-    state.setCalWeek(null);
-    void renderCalendar();
-    state.setCurrentPage(1);
-    callRender();
-  });
-
-  const mSel = document.getElementById('cal-month-select') as HTMLSelectElement;
-  t().monthLong.forEach((name, i) => {
-    const opt = document.createElement('option');
-    opt.value = String(i);
-    opt.textContent = name;
-    mSel.appendChild(opt);
-  });
-  mSel.addEventListener('change', () => {
-    state.setCalMonth(parseInt(mSel.value, 10));
-    state.setCalDay(null);
-    state.setCalWeek(null);
-    void renderCalendar();
-    state.setCurrentPage(1);
-    callRender();
-  });
-
-  const dSel = document.getElementById('cal-day-select') as HTMLSelectElement;
-  dSel.addEventListener('change', e => {
-    const d = parseInt((e.target as HTMLSelectElement).value, 10);
-    selectDay(localDateStr(state.calYear, state.calMonth!, d));
-  });
-
   const fromInput = document.getElementById('date-from-input') as HTMLInputElement;
-  fromInput.addEventListener('change', e => {
-    const val = (e.target as HTMLInputElement).value;
-    state.setCalDateFrom(val || null);
-    state.setCalDay(null);
-    state.setCalWeek(null);
-    const toVal = (document.getElementById('date-to-input') as HTMLInputElement).value;
-    state.setCalDateTo(toVal ? addDays(toVal, 1) : null);
-    state.setCurrentPage(1);
-    if (state.currentView === 'calendar') void renderCalendar();
-    callRender();
+  fromInput.addEventListener('change', () => {
+    applyDateSelection(fromInput.value || null, state.calDateTo);
   });
 
   const toInput = document.getElementById('date-to-input') as HTMLInputElement;
-  toInput.addEventListener('change', e => {
-    const val = (e.target as HTMLInputElement).value;
-    state.setCalDateTo(val ? addDays(val, 1) : null);
-    state.setCalDay(null);
-    state.setCalWeek(null);
-    state.setCurrentPage(1);
-    if (state.currentView === 'calendar') void renderCalendar();
-    callRender();
+  toInput.addEventListener('change', () => {
+    applyDateSelection(state.calDateFrom, toInput.value ? addDays(toInput.value, 1) : null);
   });
 
   document.getElementById('btn-view-cal')!.addEventListener('click', () => {
@@ -1541,48 +1315,30 @@ export async function initCalendar(onRender: () => Promise<void>): Promise<void>
   });
 
   document.getElementById('btn-clear-dates')!.addEventListener('click', () => {
-    clearCalDateFilter();
-    state.setCurrentPage(1);
-    callRender();
-    if (state.currentView === 'calendar') void renderCalendar();
+    applyDateSelection(null, null);
   });
 
-  document.getElementById('cal-prev-year')!.addEventListener('click', prevYear);
-  document.getElementById('cal-next-year')!.addEventListener('click', nextYear);
-  document.getElementById('cal-prev-month')!.addEventListener('click', prevMonth);
-  document.getElementById('cal-next-month')!.addEventListener('click', nextMonth);
-  document.getElementById('cal-prev-day')!.addEventListener('click', prevDay);
-  document.getElementById('cal-next-day')!.addEventListener('click', nextDay);
+  const prev = document.getElementById('cal-prev')!;
+  const next = document.getElementById('cal-next')!;
+  prev.addEventListener('click', () => stepView(-1));
+  next.addEventListener('click', () => stepView(1));
+  document.getElementById('cal-level-year')!.addEventListener('click', () => setLevel('year'));
+  document.getElementById('cal-level-month')!.addEventListener('click', () => setLevel('month'));
+  const selectBtn = document.getElementById('cal-select-view')!;
+  selectBtn.addEventListener('click', selectView);
+  for (const id of ['cal-month-grid', 'cal-year-view']) {
+    document.getElementById(id)!.addEventListener('pointerdown', onCellPointerDown);
+  }
 
   if (_supportsHover) {
-    // Prev/next buttons: preview the period they would navigate to.
-    // State is read at event time (not closure-captured) so it reflects the
-    // current navigation position even after the user has moved around.
-    document.getElementById('cal-prev-year')!.addEventListener('mouseenter', () => {
-      showPreviewForYear(state.calYear - 1);
-    });
-    document.getElementById('cal-next-year')!.addEventListener('mouseenter', () => {
-      showPreviewForYear(state.calYear + 1);
-    });
-    document.getElementById('cal-prev-month')!.addEventListener('mouseenter', () => {
-      const prevM = state.calMonth === 0 ? 11 : state.calMonth! - 1;
-      const prevY = state.calMonth === 0 ? state.calYear - 1 : state.calYear;
-      showPreviewForMonth(prevY, prevM);
-    });
-    document.getElementById('cal-next-month')!.addEventListener('mouseenter', () => {
-      const nextM = state.calMonth === 11 ? 0 : state.calMonth! + 1;
-      const nextY = state.calMonth === 11 ? state.calYear + 1 : state.calYear;
-      showPreviewForMonth(nextY, nextM);
-    });
-    document.getElementById('cal-prev-day')!.addEventListener('mouseenter', () => {
-      if (state.calDay) showPreviewForDay(addDays(state.calDay, -1));
-    });
-    document.getElementById('cal-next-day')!.addEventListener('mouseenter', () => {
-      if (state.calDay) showPreviewForDay(addDays(state.calDay, 1));
-    });
-    // Revert on mouseleave for all nav buttons
-    for (const id of ['cal-prev-year', 'cal-next-year', 'cal-prev-month', 'cal-next-month', 'cal-prev-day', 'cal-next-day']) {
-      document.getElementById(id)!.addEventListener('mouseleave', revertToDefault);
-    }
+    // Preview the period a button would show or select. State is read at
+    // event time so it reflects the current view.
+    const previewView = (y: number, m: number | null): void => {
+      if (m === null) showPreviewForYear(y); else showPreviewForMonth(y, m);
+    };
+    prev.addEventListener('mouseenter', () => { if (canStep(-1)) previewView(...steppedView(-1)); });
+    next.addEventListener('mouseenter', () => { if (canStep(1)) previewView(...steppedView(1)); });
+    selectBtn.addEventListener('mouseenter', () => previewView(state.calYear, state.calMonth));
+    for (const el of [prev, next, selectBtn]) el.addEventListener('mouseleave', revertToDefault);
   }
 }

@@ -13,8 +13,6 @@ const defaultState: HashState = {
   calDateTo: null,
   calYear: 2024,
   calMonth: null,
-  calDay: null,
-  calWeek: null,
   tzOffset: 0,
 };
 
@@ -70,16 +68,6 @@ describe('serializeHash', () => {
     const hash = serializeHash({ ...defaultState, calDateFrom: '2024-03-01', calDateTo: null });
     expect(hash).toContain('from=2024-03-01');
     expect(hash).not.toContain('to=');
-  });
-
-  it('includes calWeek in calendar view', () => {
-    const hash = serializeHash({ ...defaultState, currentView: 'calendar', calYear: 2024, calWeek: '2024-W05' });
-    expect(hash).toContain('week=2024-W05');
-  });
-
-  it('omits calWeek when not in calendar view', () => {
-    const hash = serializeHash({ ...defaultState, calWeek: '2024-W05' });
-    expect(hash).not.toContain('week=');
   });
 
   it('URL-encodes special chars in search query and decodes round-trip', () => {
@@ -157,27 +145,24 @@ describe('deserializeHash', () => {
       currentView: 'calendar',
       calYear: 2022,
       calMonth: 11,
-      calDay: '2022-12-25',
     };
     const hash = serializeHash(original);
     const parsed = deserializeHash('#' + hash);
     expect(parsed.currentView).toBe('calendar');
     expect(parsed.calYear).toBe(2022);
     expect(parsed.calMonth).toBe(11);
-    expect(parsed.calDay).toBe('2022-12-25');
   });
 
-  it('round-trips calWeek in calendar view', () => {
-    const original: HashState = {
-      ...defaultState,
-      currentView: 'calendar',
-      calYear: 2024,
-      calWeek: '2024-W10',
-    };
-    const hash = serializeHash(original);
-    const parsed = deserializeHash('#' + hash);
-    expect(parsed.calWeek).toBe('2024-W10');
-    expect(parsed.calYear).toBe(2024);
+  it('legacy day=/week= params are ignored; other fields still parse', () => {
+    const result = deserializeHash(
+      '#view=calendar&from=2024-01-15&to=2024-01-16&year=2024&month=0&day=2024-01-15&week=2024-01-14',
+    );
+    expect(result.calDateFrom).toBe('2024-01-15');
+    expect(result.calDateTo).toBe('2024-01-16');
+    expect(result.calYear).toBe(2024);
+    expect(result.calMonth).toBe(0);
+    expect(Object.keys(result)).not.toContain('calDay');
+    expect(Object.keys(result)).not.toContain('calWeek');
   });
 
   it('round-trips URL-encoded search query', () => {
@@ -198,12 +183,6 @@ describe('deserializeHash', () => {
     // parseInt('notanumber', 10) returns NaN; callers should guard against this.
     const result = deserializeHash('#page=notanumber');
     expect(result.currentPage).toBeNaN();
-  });
-
-  it('calDay and calWeek both present: both fields are deserialized', () => {
-    const result = deserializeHash('#view=calendar&year=2024&day=2024-01-15&week=2024-W03');
-    expect(result.calDay).toBe('2024-01-15');
-    expect(result.calWeek).toBe('2024-W03');
   });
 
   it('view=grid explicitly in hash: currentView not set (caller applies default)', () => {

@@ -21,8 +21,6 @@ export let lastStructuralHash: string = '';
 
 export let calYear: number = new Date().getFullYear();
 export let calMonth: number | null = null;
-export let calDay: string | null = null;
-export let calWeek: string | null = null;
 export let calDateFrom: string | null = null;
 export let calDateTo: string | null = null;
 export let calMinDate: string | null = null;
@@ -56,8 +54,6 @@ export function setCurrentView(v: 'grid' | 'calendar'): void { currentView = v; 
 export function setClipLayout(v: 'grid' | 'list'): void { clipLayout = v; }
 export function setCalYear(v: number): void { calYear = v; }
 export function setCalMonth(v: number | null): void { calMonth = v; }
-export function setCalDay(v: string | null): void { calDay = v; }
-export function setCalWeek(v: string | null): void { calWeek = v; }
 export function setCalDateFrom(v: string | null): void { calDateFrom = v; }
 export function setCalDateTo(v: string | null): void { calDateTo = v; }
 export function setCalMinDate(v: string | null): void { calMinDate = v; }

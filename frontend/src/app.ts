@@ -11,7 +11,6 @@ import {
   renderCalendar,
   clearCalDateFilter,
   syncDateInputs,
-  rebuildMonthSelect,
   onTzChange,
   updateLiveClipBounds,
   primePreviewCache,
@@ -27,6 +26,7 @@ import {
   getExpandedCard, getExpandedRow,
 } from './embed';
 import { initFilterBar, updateFilterTab } from './filterBar';
+import { initTimeline, refreshTimeline, applyTimelineTranslations } from './timeline';
 import { setUseMeta, setClipLayout } from './state';
 import * as auth from './auth';
 import * as twitch from './twitch';
@@ -55,8 +55,6 @@ function getStateForHash(): HashState {
     calDateTo: state.calDateTo,
     calYear: state.calYear,
     calMonth: state.calMonth,
-    calDay: state.calDay,
-    calWeek: state.calWeek,
     tzOffset: state.tzOffset,
   };
 }
@@ -100,8 +98,6 @@ function applyStateHash(hashStr: string): void {
 
   if (partial.calYear !== undefined) state.setCalYear(partial.calYear);
   state.setCalMonth(partial.calMonth ?? null);
-  state.setCalDay(partial.calDay ?? null);
-  state.setCalWeek(partial.calWeek ?? null);
 
   if (partial.tzOffset !== undefined) {
     state.setTzOffset(partial.tzOffset);
@@ -113,8 +109,6 @@ function applyStateHash(hashStr: string): void {
   (document.getElementById('search') as HTMLInputElement).value      = state.searchQuery;
   (document.getElementById('sort') as HTMLSelectElement).value       = state.sortBy;
   (document.getElementById('game-filter') as HTMLSelectElement).value = state.gameFilter;
-  const ySel = document.getElementById('cal-year-select') as HTMLSelectElement | null;
-  if (ySel) ySel.value = String(state.calYear);
   syncDateInputs();
 
   const isCalendar = partial.currentView === 'calendar';
@@ -605,6 +599,7 @@ export async function render(): Promise<void> {
   const ctrl = new AbortController();
   _renderController = ctrl;
   _renderedLiveClipCount = state.liveClips.length;
+  refreshTimeline();
   if (_liveRenderPending && state.currentPage === 1) {
     _liveRenderPending = false;
   }
@@ -1465,7 +1460,7 @@ export async function init(): Promise<void> {
     setLang(newLang);
     applyTranslations();
     syncAuthUI();
-    rebuildMonthSelect();
+    applyTimelineTranslations();
     void render();
     if (state.currentView === 'calendar') void renderCalendar();
   });
@@ -1556,6 +1551,7 @@ export async function init(): Promise<void> {
       }
     });
     await initCalendar(render); // must await: queries clip date range for nav bounds
+    await initTimeline(_devCutoff); // needs the date range from initCalendar
 
     // Fetch live clips in the background; render() is called again when done.
     if (auth.isLoggedIn()) void fetchLiveClips();

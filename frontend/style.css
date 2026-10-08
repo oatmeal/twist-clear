@@ -495,6 +495,54 @@ select:focus { border-color: var(--accent); }
 }
 .clear-dates-btn:hover { border-color: var(--accent); color: var(--text); }
 
+/* ── Timeline overview (src/timeline.ts) ──────────────────────────────────
+   Full-width last row of the controls. Bars use the heat-map colour; with a
+   date filter the bars outside it dim and the band behind them is tinted.
+   The underline below the bars marks the period the calendar shows. */
+.timeline {
+  flex: 1 1 100%;
+  position: relative;
+  min-width: 0;
+}
+.tl-svg {
+  display: block;
+  width: 100%;
+  overflow: visible;
+  cursor: pointer;
+  /* Vertical swipes scroll the page; horizontal drags reach the timeline. */
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.tl-ghost     { fill: var(--muted); opacity: 0.18; }
+.tl-bars      { fill: var(--cal-accent); }
+.tl-svg.has-sel .tl-bars { opacity: 0.3; }
+.tl-bars-sel  { fill: var(--cal-accent); }
+.tl-band      { fill: color-mix(in srgb, var(--accent) 16%, transparent); outline: none; }
+.tl-handle    { fill: var(--accent); outline: none; }
+.tl-svg.narrow-sel .tl-band   { fill: var(--accent); }
+.tl-svg.narrow-sel .tl-handle { fill: transparent; }
+.tl-band:focus-visible,
+.tl-handle:focus-visible { stroke: var(--text); stroke-width: 2px; }
+.tl-view      { fill: var(--text); }
+.tl-tick      { stroke: var(--border); stroke-width: 1; }
+.tl-year      { fill: var(--muted); font-size: 10px; font-weight: 600; }
+.tl-tip {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  z-index: 20;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.tl-tip-hint { color: var(--muted); font-size: 11px; }
+
 /* ── View switcher ── */
 .view-switcher { display: flex; gap: 4px; align-items: center; }
 /* All three view buttons use the same compact sizing */

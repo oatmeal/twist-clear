@@ -237,7 +237,8 @@ Requires `frontend/public/clips.db` — run `prepare-db` first. Serve `frontend/
 
 - Thumbnail grid and list view with clip title, view count, creator, game, and date
 - Search by title, filter by game, sort by views or date
-- Date range filter and calendar view (year heatmap → month grid, also selectable by day or week)
+- Timeline of the whole archive under the filters: drag to pick a date range, drag the range to move it; the bars follow the search and game filters
+- Calendar view (year heat-map ↔ month grid): click a day or week, drag across days for a range, or filter to the month / year on screen
 - URL hash preserves all filter state — links are bookmarkable and shareable
 - Click a thumbnail to embed the clip inline; click outside or press Escape to close
 - Keyboard accessible: Tab to a thumbnail and press Enter or Space to play; ← / → step between clips
@@ -315,10 +316,13 @@ Source layout under `frontend/src/`:
 | File | Purpose |
 |---|---|
 | `app.ts` | Main render loop, event binding, URL hash state |
-| `calendar.ts` | Calendar view (year/month/day/week navigation) |
+| `calendar.ts` | Calendar panel (year / month views); owns date-filter changes |
+| `timeline.ts` | Timeline overview in the filter bar — shows and edits the date filter |
 | `db.ts` | sql.js-httpvfs worker setup; async `q()` helper |
 | `state.ts` | All shared mutable state with typed setters |
 | `lib/query.ts` | Pure `buildWhere()` — SQL WHERE clause builder |
 | `lib/hash.ts` | Pure `serializeHash()` / `deserializeHash()` |
 | `lib/format.ts` | HTML escaping, duration/views/date formatting |
 | `lib/dateUtils.ts` | Local-timezone date arithmetic (no UTC pitfalls) |
+| `lib/dateRange.ts` | Pure date-selection semantics (range kinds, stepping, labels) |
+| `lib/timeline.ts` | Pure timeline geometry (binning, date ↔ x, drag snapping) |

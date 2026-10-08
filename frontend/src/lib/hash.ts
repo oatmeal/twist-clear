@@ -9,8 +9,6 @@ export interface HashState {
   calDateTo: string | null;
   calYear: number;
   calMonth: number | null;
-  calDay: string | null;
-  calWeek: string | null;
   tzOffset: number;
 }
 
@@ -32,8 +30,6 @@ export function serializeHash(s: HashState): string {
   if (s.currentView === 'calendar') {
     p.set('year', String(s.calYear));
     if (s.calMonth !== null) p.set('month', String(s.calMonth));
-    if (s.calDay !== null) p.set('day', s.calDay);
-    if (s.calWeek !== null) p.set('week', s.calWeek);
   }
 
   if (s.tzOffset !== 0) p.set('tz', String(s.tzOffset));
@@ -83,12 +79,6 @@ export function deserializeHash(hashStr: string): Partial<HashState> {
 
   const month = p.get('month');
   if (month !== null) result.calMonth = parseInt(month, 10);
-
-  const day = p.get('day');
-  if (day !== null) result.calDay = day;
-
-  const week = p.get('week');
-  if (week !== null) result.calWeek = week;
 
   const tz = p.get('tz');
   if (tz !== null) result.tzOffset = parseInt(tz, 10);

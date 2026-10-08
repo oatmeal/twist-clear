@@ -45,21 +45,25 @@ because true interleaving would require loading all DB clips into memory.
 ## Calendar integration
 
 After `fetchLiveClips()` completes, `updateLiveClipBounds()` in `calendar.ts`
-is called to extend `calMaxDate` (and the year-select options) if live clips are
-newer than the DB cutoff. The calendar heat-map counts also include live clips:
-`liveDayCountsForYear/Month` aggregate `state.liveClips` in-memory and merge
-into the DB query results in `renderYearView`, `renderYearStrip`, and
-`renderMonthGrid`.
+is called to extend `calMaxDate` if live clips are newer than the DB cutoff
+(which also extends the timeline's axis). The calendar heat-map counts also
+include live clips: `liveDayCountsForYear/Month` aggregate `state.liveClips`
+in-memory and merge into the DB query results in `renderYearView` and
+`renderMonthGrid`. The timeline (`timeline.ts`) merges them into its per-day
+counts the same way, through `filterLiveClips()` so they follow the game and
+search filters.
 
 ## Game filter interaction
 
 The calendar heat-map **respects the active game filter** — `queryYearDays`,
-`queryMonthDays`, `queryYearMonthTotals` and the live clip count helpers all
-apply `AND game_id = ?` when `state.gameFilter` is set. The game filter change
-handler and the search debounce both call `renderCalendar()` when the calendar
-is open so the heat-map re-renders immediately. **Title search is intentionally
-not reflected** in calendar counts (no efficient aggregate index); when a search
-is active, a `#cal-search-notice` element is shown inside the calendar panel.
+`queryMonthDays` and the live clip count helpers all apply `AND game_id = ?`
+when `state.gameFilter` is set. The game filter change handler and the search
+debounce both call `renderCalendar()` when the calendar is open so the heat-map
+re-renders immediately. **Title search is not reflected** in calendar counts;
+when a search is active, a `#cal-search-notice` element is shown inside the
+calendar panel. The timeline *does* follow search, using a forced index plan
+that makes it cheap (see `docs/calendar.md`); the calendar could adopt the same
+approach (listed in `docs/future-work.md`).
 
 The game filter is **never auto-cleared** when the user clicks a calendar period
 where the selected game has no clips. Instead, `updateGameFilter` adds a (0)

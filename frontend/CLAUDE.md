@@ -22,17 +22,22 @@ Non-obvious files worth knowing about:
 src/
   app.ts        # Render loop, event binding, URL hash state, live clip fetch
   auth.ts       # Twitch OAuth 2.0 implicit grant (token storage, logout)
-  calendar.ts   # Calendar view — year → month → day/week drill-down
+  calendar.ts   # Calendar panel (year / month views); applyDateSelection() is the one
+                #   entry point for date-filter changes — see docs/calendar.md
   db.ts         # sql.js-httpvfs worker init; exports async q() query helper
   embed.ts      # Clip player open/close (grid: panel below the card's row; list:
                 #   embed row), prev/next peek navigation, keyboard focus hand-off
   filterBar.ts  # Non-sticky filter bar + the tab that pins it back in when scrolled away
   state.ts      # All shared mutable state + explicit typed setters
+  timeline.ts   # Timeline overview in the filter bar: whole-archive histogram that
+                #   shows and edits the date filter (band + handles) and moves the calendar
   twitch.ts     # Helix API client for live clips (auto-paginates, resolves game names)
   lib/
     clipHtml.ts   # ClipItem type + clipCardHtml/clipListRowHtml/attachImgErrorHandlers
                   #   Pure HTML template functions; tzOffset is an explicit param (no state import)
     dateUtils.ts  # Timezone-aware date arithmetic + UTC-offset helpers
+    dateRange.ts  # Pure date-selection semantics: rangeKind() (day/week/month/year/
+                  #   custom, derived from from/to), shiftRange(), periodLabel()
     format.ts     # escHtml, fmtDuration, fmtViews, fmtDateTime
     hash.ts       # Pure serializeHash() / deserializeHash() — URL hash state
     i18n.ts       # English & Japanese translations; t(), detectLang(), setLang()
@@ -41,6 +46,7 @@ src/
     pkce.ts         # OAuth crypto helpers (randomBase64url, sha256Base64url)
     query.ts        # Pure buildWhere() — builds SQL WHERE clause from filter state
     searchParser.ts # Pure parseSearchQuery() — translates boolean search syntax to FTS5
+    timeline.ts     # Pure timeline geometry: week/month bins, date ↔ x, drag snapping
 ```
 
 `main.ts` is the Vite entry point; it just calls `init()` from `app.ts`.
@@ -63,7 +69,7 @@ Detailed write-ups for specific features live in `frontend/docs/`:
 - [`docs/live-clips.md`](docs/live-clips.md) — twitch.ts, liveFilter, calendar/game-filter integration
 - [`docs/i18n.md`](docs/i18n.md) — translations, Japanese game names, no-English-in-HTML rule
 - [`docs/layout.md`](docs/layout.md) — grid vs. list layout, embed rows, render loop
-- [`docs/calendar.md`](docs/calendar.md) — calendar/date-filter decoupling, controls
+- [`docs/calendar.md`](docs/calendar.md) — date selection vs. navigation, timeline overview, calendar controls
 - [`docs/metadata.md`](docs/metadata.md) — precomputed `clips_meta`, `game_clip_counts`, indexes
 
 Colour theming is documented in [`docs/theming.md`](../docs/theming.md) (root-level).
@@ -149,6 +155,11 @@ breaks both cycles:
 - `initEmbed(render)` — `embed.ts` stores the callback in `_render` and calls
   `await _render?.()` when navigating across page boundaries.
 
+`timeline.ts` imports from `calendar.ts` directly (no cycle — `calendar.ts`
+never imports it). `render()` calls `refreshTimeline()` at its start, which
+redraws the selection band / calendar-view underline and re-queries the bars
+only when the game / search filter, timezone or live clips changed.
+
 ### Pure functions for testability
 
 `buildWhere(opts)` in `lib/query.ts`, `serializeHash`/`deserializeHash` in
@@ -220,7 +231,8 @@ npm run test:watch   # re-run on change
 ```
 
 Tests cover: `buildWhere` combinations, `serializeHash`/`deserializeHash`
-round-trips, date utilities, format helpers, live clip filtering, live coverage
+round-trips, date utilities, date-range kinds / stepping / labels, timeline
+binning, scale and drag snapping, format helpers, live clip filtering, live coverage
 bisection (suppression discovery, deduplication), OAuth crypto helpers,
 `extractClipSlug` URL parsing, `panelSlot` grid player placement, and
 `clipCardHtml`/`clipListRowHtml` HTML structure, XSS escaping, game name

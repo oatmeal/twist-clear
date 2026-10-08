@@ -107,6 +107,9 @@
     <button id="btn-view-list" class="view-btn" aria-label="リスト表示" title="リスト表示">☰<span class="view-btn-label">リスト</span></button>
   </div>
   <span id="result-count"></span>
+  <!-- Timeline overview: whole-archive histogram that shows and edits the date
+       filter, and moves the calendar on click. Built by src/timeline.ts. -->
+  <div id="timeline" class="timeline"></div>
 </div>
 <div id="live-clips-banner" style="display:none">
   <span id="live-clips-banner-text"></span>
@@ -128,36 +131,30 @@
 
 <main>
   <div id="calendar-panel" style="display:none">
+    <!-- View header: ‹ › and the Year / Month toggle only move the view; the
+         "filter to" button selects the period on screen. See calendar.ts. -->
     <div id="cal-header">
-      <div id="cal-breadcrumb"></div>
-      <div id="cal-nav-controls">
-        <div id="cal-year-nav">
-          <button id="cal-prev-year">&#8249;</button>
-          <select id="cal-year-select" class="cal-nav-select"></select>
-          <button id="cal-next-year">&#8250;</button>
-        </div>
-        <div id="cal-month-nav" style="display:none">
-          <button id="cal-prev-month">&#8249;</button>
-          <select id="cal-month-select" class="cal-nav-select"></select>
-          <button id="cal-next-month">&#8250;</button>
-        </div>
-        <div id="cal-day-nav" style="display:none">
-          <button id="cal-prev-day">&#8249;</button>
-          <select id="cal-day-select" class="cal-nav-select"></select>
-          <button id="cal-next-day">&#8250;</button>
-        </div>
+      <div id="cal-nav">
+        <button id="cal-prev" class="cal-nav-btn" aria-label="前の年" title="前の年">&#8249;</button>
+        <h2 id="cal-title" class="cal-title"></h2>
+        <button id="cal-next" class="cal-nav-btn" aria-label="次の年" title="次の年">&#8250;</button>
+      </div>
+      <button id="cal-select-view" class="cal-select-view" type="button"></button>
+      <div id="cal-level" class="cal-level" role="group" aria-label="カレンダーの表示">
+        <button id="cal-level-year" type="button" aria-pressed="true">年</button>
+        <button id="cal-level-month" type="button" aria-pressed="false">月</button>
       </div>
     </div>
-    <div id="cal-all-years-strip"></div>
     <div id="cal-year-view"></div>
     <div id="cal-month-view" style="display:none">
-      <div id="cal-year-strip"></div>
       <div id="cal-month-grid"></div>
     </div>
     <!-- Notice shown when a title search is active (counts can't reflect it) -->
     <div id="cal-search-notice" style="display:none">カレンダーのクリップ数はタイトル検索を反映していません</div>
     <!-- Heat-map density legend -->
     <div id="cal-legend" class="cal-legend">
+      <!-- Mouse/trackpad hint for the current view; hidden on touch devices. -->
+      <span id="cal-hint" class="cal-hint"></span>
       <span id="cal-legend-fewer">クリップが少ない</span>
       <span class="cal-legend-swatches" aria-hidden="true">
         <span class="cal-legend-swatch" style="background:var(--cal-0)"></span>
@@ -262,7 +259,7 @@
 
   <section class="help-section">
     <h3 id="help-date-heading">日付で絞り込む</h3>
-    <p id="help-date-desc">開始日・終了日に直接入力するか、カレンダーアイコンをクリックして年・月・週・日単位で選択できます。</p>
+    <p id="help-date-desc">フィルター下のタイムラインをドラッグして期間を選択できます。選択した範囲はドラッグで移動、端をドラッグで伸縮できます。開始日・終了日に直接入力することもできます。タイムラインかカレンダーアイコンをクリックするとカレンダーが開き、日や週番号のクリックで選択、日のドラッグで期間を選択、「〜で絞り込む」で表示中の月・年を選択できます。</p>
   </section>
 
   <section class="help-section">

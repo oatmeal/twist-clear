@@ -1,26 +1,132 @@
-# Calendar panel vs. date filter — decoupled
+# Date filter: selection, navigation, timeline and calendar
 
-`currentView` (`'grid' | 'calendar'` in `state.ts`) controls only whether the
-calendar panel is visible. It has **no coupling to the date filter**
-(`calDateFrom` / `calDateTo`).
+## The model
 
-## Controls
+Two separate pieces of state, never mixed:
 
-**Calendar toggle** (`btn-view-cal`): clicking it calls `switchView()` which
-opens or closes the panel. On open, `deriveNavigationPosition()` computes a
-sensible `calYear` / `calMonth` from the current filter (≤ 62-day filter →
-month view; longer → year view for the midpoint year; no filter → most-recent
-year). The filter itself is not modified.
+- **Selection** — the date filter, `calDateFrom` / `calDateTo` in `state.ts`:
+  local `YYYY-MM-DD` dates, `to` exclusive, either end may be `null`. Its
+  *kind* (day, Sun–Sat week, month, year, custom, open) is derived from the
+  dates by `rangeKind()` in `lib/dateRange.ts`, not stored — so a range typed
+  into the date inputs behaves exactly like the same range clicked in the
+  calendar. (There used to be `calDay` / `calWeek` state and `day` / `week`
+  hash params; both are gone, and old URLs still work via `from` / `to`.)
+- **Navigation** — what the calendar panel shows: `calYear` plus `calMonth`
+  (`null` = the year view). Serialized as `year` / `month` in the hash only
+  while the panel is open.
 
-**Clear button** (`btn-clear-dates`): calls `clearCalDateFilter()` which zeroes
-`calDateFrom`, `calDateTo`, `calDay`, `calWeek`. The calendar panel stays open
-if it was open.
+The rule: **navigating never changes the selection; selecting may move the
+view, but only when the new selection is entirely off-screen** (typed into the
+inputs, or dragged on the timeline). Clicking a day that's on screen leaves the
+view where it is.
 
-**Navigation** (arrows, year/month selects): change `calYear` / `calMonth` only;
-do **not** touch the date filter. The calendar re-renders to show the new
-position; the clip grid is also re-rendered (same filter, same results — this
-keeps the URL hash in sync with the new navigation position).
+In code:
 
-**Selection** (clicking a mini-month card, month pill, day, week; breadcrumb
-clicks): change both the navigation position **and** the date filter, then
-re-render both the calendar and the clip grid.
+- Every selection change goes through `applyDateSelection(from, to)` in
+  `calendar.ts` — date inputs, the clear button, calendar clicks / drags /
+  shift-clicks, the "Filter to …" button, and the timeline. It syncs the date
+  inputs, moves the view if needed, re-renders the calendar, resets to page 1
+  and calls `render()`.
+- Every navigation change goes through `navigate()` — it re-renders the
+  calendar and calls `render()` only to update the URL hash and the timeline's
+  view underline (the page isn't reset; results don't change).
+
+### Why not "the view always follows the selection"?
+
+The October 2026 UX review (see `docs/future-work.md`) found that navigation
+and selection controls looked identical, so the view and the filter drifted
+apart ("2024 › July" in the breadcrumb while the grid showed June's clips).
+Coupling them — every click selects, one ‹ › steps the selection — was
+considered and rejected: browsing would then destroy selections, and a typed
+custom range is the most expensive one to recreate. Instead we kept the
+date-picker rule above and made the selection always visible outside the
+calendar, in the timeline.
+
+## Timeline overview (`timeline.ts`, `lib/timeline.ts`)
+
+The last row of the filter bar (`#timeline`): an SVG histogram of the whole
+archive, `calMinDate`…`calMaxDate`.
+
+- **Bars**: one per week (Sunday-aligned), or per month when week bars would be
+  narrower than `MIN_WEEK_PX` (phones, tablets). Square-root height scale. Bars
+  use `--cal-accent`; with a selection, bars outside it are dimmed and the band
+  behind them is tinted `--accent`. Year ticks and labels below; a sliver of a
+  year at either end gets `'26` or no label.
+- **Filters**: the bars follow the game and search filters but never the date
+  filter (the band shows that). With a game or search filter, faint grey "ghost"
+  bars show the unfiltered totals on the same scale.
+- **Data**: one per-local-day `GROUP BY` over the whole archive
+  (`queryDayCounts`), rebinned in JS on resize; re-queried only when the
+  search / game filter, timezone, archive bounds or live-clip count change.
+  Live clips are merged in through `filterLiveClips()`.
+  - FTS searches add `INDEXED BY clips_created_at`: SQLite's default plan
+    looks up every matching row to read `created_at` (≈1,850 4 KB pages for a
+    common term such as りりまる); scanning the index and probing the match
+    list costs ≈210 pages whatever the term — about the same as no filter.
+    With a game filter the default plan (`clips_game_created`) is cheaper
+    (≈90), so the hint is skipped. The index is checked in `sqlite_master` at
+    init because the raw dev DB may lack it.
+  - LIKE fallback searches (terms under 3 characters) scan the table, but the
+    result-count query already does that same scan, so the pages are cached.
+- **Calendar-view underline** (`rect.tl-view`): the year or month the calendar
+  panel shows, while it's open.
+
+### Interactions
+
+| Gesture | Mouse | Touch |
+|---|---|---|
+| Click / tap (no drag), anywhere incl. the band | Open the calendar (if closed) and move it to that date at its current zoom level — `showDateInCalendar()`; filter unchanged | same |
+| Drag empty space | New selection, ends snapped outward to whole bars (`rangeFromDrag`) | ignored, so a stray swipe can't replace a selection |
+| Drag a handle | Resize, snapped to bar boundaries, never collapsing (`resizeRange`) | same (16 px hit zone) |
+| Drag the band | Slide by whole units of its own kind — days, weeks, calendar months, years, or its own length for custom ranges (`dragShift` → `shiftRange`) | same |
+| Keyboard | Band is a slider: ← → shift by one unit. Handles are sliders: ← → move that end a day, Shift = a week. Clicking the band / a handle focuses it (focus is set explicitly because `preventDefault()` on `pointerdown` cancels the browser's focus-on-press) | — |
+
+Narrow bands (under `NARROW_BAND_PX`, e.g. one month on a phone) are drawn as
+one solid marker without handles, and their hit zones change so both the band
+(move) and the edges (resize, extending outward only) stay reachable.
+
+Edits commit on release; while dragging, the band and tooltip preview the new
+range and its clip count. Commits and calendar moves dispatch a bubbling
+`change` event from `#timeline` so `filterBar.ts` treats them like any other
+filter change (it reveals the results when the bar is pinned).
+
+## Calendar panel (`calendar.ts`)
+
+**Toggle** (`#btn-view-cal`): `switchView()` opens or closes the panel. On open,
+`deriveNavigationPosition()` picks a starting view from the filter (no filter →
+latest year; ≤ 62 days → month view of its start; longer → year view of its
+midpoint). Opening from a timeline click skips that and goes to the clicked
+date instead.
+
+**Header**: `‹ title ›` steps the view (a year or a month at a time, disabled at
+the archive bounds). The **Year | Month** toggle zooms; switching to Month picks
+the selection's month if it's in the viewed year, else the last month viewed,
+else the latest month with data (`monthForYear`). **"Filter to <period>"**
+(`#cal-select-view`) selects exactly the year or month on screen; once that is
+the filter it reads "✓ Filtered to …" and is disabled. All of these except the
+last are navigation only.
+
+**Year view**: all twelve mini-months; months without clips are dimmed and
+inert. Clicking anywhere on a card zooms into that month (navigation; the title
+is the keyboard-focusable button for the same thing). Hovering a card previews
+the month in the game strip.
+
+**Month view**: click a day to select it; click a week number (ISO numbering,
+Sunday-start rows) to select that Sun–Sat week.
+
+**Ranges** (mouse/trackpad, both views): drag across days to select a range —
+in the year view a drag can span months; Shift-click extends the selection to
+the clicked day, moving whichever end is on that side, including across months
+after paging with ‹ ›. On touch, a drag scrolls the page, so phones only tap;
+ranges there come from the timeline or the date inputs. All of this is one
+delegated `pointerdown` handler on `#cal-month-grid` / `#cal-year-view` (cells
+carry `data-date`; cards `data-month`). A hint line under the calendar
+(`#cal-hint`, hidden on `(hover: none)` devices) explains the gestures.
+
+**Clear** (`#btn-clear-dates`): `applyDateSelection(null, null)`.
+
+## Open questions
+
+The experiment's year/month flow (toggle + "Filter to …" + card zoom) is still
+being evaluated, and touch range selection is unsolved — see "Timeline &
+calendar follow-ups" in `docs/future-work.md`.

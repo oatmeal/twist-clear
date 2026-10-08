@@ -11,7 +11,7 @@ Pages) without editing any source files.
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `--accent` | `#9147ff` | Interactive highlights: buttons, focus rings, hover borders, view-count badge, streamer links |
-| `--cal-accent` | `#22a84a` | Calendar heat-map colour — intentionally separate from `--accent` (see below) |
+| `--cal-accent` | `#22a84a` | Calendar heat-map and timeline bar colour — intentionally separate from `--accent` (see below) |
 | `--bg` | `#0e0e0e` | Page background |
 | `--surface` | `#1f1f23` | Cards, header, login banner, calendar panel |
 | `--surface2` | `#26262c` | Dropdowns, nav buttons, week-number column |

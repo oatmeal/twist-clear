@@ -38,45 +38,22 @@
   gap: 8px;
 }
 
-/* ── Breadcrumb ── */
-#cal-breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 14px;
-  min-height: 22px;
-}
-#cal-breadcrumb .crumb {
-  color: var(--accent);
-  font-weight: 600;
-  cursor: pointer;
-}
-#cal-breadcrumb .crumb:hover { color: var(--accent-h); }
-#cal-breadcrumb .crumb-current { color: var(--text); font-weight: 600; }
-#cal-breadcrumb .sep { color: var(--border); }
-
-/* ── Navigation controls (year / month / day) ── */
-#cal-nav-controls {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-#cal-year-nav,
-#cal-month-nav,
-#cal-day-nav {
+/* ── View header: ‹ title ›, "filter to" button, Year / Month toggle ── */
+#cal-nav {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-right: auto;
 }
-
-/* Separator between nav groups */
-#cal-month-nav { border-left: 1px solid var(--border); padding-left: 16px; }
-#cal-day-nav   { border-left: 1px solid var(--border); padding-left: 16px; }
-
-#cal-year-nav button,
-#cal-month-nav button,
-#cal-day-nav button {
+.cal-title {
+  margin: 0;
+  min-width: 7.5em;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+.cal-nav-btn {
   background: var(--surface2);
   border: 1px solid var(--border);
   color: var(--text);
@@ -91,32 +68,50 @@
   justify-content: center;
   transition: border-color 0.12s;
 }
-#cal-year-nav button:hover,
-#cal-month-nav button:hover,
-#cal-day-nav button:hover { border-color: var(--accent); }
+.cal-nav-btn:hover:not(:disabled) { border-color: var(--accent); }
+.cal-nav-btn:disabled { opacity: 0.35; cursor: default; }
 
-/* Inline <select> elements styled to look like nav labels */
-.cal-nav-select {
-  background: transparent;
-  border: none;
-  color: var(--text);
-  font-size: 15px;
-  font-weight: 700;
+/* Selects the period on screen; filled once that period is the filter. */
+.cal-select-view {
+  background: none;
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  color: var(--accent-h);
   cursor: pointer;
-  outline: none;
-  padding: 0 2px;
-  min-width: 44px;
-  text-align: center;
-  appearance: none;
-  -webkit-appearance: none;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  transition: background 0.12s, color 0.12s;
 }
-.cal-nav-select:hover { color: var(--accent-h); }
-.cal-nav-select:focus { color: var(--accent); }
-/* Style the dropdown list to match dark theme */
-.cal-nav-select option {
+.cal-select-view:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.cal-select-view.active {
+  background: var(--accent);
+  color: #fff;
+  cursor: default;
+}
+
+/* Segmented Year / Month zoom toggle (navigation only). */
+.cal-level {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.cal-level button {
   background: var(--surface2);
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+}
+.cal-level button + button { border-left: 1px solid var(--border); }
+.cal-level button:hover { color: var(--text); }
+.cal-level button[aria-pressed="true"] {
+  background: var(--surface);
   color: var(--text);
-  font-weight: 400;
+  box-shadow: inset 0 -2px 0 var(--text);
 }
 
 /* ── Year view: 4×3 mini-month grid ── */
@@ -131,26 +126,47 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 8px 6px;
-  cursor: pointer;
-  transition: border-color 0.12s, transform 0.12s;
-}
-.mini-month:hover {
-  border-color: var(--accent);
-  transform: translateY(-2px);
 }
 .mini-month.in-range {
   border-color: var(--accent);
 }
+/* Click anywhere on a card to zoom into the month. */
+.mini-month:not(.is-empty) { cursor: zoom-in; transition: border-color 0.12s; }
+.mini-month:not(.is-empty):hover { border-color: var(--accent); }
+/* No clips that month: keep the slot, dimmed and inert. */
+.mini-month.is-empty { opacity: 0.4; }
 
+/* Drag-selecting days (mouse): no text selection, and the dragged range is
+   overlaid on the heat-map until release. */
+#cal-year-view,
+#cal-month-grid { user-select: none; -webkit-user-select: none; }
+.mini-day { position: relative; }
+.mini-day.drag-sel::after,
+.month-day-cell.drag-sel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  pointer-events: none;
+}
+
+/* Zooms into the month (navigation only). */
 .mini-month-title {
+  display: block;
+  margin: 0 auto 5px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  padding: 2px 8px;
   font-size: 10px;
   font-weight: 700;
   color: var(--muted);
-  text-align: center;
-  margin-bottom: 5px;
   text-transform: uppercase;
   letter-spacing: 0.6px;
+  cursor: inherit;
 }
+.mini-month-title:hover:not(:disabled) { color: var(--accent-h); }
+.mini-month-title:disabled { cursor: default; }
 
 .mini-month-grid {
   display: grid;
@@ -163,66 +179,6 @@
   border-radius: 1px;
 }
 .mini-day.empty { background: transparent !important; }
-
-/* ── Year view: all-years strip ── */
-#cal-all-years-strip {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 14px;
-  flex-wrap: wrap;
-}
-
-.strip-year {
-  flex: 1 0 auto;
-  min-width: 46px;
-  text-align: center;
-  padding: 5px 4px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted);
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition: border-color 0.1s, color 0.1s;
-}
-.strip-year:hover,
-.strip-year.active,
-.strip-year.in-range { border-color: var(--accent); color: var(--text); }
-.strip-year[data-heat="3"],
-.strip-year[data-heat="4"] { color: var(--cal-text); }
-.strip-year[data-heat="3"]:hover,
-.strip-year[data-heat="4"]:hover,
-.strip-year[data-heat="3"].active,
-.strip-year[data-heat="4"].active,
-.strip-year[data-heat="3"].in-range,
-.strip-year[data-heat="4"].in-range { color: var(--cal-text); }
-
-/* ── Month view: year strip ── */
-#cal-month-view { }
-
-#cal-year-strip {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 14px;
-  flex-wrap: wrap;
-}
-
-.strip-month {
-  flex: 1 0 auto;
-  min-width: 36px;
-  text-align: center;
-  padding: 5px 4px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted);
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition: border-color 0.1s, color 0.1s;
-}
-.strip-month:hover,
-.strip-month.active,
-.strip-month.in-range { border-color: var(--accent); color: var(--text); }
 
 /* ── Month view: full calendar grid ── */
 #cal-month-grid {
@@ -336,16 +292,6 @@
 .month-day-cell[data-heat="4"] .day-number { color: var(--cal-text); }
 .month-day-cell[data-heat="3"] .day-count,
 .month-day-cell[data-heat="4"] .day-count  { color: var(--cal-text-muted); }
-/* strip-month: override default muted color AND hover/active states */
-.strip-month[data-heat="3"],
-.strip-month[data-heat="4"] { color: var(--cal-text); }
-.strip-month[data-heat="3"]:hover,
-.strip-month[data-heat="4"]:hover,
-.strip-month[data-heat="3"].active,
-.strip-month[data-heat="4"].active,
-.strip-month[data-heat="3"].in-range,
-.strip-month[data-heat="4"].in-range { color: var(--cal-text); }
-
 /* ── Responsive ── */
 @media (max-width: 900px) {
   #cal-year-view { grid-template-columns: repeat(3, 1fr); }
@@ -355,13 +301,8 @@
   .month-day-cell { min-height: 40px; }
   .day-count { display: none; }
 
-  /* Calendar nav controls: wrap onto multiple lines on narrow screens
-     so year / month / day nav groups don't overflow horizontally. */
-  #cal-nav-controls { flex-wrap: wrap; gap: 8px; }
-  /* Remove the left-border separators when wrapped — they'd look odd on
-     a new line with no preceding element on the same row. */
-  #cal-month-nav { border-left: none; padding-left: 0; }
-  #cal-day-nav   { border-left: none; padding-left: 0; }
+  /* Header: nav + toggle share the first row; the filter button wraps. */
+  #cal-select-view { order: 3; }
 }
 
 /* ── Search notice ───────────────────────────────────────────────────────── */
@@ -372,6 +313,8 @@
 }
 
 /* ── Heat-map density legend ─────────────────────────────────────────────── */
+.cal-hint { margin-right: auto; }
+@media (hover: none) { .cal-hint { display: none; } }
 .cal-legend {
   display: flex;
   align-items: center;

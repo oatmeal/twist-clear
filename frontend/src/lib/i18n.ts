@@ -109,6 +109,25 @@ export interface Translations {
   dayOfWeek: readonly string[];
   // Calendar search notice
   calSearchNotice: string;   // shown when a title search is active (counts don't reflect it)
+  // Calendar view header
+  calPrevYear: string;
+  calNextYear: string;
+  calPrevMonth: string;
+  calNextMonth: string;
+  calLevelGroup: string;                     // aria-label for the Year / Month toggle
+  calLevelYear: string;
+  calLevelMonth: string;
+  calFilterTo: (period: string) => string;   // button: filter to the period on screen
+  calFilteredTo: (period: string) => string; // same button once that period is the filter
+  calOpenMonth: (month: string) => string;   // year view: mini-month title tooltip
+  // Timeline overview (filter bar)
+  timelineLabel: string;
+  timelineSelection: string;                 // aria-label of the selection band
+  timelineHint: string;                      // second line of the hover tooltip
+  timelineBandHint: string;                  // …when hovering the selection band
+  timelineHandleHint: string;                // …when hovering a handle
+  calHintYear: string;                       // calendar footer hint, year view (hover devices)
+  calHintMonth: string;                      // calendar footer hint, month view (hover devices)
   // Live clips pending banner
   newClipsBanner: (n: number) => string;
   showNewClips: string;
@@ -161,7 +180,7 @@ const en: Translations = {
   searchHelpGroup: 'Grouping',
   searchHelpNote: 'Spaces are required around OR and |.',
   helpDate: 'Filtering by date',
-  helpDateDesc: 'Type dates into the From / End date boxes, or click the calendar icon to browse by year, month, week, or day.',
+  helpDateDesc: 'Drag across the timeline below the filters to pick a range, then drag the highlighted range to move it or its edges to resize it. You can also type dates into the From / End date boxes. Click the timeline or the calendar icon to open the calendar: click a day or week number to select it, drag across days for a range, or use “Filter to …” for the whole month or year on screen.',
   helpLogin: 'Logging in',
   helpLoginDescWithDate: (date) => `This site's clip data was last updated on ${date}. To view clips newer than this, log in with Twitch — your credentials are used to fetch the latest clips directly from Twitch's servers.`,
   helpLoginDescNoDate: "This site's clip data may not include the most recent clips. Log in with Twitch to fetch the latest clips directly from Twitch's servers.",
@@ -212,6 +231,23 @@ const en: Translations = {
               'July', 'August', 'September', 'October', 'November', 'December'],
   dayOfWeek: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
   calSearchNotice: 'Calendar clip counts do not reflect the active title search',
+  calPrevYear: 'Previous year',
+  calNextYear: 'Next year',
+  calPrevMonth: 'Previous month',
+  calNextMonth: 'Next month',
+  calLevelGroup: 'Calendar view',
+  calLevelYear: 'Year',
+  calLevelMonth: 'Month',
+  calFilterTo: (p) => `Filter to ${p}`,
+  calFilteredTo: (p) => `✓ Filtered to ${p}`,
+  calOpenMonth: (m) => `Show ${m}`,
+  timelineLabel: 'Clip timeline',
+  timelineSelection: 'Selected dates',
+  timelineHint: 'Drag to select · click to show in calendar',
+  timelineBandHint: 'Drag to move · ← → to step',
+  timelineHandleHint: 'Drag to resize · ← → by a day',
+  calHintYear: 'Click a month to open it · drag across days to select a range',
+  calHintMonth: 'Click a day to select it · drag or Shift-click for a range',
   newClipsBanner: (n) => `${n} new clip${n !== 1 ? 's' : ''} available`,
   showNewClips: 'Show',
 };
@@ -263,7 +299,7 @@ const ja: Translations = {
   searchHelpGroup: 'グループ化',
   searchHelpNote: 'OR・|・｜ の前後にはスペースが必要です。',
   helpDate: '日付で絞り込む',
-  helpDateDesc: '開始日・終了日に直接入力するか、カレンダーアイコンをクリックして年・月・週・日単位で選択できます。',
+  helpDateDesc: 'フィルター下のタイムラインをドラッグして期間を選択できます。選択した範囲はドラッグで移動、端をドラッグで伸縮できます。開始日・終了日に直接入力することもできます。タイムラインかカレンダーアイコンをクリックするとカレンダーが開き、日や週番号のクリックで選択、日のドラッグで期間を選択、「〜で絞り込む」で表示中の月・年を選択できます。',
   helpLogin: 'ログイン',
   helpLoginDescWithDate: (date) => `このサイトのクリップデータは${date}時点のものです。それ以降の新着クリップを見るには、Twitchでログインしてください。ログインすると、Twitchのサーバーから新着クリップを直接読み込めます。`,
   helpLoginDescNoDate: 'このサイトのクリップデータには、新着クリップが含まれていない場合があります。Twitchでログインすると、Twitchのサーバーから新着クリップを直接読み込めます。',
@@ -318,6 +354,23 @@ const ja: Translations = {
   monthLong: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'],
   dayOfWeek: ['日', '月', '火', '水', '木', '金', '土'],
   calSearchNotice: 'カレンダーのクリップ数はタイトル検索を反映していません',
+  calPrevYear: '前の年',
+  calNextYear: '次の年',
+  calPrevMonth: '前の月',
+  calNextMonth: '次の月',
+  calLevelGroup: 'カレンダーの表示',
+  calLevelYear: '年',
+  calLevelMonth: '月',
+  calFilterTo: (p) => `${p}で絞り込む`,
+  calFilteredTo: (p) => `✓ ${p}で絞り込み中`,
+  calOpenMonth: (m) => `${m}を表示`,
+  timelineLabel: 'クリップのタイムライン',
+  timelineSelection: '選択中の期間',
+  timelineHint: 'ドラッグで期間を選択・クリックでカレンダーに表示',
+  timelineBandHint: 'ドラッグで移動・← →で前後へ',
+  timelineHandleHint: 'ドラッグで伸縮・← →で1日ずつ',
+  calHintYear: 'クリックで月を表示・日をドラッグで期間を選択',
+  calHintMonth: 'クリックで日を選択・ドラッグかShift+クリックで期間を選択',
   newClipsBanner: (n) => `新着クリップ${n}件`,
   showNewClips: '表示',
 };
