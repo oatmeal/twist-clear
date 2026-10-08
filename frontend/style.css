@@ -1189,8 +1189,8 @@ header .streamer-tag a:hover {
    Controls layout:
      row 1 — search + sort
      row 2 — game-filter (fills full width)
-     row 3 — date-filter-group + view-switcher + result-count
-             (view-switcher may wrap to row 4 on the very narrowest screens) */
+     row 3 — date-filter-group (fills full width)
+     row 4 — view-switcher + result-count */
 @media (max-width: 600px) {
   header    { padding: 10px 12px; }
   #controls { padding: 8px 12px; }
@@ -1206,10 +1206,19 @@ header .streamer-tag a:hover {
   .header-title.desc-expanded .site-desc { display: block; }
   .header-title.has-desc .site-desc-btn { display: inline-flex; }
 
+  /* Row 1: search + sort share the row. Without shrinkable bases the two
+     overflow a phone-width row and wrap onto separate rows. */
+  .search-wrapper { flex: 1 1 120px; min-width: 0; }
+  #sort { flex: 0 1 auto; min-width: 0; max-width: 46%; }
   /* Activate the mid-row break: game-filter drops to its own row */
   .controls-break-md { flex-basis: 100%; }
   /* Game filter fills the full width of its row */
   #game-filter { flex: 1 1 0; min-width: 0; }
+  /* Date row fills its row and the inputs shrink to fit, rather than pushing
+     the "to" input and clear button off-screen on the narrowest phones. */
+  .date-filter-group { flex: 1 1 100%; min-width: 0; }
+  .date-range-filter { flex: 1 1 0; min-width: 0; }
+  .date-range-filter input[type="date"] { flex: 1 1 0; min-width: 0; padding: 7px 6px; }
   /* Show short text labels on both view buttons — both labels keeps them
      symmetrical in width, preventing one button from unexpectedly wrapping. */
   .view-btn .view-btn-label { display: inline; }
